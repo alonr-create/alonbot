@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage } from './memory.js';
-import { toolDefinitions, executeTool } from './tools.js';
+import { toolDefinitions, executeTool, collectMedia } from './tools.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -18,12 +18,23 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     content: h.content,
   }));
 
+  // If user sent an image, add it to the last message as vision content
+  if (msg.image) {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.content = [
+        { type: 'image', source: { type: 'base64', media_type: msg.imageMediaType || 'image/jpeg', data: msg.image } },
+        { type: 'text', text: msg.text || 'מה יש בתמונה?' },
+      ];
+    }
+  }
+
   const systemPrompt = buildSystemPrompt();
 
   // Agent loop — handle tool calls
   let response = await client.messages.create({
     model: 'claude-sonnet-4-20250514',
-    max_tokens: 2048,
+    max_tokens: 4096,
     system: systemPrompt,
     tools: toolDefinitions,
     messages,
@@ -35,18 +46,24 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
     );
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = toolBlocks.map(block => ({
-      type: 'tool_result' as const,
-      tool_use_id: block.id,
-      content: executeTool(block.name, block.input as Record<string, string>),
-    }));
+    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    for (const block of toolBlocks) {
+      console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
+      const result = await executeTool(block.name, block.input as Record<string, any>);
+      console.log(`[Tool] → ${result.slice(0, 100)}`);
+      toolResults.push({
+        type: 'tool_result' as const,
+        tool_use_id: block.id,
+        content: result,
+      });
+    }
 
     messages.push({ role: 'assistant', content: response.content });
     messages.push({ role: 'user', content: toolResults });
 
     response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 2048,
+      max_tokens: 4096,
       system: systemPrompt,
       tools: toolDefinitions,
       messages,
@@ -62,5 +79,14 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
 
-  return { text: replyText };
+  // Collect any media from tool calls
+  const media = collectMedia();
+  const reply: UnifiedReply = { text: replyText };
+
+  for (const m of media) {
+    if (m.type === 'image') reply.image = m.data;
+    if (m.type === 'voice') reply.voice = m.data;
+  }
+
+  return reply;
 }

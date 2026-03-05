@@ -2,17 +2,23 @@ import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeys
 import { Boom } from '@hapi/boom';
 import { config } from '../utils/config.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
-import { mkdirSync } from 'fs';
-import qrcode from 'qrcode-terminal';
+import { mkdirSync, existsSync } from 'fs';
 
 const SESSION_DIR = `${config.dataDir}/whatsapp-session`;
+const MAX_RETRIES = 3;
+const PHONE_NUMBER = config.allowedWhatsApp[0]; // Use first allowed number for pairing
 
 export function createWhatsAppAdapter(): ChannelAdapter {
   let sock: ReturnType<typeof makeWASocket> | null = null;
   let messageHandler: ((msg: UnifiedMessage) => void) | null = null;
+  let retryCount = 0;
 
   function jidToNumber(jid: string): string {
     return jid.replace(/@s\.whatsapp\.net$/, '').replace(/@g\.us$/, '');
+  }
+
+  function hasSession(): boolean {
+    return existsSync(`${SESSION_DIR}/creds.json`);
   }
 
   async function connect() {
@@ -22,7 +28,22 @@ export function createWhatsAppAdapter(): ChannelAdapter {
     sock = makeWASocket({
       auth: state,
       printQRInTerminal: false,
+      browser: ['AlonBot', 'Chrome', '22.0'],
     });
+
+    // If not registered yet, request pairing code
+    if (!hasSession() && PHONE_NUMBER) {
+      setTimeout(async () => {
+        try {
+          const code = await sock!.requestPairingCode(PHONE_NUMBER);
+          console.log(`\n[WhatsApp] ===== PAIRING CODE: ${code} =====`);
+          console.log(`[WhatsApp] Open WhatsApp > Linked Devices > Link with phone number`);
+          console.log(`[WhatsApp] Enter this code: ${code}\n`);
+        } catch (err: any) {
+          console.warn('[WhatsApp] Pairing code request failed:', err.message);
+        }
+      }, 3000);
+    }
 
     sock.ev.on('creds.update', saveCreds);
 
@@ -30,21 +51,24 @@ export function createWhatsAppAdapter(): ChannelAdapter {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        console.log('[WhatsApp] Scan QR code:');
-        qrcode.generate(qr, { small: true });
+        console.log('[WhatsApp] QR code received (use pairing code instead — see above)');
       }
 
       if (connection === 'close') {
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        if (reason !== DisconnectReason.loggedOut) {
-          console.log('[WhatsApp] Reconnecting...');
-          setTimeout(connect, 3000);
-        } else {
+        if (reason === DisconnectReason.loggedOut) {
           console.log('[WhatsApp] Logged out. Delete session and restart.');
+        } else if (retryCount < MAX_RETRIES) {
+          retryCount++;
+          console.log(`[WhatsApp] Reconnecting... (${retryCount}/${MAX_RETRIES})`);
+          setTimeout(connect, 5000);
+        } else {
+          console.log('[WhatsApp] Max retries reached. WhatsApp disabled.');
         }
       }
 
       if (connection === 'open') {
+        retryCount = 0;
         console.log('[WhatsApp] Connected!');
       }
     });

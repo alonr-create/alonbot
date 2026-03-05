@@ -7,8 +7,10 @@ export interface UnifiedMessage {
   senderName: string;
   text: string;
   timestamp: number;
-  /** Base64 image data if image was sent */
+  /** Base64 image data */
   image?: string;
+  /** MIME type of the image (e.g. image/jpeg, image/png, image/webp) */
+  imageMediaType?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
   /** Raw platform-specific context for replies */
   raw: unknown;
 }
@@ -16,6 +18,7 @@ export interface UnifiedMessage {
 export interface UnifiedReply {
   text: string;
   image?: Buffer;
+  voice?: Buffer;
 }
 
 export interface ChannelAdapter {
@@ -23,5 +26,6 @@ export interface ChannelAdapter {
   start(): Promise<void>;
   stop(): Promise<void>;
   sendReply(original: UnifiedMessage, reply: UnifiedReply): Promise<void>;
+  sendTyping?(original: UnifiedMessage): Promise<void>;
   onMessage(handler: (msg: UnifiedMessage) => void): void;
 }

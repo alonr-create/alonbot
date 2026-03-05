@@ -16,9 +16,10 @@ const telegram = createTelegramAdapter();
 registerAdapter(telegram);
 await telegram.start();
 
-const whatsapp = createWhatsAppAdapter();
-registerAdapter(whatsapp);
-await whatsapp.start();
+// WhatsApp disabled temporarily — rate limited. Uncomment to enable:
+// const whatsapp = createWhatsAppAdapter();
+// registerAdapter(whatsapp);
+// whatsapp.start().catch(err => console.warn('[WhatsApp] Failed to start:', err.message));
 
 // Start cron jobs
 startAllCronJobs(sendToChannel);
@@ -29,6 +30,6 @@ console.log('[AlonBot] Ready!');
 process.on('SIGINT', async () => {
   console.log('\n[AlonBot] Shutting down...');
   await telegram.stop();
-  await whatsapp.stop();
+  // await whatsapp.stop();
   process.exit(0);
 });
