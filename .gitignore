@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/whatsapp-session/
+.DS_Store
