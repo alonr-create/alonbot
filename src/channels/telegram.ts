@@ -7,7 +7,8 @@ export function createTelegramAdapter(): ChannelAdapter {
   let messageHandler: ((msg: UnifiedMessage) => void) | null = null;
 
   function isAllowed(senderId: string): boolean {
-    return config.allowedTelegram.length === 0 || config.allowedTelegram.includes(senderId);
+    if (config.allowedTelegram.length === 0) return false;
+    return config.allowedTelegram.includes(senderId);
   }
 
   function makeUnified(ctx: any, text: string, extra?: Partial<UnifiedMessage>): UnifiedMessage {

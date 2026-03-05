@@ -7,7 +7,31 @@ import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
+// Rate limiting: max 10 messages per minute per user
+const rateLimitMap = new Map<string, number[]>();
+const RATE_LIMIT = 10;
+const RATE_WINDOW_MS = 60_000;
+
+function checkRateLimit(userId: string): boolean {
+  const now = Date.now();
+  const timestamps = (rateLimitMap.get(userId) || []).filter(t => now - t < RATE_WINDOW_MS);
+  if (timestamps.length >= RATE_LIMIT) return false;
+  timestamps.push(now);
+  rateLimitMap.set(userId, timestamps);
+  return true;
+}
+
 export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> {
+  // Rate limit check
+  if (!checkRateLimit(msg.senderId)) {
+    return { text: 'יותר מדי הודעות. נסה שוב בעוד דקה.' };
+  }
+
+  // Truncate excessively long messages
+  if (msg.text.length > 4000) {
+    msg.text = msg.text.slice(0, 4000) + '\n[ההודעה קוצרה — מקסימום 4000 תווים]';
+  }
+
   // Save user message
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'user', msg.text);
 
@@ -40,8 +64,11 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     messages,
   });
 
-  // Process tool calls in a loop
-  while (response.stop_reason === 'tool_use') {
+  // Process tool calls in a loop (max 15 iterations to prevent runaway)
+  const MAX_TOOL_ITERATIONS = 15;
+  let toolIteration = 0;
+  while (response.stop_reason === 'tool_use' && toolIteration < MAX_TOOL_ITERATIONS) {
+    toolIteration++;
     const toolBlocks = response.content.filter(
       (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
     );

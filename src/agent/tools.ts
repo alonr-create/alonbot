@@ -1,5 +1,6 @@
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, writeFileSync, realpathSync } from 'fs';
+import { resolve } from 'path';
 import { createTransport } from 'nodemailer';
 import type Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
@@ -16,23 +17,66 @@ export function collectMedia(): Array<{ type: 'image' | 'voice'; data: Buffer }>
   return media;
 }
 
-// --- Whitelisted shell commands ---
+// --- Security: shell command whitelist ---
 const ALLOWED_COMMANDS = [
   'date', 'cal', 'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'find', 'echo',
-  'pwd', 'whoami', 'uptime', 'df', 'curl', 'node', 'python3', 'npm', 'git',
-  'screencapture', 'open', 'which', 'hostname', 'sw_vers',
+  'pwd', 'whoami', 'uptime', 'df', 'which', 'hostname', 'sw_vers',
 ];
 
+// Block shell metacharacters that enable command chaining/injection
+const SHELL_INJECTION_PATTERN = /[;|&`$(){}!<>]/;
+
 function isCommandAllowed(cmd: string): boolean {
-  const base = cmd.trim().split(/\s+/)[0];
+  const trimmed = cmd.trim();
+  if (SHELL_INJECTION_PATTERN.test(trimmed)) return false;
+  const base = trimmed.split(/\s+/)[0];
   return ALLOWED_COMMANDS.some(a => base === a || base.endsWith(`/${a}`));
+}
+
+// --- Security: file path restrictions ---
+const ALLOWED_FILE_DIRS = ['/Users/oakhome/קלוד עבודות/', '/tmp/alonbot-'];
+const BLOCKED_FILE_PATTERNS = ['.env', '.git/', '.ssh/', '.claude/', 'credentials', '.zshrc', '.bashrc'];
+
+function isPathAllowed(filePath: string): boolean {
+  const resolved = resolve(filePath);
+  // Block dotfiles and sensitive patterns
+  if (BLOCKED_FILE_PATTERNS.some(p => resolved.includes(p))) return false;
+  // Must be under allowed directories
+  return ALLOWED_FILE_DIRS.some(d => resolved.startsWith(d));
+}
+
+// --- Security: URL validation for SSRF prevention ---
+function isUrlAllowed(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
+    const host = parsed.hostname.toLowerCase();
+    // Block internal/private IPs
+    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false;
+    if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return false;
+    if (host.startsWith('172.') && parseInt(host.split('.')[1]) >= 16 && parseInt(host.split('.')[1]) <= 31) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// --- Security: email recipient whitelist ---
+const ALLOWED_EMAIL_DOMAINS = ['dprisha.co.il', 'gmail.com'];
+const ALLOWED_EMAIL_ADDRESSES = ['alon12@gmail.com', 'dekel@dprisha.co.il', 'alonr@dprisha.co.il', 'servicedprisha@gmail.com'];
+
+function isEmailAllowed(to: string): boolean {
+  const email = to.trim().toLowerCase();
+  if (ALLOWED_EMAIL_ADDRESSES.includes(email)) return true;
+  const domain = email.split('@')[1];
+  return ALLOWED_EMAIL_DOMAINS.includes(domain);
 }
 
 // --- Tool definitions ---
 export const toolDefinitions: Anthropic.Tool[] = [
   {
     name: 'shell',
-    description: 'Run a shell command on the local Mac. Whitelisted commands only.',
+    description: 'Run a shell command on the local Mac. Whitelisted commands only. No pipes, semicolons, or chaining.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -43,7 +87,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'read_file',
-    description: 'Read the contents of a file.',
+    description: 'Read the contents of a file. Restricted to project directories.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -54,7 +98,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'write_file',
-    description: 'Write content to a file.',
+    description: 'Write content to a file. Restricted to project directories.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -77,7 +121,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'browse_url',
-    description: 'Fetch and read the text content of a web page.',
+    description: 'Fetch and read the text content of a web page. Only public URLs allowed.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -165,7 +209,7 @@ export const toolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'send_email',
-    description: 'Send an email via Gmail.',
+    description: 'Send an email via Gmail. Recipients restricted to known addresses.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -203,29 +247,35 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
   switch (name) {
     case 'shell': {
       if (!isCommandAllowed(input.command)) {
-        return `Error: Command not allowed. Allowed: ${ALLOWED_COMMANDS.join(', ')}`;
+        return `Error: Command not allowed. Only simple commands permitted (no pipes, semicolons, or chaining). Allowed: ${ALLOWED_COMMANDS.join(', ')}`;
       }
       try {
         return execSync(input.command, { timeout: 15000, encoding: 'utf-8', maxBuffer: 100000 }).trim();
       } catch (e: any) {
-        return `Error: ${e.stderr || e.message}`;
+        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
       }
     }
 
     case 'read_file': {
+      if (!isPathAllowed(input.path)) {
+        return 'Error: Access denied. Can only read files under project directories.';
+      }
       try {
         return readFileSync(input.path, 'utf-8').slice(0, 10000);
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: File not found or unreadable.`;
       }
     }
 
     case 'write_file': {
+      if (!isPathAllowed(input.path)) {
+        return 'Error: Access denied. Can only write files under project directories.';
+      }
       try {
         writeFileSync(input.path, input.content);
         return `File written: ${input.path}`;
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Could not write file.`;
       }
     }
 
@@ -249,18 +299,20 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         }
         return results.length > 0 ? results.join('\n\n') : 'No results found.';
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Search failed.`;
       }
     }
 
     case 'browse_url': {
+      if (!isUrlAllowed(input.url)) {
+        return 'Error: URL not allowed. Only public http/https URLs permitted.';
+      }
       try {
         const res = await fetch(input.url, {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlonBot/1.0)' },
           signal: AbortSignal.timeout(10000),
         });
         const html = await res.text();
-        // Strip tags, scripts, styles — extract text
         const text = html
           .replace(/<script[\s\S]*?<\/script>/gi, '')
           .replace(/<style[\s\S]*?<\/style>/gi, '')
@@ -270,7 +322,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
           .slice(0, 8000);
         return text || 'Empty page.';
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Could not fetch URL.`;
       }
     }
 
@@ -278,10 +330,13 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
       if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY not configured.';
       try {
         const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${config.geminiApiKey}`,
+          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
           {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'x-goog-api-key': config.geminiApiKey,
+            },
             body: JSON.stringify({
               contents: [{ parts: [{ text: input.prompt }] }],
               generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
@@ -299,7 +354,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         }
         return 'Image generation failed — no image in response.';
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Image generation failed.`;
       }
     }
 
@@ -342,7 +397,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         const data = await res.json();
         return JSON.stringify(data, null, 2).slice(0, 8000);
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Monday.com API call failed.`;
       }
     }
 
@@ -369,12 +424,15 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         pendingMedia.push({ type: 'voice', data: buf });
         return 'Voice message generated and sent.';
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Voice generation failed.`;
       }
     }
 
     case 'send_email': {
       if (!config.gmailUser || !config.gmailAppPassword) return 'Error: Gmail credentials not configured.';
+      if (!isEmailAllowed(input.to)) {
+        return `Error: Recipient not allowed. Can only send to known addresses.`;
+      }
       try {
         const transport = createTransport({
           service: 'gmail',
@@ -386,25 +444,30 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
           subject: input.subject,
           html: input.body,
         });
+        transport.close();
         return `Email sent to ${input.to}`;
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Email sending failed.`;
       }
     }
 
     case 'screenshot': {
       try {
-        const tmpPath = '/tmp/alonbot-screenshot.png';
+        const tmpPath = `/tmp/alonbot-screenshot-${Date.now()}.png`;
         execSync(`screencapture -x ${tmpPath}`, { timeout: 5000 });
         const buf = readFileSync(tmpPath);
         pendingMedia.push({ type: 'image', data: buf });
         return 'Screenshot taken and sent.';
       } catch (e: any) {
-        return `Error: ${e.message}`;
+        return `Error: Screenshot failed.`;
       }
     }
 
     case 'manage_project': {
+      // Validate project name — no path traversal
+      if (input.project.includes('/') || input.project.includes('..') || input.project.includes('\\')) {
+        return 'Error: Invalid project name.';
+      }
       const projectDir = `/Users/oakhome/קלוד עבודות/${input.project}`;
       const actions: Record<string, string> = {
         status: 'git status --short',
@@ -417,7 +480,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
       try {
         return execSync(cmd, { cwd: projectDir, timeout: 15000, encoding: 'utf-8', maxBuffer: 50000 }).trim() || 'Clean — no changes.';
       } catch (e: any) {
-        return `Error: ${e.stderr || e.message}`;
+        return `Error: Git command failed.`;
       }
     }
 
