@@ -47,6 +47,30 @@ export function getAdapter(name: string): ChannelAdapter | undefined {
   return adapters.get(name);
 }
 
+// Send a message through the agent (processes with Claude + tools)
+export async function sendAgentMessage(channel: string, targetId: string, text: string) {
+  const adapter = adapters.get(channel);
+  if (!adapter) return;
+
+  const fakeMsg: UnifiedMessage = {
+    id: 'cron-agent',
+    channel: channel as any,
+    senderId: targetId,
+    senderName: 'Alon',
+    text,
+    timestamp: Date.now(),
+    raw: null,
+  };
+
+  try {
+    const reply = await handleMessage(fakeMsg);
+    // For cron messages, we need to send directly via bot API since raw is null
+    await sendToChannel(channel, targetId, reply.text);
+  } catch (error: any) {
+    console.error(`[Router] Agent message error:`, error.message);
+  }
+}
+
 export async function sendToChannel(channel: string, targetId: string, text: string) {
   const adapter = adapters.get(channel);
   if (!adapter) {

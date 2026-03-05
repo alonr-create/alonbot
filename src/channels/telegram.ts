@@ -27,7 +27,17 @@ export function createTelegramAdapter(): ChannelAdapter {
   bot.on('message:text', async (ctx) => {
     if (!isAllowed(String(ctx.from.id))) { await ctx.reply('Unauthorized.'); return; }
     if (!messageHandler) return;
-    messageHandler(makeUnified(ctx, ctx.message.text));
+
+    const text = ctx.message.text;
+
+    // Auto-detect bare URL messages → ask to summarize
+    const urlOnly = text.match(/^(https?:\/\/\S+)$/);
+    if (urlOnly) {
+      messageHandler(makeUnified(ctx, `סכם את התוכן של הדף הזה: ${urlOnly[1]}`));
+      return;
+    }
+
+    messageHandler(makeUnified(ctx, text));
   });
 
   // Handle photo messages (image understanding)
@@ -48,6 +58,76 @@ export function createTelegramAdapter(): ChannelAdapter {
       }));
     } catch (err: any) {
       console.error('[Telegram] Photo error:', err.message);
+    }
+  });
+
+  // Handle document messages (PDF, text files, etc)
+  bot.on('message:document', async (ctx) => {
+    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
+
+    try {
+      const doc = ctx.message.document;
+      const fileName = doc.file_name || 'document';
+      const mimeType = doc.mime_type || '';
+
+      // Only handle text-based documents
+      const textTypes = ['application/pdf', 'text/', 'application/json', 'application/xml', 'application/csv'];
+      if (!textTypes.some(t => mimeType.startsWith(t)) && !fileName.match(/\.(txt|md|json|csv|xml|html|js|ts|py|sh)$/i)) {
+        messageHandler(makeUnified(ctx, `[קובץ: ${fileName} (${mimeType}) — לא נתמך לניתוח]`));
+        return;
+      }
+
+      const file = await ctx.api.getFile(doc.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
+      const res = await fetch(fileUrl);
+
+      if (mimeType === 'application/pdf') {
+        // For PDF, save locally and tell the agent where it is
+        const buf = Buffer.from(await res.arrayBuffer());
+        const tmpPath = `/tmp/alonbot-${fileName}`;
+        const { writeFileSync } = await import('fs');
+        writeFileSync(tmpPath, buf);
+        messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את המסמך'}\n[קובץ PDF נשמר ב: ${tmpPath}]`));
+      } else {
+        // Text files — read content directly
+        const text = await res.text();
+        const truncated = text.slice(0, 6000);
+        messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את הקובץ'}\n\n--- ${fileName} ---\n${truncated}`));
+      }
+    } catch (err: any) {
+      console.error('[Telegram] Document error:', err.message);
+    }
+  });
+
+  // Handle /export command — export chat history as file
+  bot.command('export', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+
+    try {
+      const { db } = await import('../utils/db.js');
+      const rows = db.prepare(
+        `SELECT sender_name, role, content, created_at FROM messages
+         WHERE channel = 'telegram' AND sender_id = ?
+         ORDER BY id ASC`
+      ).all(String(ctx.from.id)) as any[];
+
+      if (rows.length === 0) {
+        await ctx.reply('אין היסטוריית שיחות.');
+        return;
+      }
+
+      const lines = rows.map((r: any) =>
+        `[${r.created_at}] ${r.role === 'user' ? r.sender_name : 'AlonBot'}: ${r.content}`
+      );
+      const text = lines.join('\n\n');
+      const buf = Buffer.from(text, 'utf-8');
+
+      await ctx.replyWithDocument(new InputFile(buf, `chat-export-${new Date().toISOString().slice(0, 10)}.txt`), {
+        caption: `היסטוריית שיחה — ${rows.length} הודעות`,
+      });
+    } catch (err: any) {
+      console.error('[Telegram] Export error:', err.message);
+      await ctx.reply('שגיאה בייצוא.');
     }
   });
 
@@ -151,7 +231,23 @@ export function createTelegramAdapter(): ChannelAdapter {
 
     async sendReply(original: UnifiedMessage, reply: UnifiedReply) {
       const ctx = original.raw as any;
-      if (!ctx?.reply) return;
+
+      // Direct send by chat ID (for cron messages where raw is null)
+      if (!ctx?.reply) {
+        const chatId = Number(original.senderId);
+        if (!chatId) return;
+        if (reply.text) {
+          const chunks = reply.text.match(/[\s\S]{1,4000}/g) || [reply.text];
+          for (const chunk of chunks) {
+            try {
+              await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
+            } catch {
+              await bot.api.sendMessage(chatId, chunk);
+            }
+          }
+        }
+        return;
+      }
 
       if (reply.voice) {
         try {
@@ -172,7 +268,12 @@ export function createTelegramAdapter(): ChannelAdapter {
       if (reply.text) {
         const chunks = reply.text.match(/[\s\S]{1,4000}/g) || [reply.text];
         for (const chunk of chunks) {
-          await ctx.reply(chunk);
+          try {
+            await ctx.reply(chunk, { parse_mode: 'Markdown' });
+          } catch {
+            // Fallback to plain text if Markdown parsing fails
+            await ctx.reply(chunk);
+          }
         }
       }
     },
