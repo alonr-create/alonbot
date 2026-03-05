@@ -244,13 +244,44 @@ const allToolDefinitions: Anthropic.Tool[] = [
   },
 ];
 
-// Filter out local-only tools in cloud mode
-export const toolDefinitions = config.mode === 'cloud'
-  ? allToolDefinitions.filter(t => !LOCAL_ONLY_TOOLS.includes(t.name))
-  : allToolDefinitions;
+// In cloud mode: keep all tools, but proxy local-only ones to Mac
+export const toolDefinitions = allToolDefinitions;
+
+// --- Proxy local tools from cloud to Mac ---
+async function proxyToLocal(name: string, input: Record<string, any>): Promise<{ result: string; media?: Array<{ type: string; data: string }> } | null> {
+  if (!config.localApiUrl) return null;
+  try {
+    const res = await fetch(`${config.localApiUrl}/api/tool`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${config.localApiSecret}`,
+      },
+      body: JSON.stringify({ name, input }),
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) return null;
+    return await res.json() as any;
+  } catch {
+    return null;
+  }
+}
 
 // --- Tool execution ---
 export async function executeTool(name: string, input: Record<string, any>): Promise<string> {
+  // In cloud mode, proxy local-only tools to Mac
+  if (config.mode === 'cloud' && LOCAL_ONLY_TOOLS.includes(name)) {
+    const proxy = await proxyToLocal(name, input);
+    if (!proxy) return 'Error: Mac is offline. This tool requires the local Mac to be running.';
+    // Collect proxied media
+    if (proxy.media) {
+      for (const m of proxy.media) {
+        pendingMedia.push({ type: m.type as any, data: Buffer.from(m.data, 'base64') });
+      }
+    }
+    return proxy.result;
+  }
+
   switch (name) {
     case 'shell': {
       if (!isCommandAllowed(input.command)) {
