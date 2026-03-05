@@ -442,8 +442,11 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
     case 'send_voice': {
       if (!config.elevenlabsApiKey) return 'Error: ELEVENLABS_API_KEY not configured.';
       try {
+        // Detect language: Hebrew or English voice
+        const isHebrew = /[\u0590-\u05FF]/.test(input.text);
+        const voiceId = isHebrew ? config.elevenlabsVoiceId : 'nPczCjzI2devNBz1zQrb';
         const res = await fetch(
-          `https://api.elevenlabs.io/v1/text-to-speech/${config.elevenlabsVoiceId}`,
+          `https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`,
           {
             method: 'POST',
             headers: {
@@ -452,8 +455,8 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
             },
             body: JSON.stringify({
               text: input.text,
-              model_id: 'eleven_multilingual_v2',
-              voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+              model_id: 'eleven_v3',
+              voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 },
             }),
           },
         );
