@@ -4,7 +4,7 @@ import { resolve } from 'path';
 import { createTransport } from 'nodemailer';
 import type Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
-import { setFact } from './memory.js';
+import { saveMemory } from './memory.js';
 import { db } from '../utils/db.js';
 import { addCronJob } from '../cron/scheduler.js';
 
@@ -177,14 +177,16 @@ const allToolDefinitions: Anthropic.Tool[] = [
   },
   {
     name: 'remember',
-    description: 'Save a fact about the user for future reference.',
+    description: 'Save a memory about the user. Use type to classify: fact (concrete info), preference (likes/dislikes), event (something that happened), pattern (recurring behavior), relationship (person the user knows).',
     input_schema: {
       type: 'object' as const,
       properties: {
-        key: { type: 'string', description: 'Fact key (e.g. "birthday", "favorite_food")' },
-        value: { type: 'string', description: 'Fact value' },
+        content: { type: 'string', description: 'The memory content in natural language (e.g. "אלון אוהב פיצה", "פגישה עם רו"ח ביום ראשון")' },
+        type: { type: 'string', enum: ['fact', 'preference', 'event', 'pattern', 'relationship'], description: 'Memory type' },
+        category: { type: 'string', enum: ['personal', 'work_dekel', 'work_mazpen', 'work_alon_dev', 'work_aliza', 'health', 'finance'], description: 'Category (optional, auto-detected if omitted)' },
+        importance: { type: 'number', description: 'Importance 1-10 (default 5). Use 8+ for critical facts like birthday, family, key business info.' },
       },
-      required: ['key', 'value'],
+      required: ['content', 'type'],
     },
   },
   {
@@ -417,8 +419,14 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
     }
 
     case 'remember': {
-      setFact(input.key, input.value);
-      return `Remembered: ${input.key} = ${input.value}`;
+      const id = saveMemory(
+        input.type || 'fact',
+        input.category || null,
+        input.content,
+        input.importance || 5,
+        'user_told'
+      );
+      return `Remembered (id=${id}, type=${input.type}): ${input.content}`;
     }
 
     case 'monday_api': {

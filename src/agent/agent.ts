@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { getHistory, saveMessage } from './memory.js';
+import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
 import { toolDefinitions, executeTool, collectMedia } from './tools.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
@@ -53,7 +53,7 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Agent loop — handle tool calls
   let response = await client.messages.create({
@@ -106,6 +106,13 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
 
+  // Auto-summarize old messages if threshold reached
+  if (shouldSummarize(msg.channel, msg.senderId)) {
+    summarizeInBackground(msg.channel, msg.senderId).catch(err =>
+      console.error('[Summarize] Error:', err.message)
+    );
+  }
+
   // Collect any media from tool calls
   const media = collectMedia();
   const reply: UnifiedReply = { text: replyText };
@@ -116,4 +123,43 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   }
 
   return reply;
+}
+
+async function summarizeInBackground(channel: string, senderId: string) {
+  const unsummarized = getUnsummarizedMessages(channel, senderId);
+  if (unsummarized.length < 40) return;
+
+  const conversationText = unsummarized
+    .map(m => `${m.role}: ${m.content}`)
+    .join('\n');
+
+  const response = await client.messages.create({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 500,
+    system: 'אתה מסכם שיחות. תן סיכום קצר (3-5 משפטים) של השיחה, וציין נושאים עיקריים כ-JSON array.',
+    messages: [{
+      role: 'user',
+      content: `סכם את השיחה הבאה:\n\n${conversationText.slice(0, 8000)}\n\nהחזר בפורמט:\nסיכום: [הסיכום]\nנושאים: ["נושא1", "נושא2"]`,
+    }],
+  });
+
+  const text = response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map(b => b.text)
+    .join('\n');
+
+  const summaryMatch = text.match(/סיכום:\s*(.+?)(?:\n|$)/);
+  const topicsMatch = text.match(/נושאים:\s*(\[.+?\])/);
+
+  const summary = summaryMatch?.[1]?.trim() || text.slice(0, 500);
+  let topics: string[] = [];
+  try {
+    topics = topicsMatch ? JSON.parse(topicsMatch[1]) : [];
+  } catch { /* ok */ }
+
+  const fromDate = unsummarized[0].created_at;
+  const toDate = unsummarized[unsummarized.length - 1].created_at;
+
+  saveSummary(channel, senderId, summary, topics, unsummarized.length, fromDate, toDate);
+  console.log(`[Summarize] Saved summary for ${channel}/${senderId}: ${unsummarized.length} messages → "${summary.slice(0, 80)}..."`);
 }

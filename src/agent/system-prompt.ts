@@ -1,14 +1,54 @@
-import { getAllFacts } from './memory.js';
+import { getRelevantMemories, getRecentSummaries, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 
-export function buildSystemPrompt(): string {
+function formatMemories(memories: Memory[]): string {
+  if (memories.length === 0) return '';
+
+  const grouped: Record<string, Memory[]> = {};
+  for (const m of memories) {
+    const key = m.type;
+    if (!grouped[key]) grouped[key] = [];
+    grouped[key].push(m);
+  }
+
+  const typeLabels: Record<string, string> = {
+    fact: 'עובדות',
+    preference: 'העדפות',
+    event: 'אירועים',
+    pattern: 'דפוסים',
+    relationship: 'אנשים',
+  };
+
+  let block = '\n## מה שאני זוכר על אלון\n';
+  for (const [type, items] of Object.entries(grouped)) {
+    const label = typeLabels[type] || type;
+    block += `\n### ${label}\n`;
+    for (const m of items) {
+      const stars = m.importance >= 8 ? ' ⭐' : '';
+      block += `- ${m.content}${stars}\n`;
+    }
+  }
+  return block;
+}
+
+export function buildSystemPrompt(userMessage?: string, channel?: string, senderId?: string): string {
   const now = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-  const facts = getAllFacts();
+  const memories = getRelevantMemories(userMessage || '');
   const skills = loadAllSkills();
 
-  const factsBlock = facts.length > 0
-    ? `\n## עובדות שאני זוכר על אלון\n${facts.map(f => `- ${f.key}: ${f.value}`).join('\n')}`
-    : '';
+  const memoriesBlock = formatMemories(memories);
+
+  let summariesBlock = '';
+  if (channel && senderId) {
+    const summaries = getRecentSummaries(channel, senderId);
+    if (summaries.length > 0) {
+      summariesBlock = '\n## סיכומי שיחות אחרונות\n';
+      for (const s of summaries) {
+        const topics = s.topics ? JSON.parse(s.topics).join(', ') : '';
+        summariesBlock += `- ${s.from_date} עד ${s.to_date}: ${s.summary}${topics ? ` [${topics}]` : ''}\n`;
+      }
+    }
+  }
 
   const skillsBlock = skills.length > 0
     ? `\n## Skills זמינים\n${skills.map(s => `- **${s.name}**: ${s.description}`).join('\n')}`
@@ -46,7 +86,7 @@ export function buildSystemPrompt(): string {
 - **send_voice**: הפיכת טקסט להודעה קולית (ElevenLabs)
 
 ### זיכרון ותזמון
-- **remember**: שמירת עובדות על אלון
+- **remember**: שמירת זיכרון על אלון (עם סוג, קטגוריה, חשיבות)
 - **set_reminder**: הגדרת תזכורת (cron)
 - **list_reminders**: הצגת כל התזכורות
 - **delete_reminder**: מחיקת תזכורת
@@ -58,12 +98,24 @@ export function buildSystemPrompt(): string {
 ### פרויקטים
 - **manage_project**: בדיקת סטטוס git של פרויקטים (status/log/pull/diff)
 
+## ניהול זיכרון
+כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
+- **type**: fact (עובדה), preference (העדפה), event (אירוע), pattern (דפוס), relationship (אדם שמכיר)
+- **category**: personal, work_dekel, work_mazpen, work_alon_dev, work_aliza, health, finance
+- **importance**: 1-10. השתמש ב-8+ לדברים קריטיים (יום הולדת, שם בן/בת זוג, מידע עסקי חשוב)
+
+דוגמאות:
+- "אני אוהב סושי" → remember(content="אלון אוהב סושי", type="preference", category="personal", importance=4)
+- "יש לי פגישה עם הרואה חשבון מחר" → remember(content="פגישה עם רו\"ח מתוכננת", type="event", category="work_dekel", importance=7)
+- "הבת שלי נולדה ב-15 למאי" → remember(content="יום הולדת הבת של אלון: 15 למאי", type="fact", category="personal", importance=9)
+
 ## הקשר
 - תאריך ושעה: ${now}
 - אזור זמן: ישראל (Asia/Jerusalem)
 - מחשב: MacBook Air, macOS
 - תיקיית פרויקטים: /Users/oakhome/קלוד עבודות/
-${factsBlock}
+${memoriesBlock}
+${summariesBlock}
 ${skillsBlock}
 
 ## כללים
