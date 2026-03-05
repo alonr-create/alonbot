@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 export const config = {
+  mode: (process.env.MODE || 'local') as 'cloud' | 'local',
   port: parseInt(process.env.PORT || '3700'),
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',

@@ -72,8 +72,10 @@ function isEmailAllowed(to: string): boolean {
   return ALLOWED_EMAIL_DOMAINS.includes(domain);
 }
 
-// --- Tool definitions ---
-export const toolDefinitions: Anthropic.Tool[] = [
+// --- Local-only tools (disabled in cloud mode) ---
+const LOCAL_ONLY_TOOLS = ['shell', 'read_file', 'write_file', 'screenshot', 'manage_project'];
+
+const allToolDefinitions: Anthropic.Tool[] = [
   {
     name: 'shell',
     description: 'Run a shell command on the local Mac. Whitelisted commands only. No pipes, semicolons, or chaining.',
@@ -241,6 +243,11 @@ export const toolDefinitions: Anthropic.Tool[] = [
     },
   },
 ];
+
+// Filter out local-only tools in cloud mode
+export const toolDefinitions = config.mode === 'cloud'
+  ? allToolDefinitions.filter(t => !LOCAL_ONLY_TOOLS.includes(t.name))
+  : allToolDefinitions;
 
 // --- Tool execution ---
 export async function executeTool(name: string, input: Record<string, any>): Promise<string> {

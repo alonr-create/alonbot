@@ -28,5 +28,7 @@ services:
         sync: false
       - key: ALLOWED_WHATSAPP
         sync: false
+      - key: MODE
+        value: cloud
       - key: PORT
         value: 3700
