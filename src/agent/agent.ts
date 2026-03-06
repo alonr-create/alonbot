@@ -8,14 +8,9 @@ import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
 // Gemini fallback for when Claude rate-limits (429)
-async function callGeminiFallback(systemPrompt: string, messages: Anthropic.MessageParam[]): Promise<string> {
-  // Convert Anthropic messages to Gemini format
-  const contents = messages.map(m => ({
-    role: m.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: typeof m.content === 'string' ? m.content : (m.content as any[]).filter((b: any) => b.type === 'text' || b.type === 'tool_result').map((b: any) => b.text || b.content || '').join('\n') }],
-  }));
-
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`, {
+// Tries Gemini 2.5 Pro first (stronger), then 2.0 Flash (faster, higher rate limit)
+async function callGemini(model: string, systemPrompt: string, contents: any[]): Promise<string> {
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -24,10 +19,27 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
       generationConfig: { maxOutputTokens: 4096 },
     }),
   });
-
-  if (!res.ok) throw new Error(`Gemini fallback failed: ${res.status}`);
+  if (!res.ok) throw new Error(`Gemini ${model} failed: ${res.status}`);
   const data = await res.json() as any;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'לא הצלחתי לעבד (fallback).';
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+}
+
+async function callGeminiFallback(systemPrompt: string, messages: Anthropic.MessageParam[]): Promise<{ text: string; model: string }> {
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : (m.content as any[]).filter((b: any) => b.type === 'text' || b.type === 'tool_result').map((b: any) => b.text || b.content || '').join('\n') }],
+  }));
+
+  // Try Gemini 2.5 Pro first (stronger), fall back to 2.0 Flash
+  try {
+    const text = await callGemini('gemini-2.5-pro-preview-06-05', systemPrompt, contents);
+    if (text) return { text, model: 'Gemini 2.5 Pro' };
+  } catch (e: any) {
+    console.warn(`[Agent] Gemini 2.5 Pro failed: ${e.message}, trying 2.0 Flash...`);
+  }
+
+  const text = await callGemini('gemini-2.0-flash', systemPrompt, contents);
+  return { text: text || 'לא הצלחתי לעבד (fallback).', model: 'Gemini 2.0 Flash' };
 }
 
 // Rate limiting: max 10 messages per minute per user
@@ -154,10 +166,11 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   } catch (err: any) {
     // Fallback to Gemini on rate limit (429) or overload (529)
     if (err?.status === 429 || err?.status === 529) {
-      console.warn(`[Agent] Claude ${err.status} — falling back to Gemini 2.0 Flash`);
-      modelUsed = 'Gemini 2.0 Flash (fallback)';
+      console.warn(`[Agent] Claude ${err.status} — falling back to Gemini`);
       try {
-        replyText = await callGeminiFallback(systemPrompt, messages);
+        const fallback = await callGeminiFallback(systemPrompt, messages);
+        replyText = fallback.text;
+        modelUsed = `${fallback.model} (fallback)`;
       } catch (geminiErr: any) {
         console.error('[Agent] Gemini fallback also failed:', geminiErr.message);
         throw err;
