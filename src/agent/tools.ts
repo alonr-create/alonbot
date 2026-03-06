@@ -32,7 +32,8 @@ export function collectMedia(requestId?: string): Array<{ type: 'image' | 'voice
 
 // --- Security: file path restrictions ---
 const ALLOWED_FILE_DIRS = ['/Users/oakhome/קלוד עבודות/', '/tmp/alonbot-', '/app/workspace/', '/tmp/'];
-const BLOCKED_FILE_PATTERNS = ['.env', '.git/', '.ssh/', '.claude/', 'credentials', '.zshrc', '.bashrc'];
+// Only block sensitive config files — git operations go through shell tool anyway
+const BLOCKED_FILE_PATTERNS = ['.env', '.ssh/', 'credentials', '.zshrc', '.bashrc'];
 
 function isPathAllowed(filePath: string): boolean {
   const resolved = resolve(filePath);

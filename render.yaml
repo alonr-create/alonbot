@@ -28,6 +28,8 @@ services:
         sync: false
       - key: ALLOWED_WHATSAPP
         sync: false
+      - key: GITHUB_TOKEN
+        sync: false
       - key: MODE
         value: cloud
       - key: PORT
