@@ -200,7 +200,7 @@ export function createTelegramAdapter(): ChannelAdapter {
       const transcription = sttData.text;
 
       console.log(`[Telegram] Voice transcribed: ${transcription.slice(0, 80)}`);
-      messageHandler(makeUnified(ctx, transcription));
+      messageHandler(makeUnified(ctx, transcription, { isVoice: true }));
     } catch (err: any) {
       console.error('[Telegram] Voice error:', err.message);
     }

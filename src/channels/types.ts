@@ -15,6 +15,8 @@ export interface UnifiedMessage {
   document?: string;
   /** Original filename of the document */
   documentName?: string;
+  /** Was this a voice message (for voice-to-voice reply) */
+  isVoice?: boolean;
   /** Raw platform-specific context for replies */
   raw: unknown;
 }

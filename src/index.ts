@@ -4,6 +4,7 @@ import { createTelegramAdapter } from './channels/telegram.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
+import { db } from './utils/db.js';
 import cron from 'node-cron';
 
 console.log('=== AlonBot ===');
@@ -65,6 +66,32 @@ if (config.mode === 'cloud') {
 embedUnembeddedMemories().catch(err =>
   console.error('[Embed] Startup embed failed:', err.message)
 );
+
+// Proactive: overdue tasks check — 18:00 daily
+cron.schedule('0 18 * * *', async () => {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId) return;
+  try {
+    const overdue = db.prepare(
+      "SELECT id, title, due_date FROM tasks WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < date('now') ORDER BY due_date"
+    ).all() as any[];
+    if (overdue.length > 0) {
+      const list = overdue.map(t => `- #${t.id} ${t.title} (${t.due_date})`).join('\n');
+      await sendToChannel('telegram', targetId, `⚠️ יש לך ${overdue.length} משימות שעבר הזמן שלהן:\n${list}`);
+    }
+  } catch (e: any) {
+    console.error('[Proactive] Overdue tasks check failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Proactive: weekly summary — Sunday 09:00
+cron.schedule('0 9 * * 0', async () => {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId) return;
+  await sendAgentMessage('telegram', targetId,
+    `סיכום שבועי:\n1. כמה שילמתי על API השבוע?\n2. כמה משימות פתוחות?\n3. מה ההודעות האחרונות בדקל?\n4. מה התוכניות לשבוע הקרוב?`
+  );
+}, { timezone: 'Asia/Jerusalem' });
 
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {

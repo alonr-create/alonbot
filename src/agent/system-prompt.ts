@@ -32,7 +32,15 @@ function formatMemories(memories: Memory[]): string {
 }
 
 export async function buildSystemPrompt(userMessage?: string, channel?: string, senderId?: string): Promise<string> {
-  const now = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const nowDate = new Date();
+  const now = nowDate.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+
+  // Detect quiet hours (23:00-07:00 Israel time) and Shabbat
+  const israelHour = parseInt(nowDate.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }));
+  const israelDay = nowDate.toLocaleDateString('en-US', { timeZone: 'Asia/Jerusalem', weekday: 'short' });
+  const isQuietHours = israelHour >= 23 || israelHour < 7;
+  const isShabbat = israelDay === 'Sat' || (israelDay === 'Fri' && israelHour >= 18);
+
   const memories = await getRelevantMemories(userMessage || '');
   const skills = loadAllSkills();
 
@@ -95,8 +103,15 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **monday_api**: שליפת נתונים מ-Monday.com (GraphQL)
 - **send_email**: שליחת מייל דרך Gmail
 
+### משימות ומעקב
+- **add_task**: הוספת משימה לרשימה
+- **list_tasks**: הצגת משימות פתוחות
+- **complete_task**: סימון משימה כבוצעה
+- **api_costs**: דוח עלויות API (היום/שבוע/חודש)
+
 ### פרויקטים
 - **manage_project**: בדיקת סטטוס git של פרויקטים (status/log/pull/diff)
+- **send_file**: שליחת קובץ מהמחשב למשתמש
 
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
@@ -118,7 +133,7 @@ ${memoriesBlock}
 ${summariesBlock}
 ${skillsBlock}
 
-## כללים
+${isQuietHours ? '## שעות שקטות (לילה)\nעכשיו שעות לילה. תן תשובות קצרות במיוחד. אם הבקשה לא דחופה, הצע לאלון לטפל בזה בבוקר.\n' : ''}${isShabbat ? '## שבת\nעכשיו שבת. תן תשובות קצרות, אל תציע פעולות עסקיות.\n' : ''}## כללים
 - ענה בעברית, אלא אם שאלו באנגלית.
 - אל תשתמש באימוג׳ים אלא אם ביקשו.
 - כשמקבל תמונה — תאר מה רואים ותענה על שאלות לגביה.

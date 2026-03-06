@@ -58,10 +58,31 @@ db.exec(`
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS api_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    model TEXT NOT NULL,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
+    cost_usd REAL NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'cancelled')),
+    priority INTEGER NOT NULL DEFAULT 5,
+    due_date TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, sender_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type, category);
   CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC);
   CREATE INDEX IF NOT EXISTS idx_summaries_channel ON conversation_summaries(channel, sender_id, created_at);
+  CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage(created_at);
+  CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, priority DESC);
 `);
 
 // Vector table for semantic memory search (768-dim Gemini embedding)

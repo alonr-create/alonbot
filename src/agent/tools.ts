@@ -73,7 +73,7 @@ function isEmailAllowed(to: string): boolean {
 }
 
 // --- Local-only tools (disabled in cloud mode) ---
-const LOCAL_ONLY_TOOLS = ['shell', 'read_file', 'write_file', 'screenshot', 'manage_project'];
+const LOCAL_ONLY_TOOLS = ['shell', 'read_file', 'write_file', 'screenshot', 'manage_project', 'send_file'];
 
 const allToolDefinitions: Anthropic.Tool[] = [
   { name: 'shell', description: 'Run whitelisted shell command on Mac', input_schema: { type: 'object' as const, properties: { command: { type: 'string' } }, required: ['command'] } },
@@ -92,6 +92,11 @@ const allToolDefinitions: Anthropic.Tool[] = [
   { name: 'send_voice', description: 'TTS voice message (Hebrew/English)', input_schema: { type: 'object' as const, properties: { text: { type: 'string' } }, required: ['text'] } },
   { name: 'send_email', description: 'Send Gmail to whitelisted address', input_schema: { type: 'object' as const, properties: { to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
   { name: 'screenshot', description: 'Screenshot Mac screen', input_schema: { type: 'object' as const, properties: {} } },
+  { name: 'api_costs', description: 'Show API usage costs (today/week/month/all)', input_schema: { type: 'object' as const, properties: { period: { type: 'string', enum: ['today', 'week', 'month', 'all'], description: 'Time period' } }, required: ['period'] } },
+  { name: 'add_task', description: 'Add task to todo list', input_schema: { type: 'object' as const, properties: { title: { type: 'string' }, priority: { type: 'number', description: '1-10' }, due_date: { type: 'string', description: 'YYYY-MM-DD' } }, required: ['title'] } },
+  { name: 'list_tasks', description: 'List pending tasks', input_schema: { type: 'object' as const, properties: {} } },
+  { name: 'complete_task', description: 'Mark task as done', input_schema: { type: 'object' as const, properties: { id: { type: 'number' } }, required: ['id'] } },
+  { name: 'send_file', description: 'Send file from Mac to user', input_schema: { type: 'object' as const, properties: { path: { type: 'string' } }, required: ['path'] } },
   {
     name: 'manage_project',
     description: 'Run git commands or check status of a project. Projects are in /Users/oakhome/קלוד עבודות/.',
@@ -449,6 +454,61 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         return 'Screenshot taken and sent.';
       } catch (e: any) {
         return `Error: Screenshot failed.`;
+      }
+    }
+
+    case 'api_costs': {
+      const periods: Record<string, string> = {
+        today: "date(created_at) = date('now')",
+        week: "created_at >= datetime('now', '-7 days')",
+        month: "created_at >= datetime('now', '-30 days')",
+        all: '1=1',
+      };
+      const where = periods[input.period] || periods.all;
+      const rows = db.prepare(`
+        SELECT model, COUNT(*) as calls, SUM(input_tokens) as input_t, SUM(output_tokens) as output_t,
+               ROUND(SUM(cost_usd), 4) as total_cost
+        FROM api_usage WHERE ${where} GROUP BY model
+      `).all() as any[];
+      if (rows.length === 0) return `No API usage for period: ${input.period}`;
+      const total = rows.reduce((s, r) => s + (r.total_cost || 0), 0);
+      const lines = rows.map(r => `${r.model}: ${r.calls} calls, ${r.input_t?.toLocaleString()}↓ ${r.output_t?.toLocaleString()}↑, $${r.total_cost}`);
+      lines.push(`\nTotal: $${total.toFixed(4)}`);
+      return lines.join('\n');
+    }
+
+    case 'add_task': {
+      const stmt = db.prepare('INSERT INTO tasks (title, priority, due_date) VALUES (?, ?, ?)');
+      const result = stmt.run(input.title, input.priority || 5, input.due_date || null);
+      return `Task #${result.lastInsertRowid} added: "${input.title}"`;
+    }
+
+    case 'list_tasks': {
+      const tasks = db.prepare("SELECT id, title, priority, due_date, created_at FROM tasks WHERE status = 'pending' ORDER BY priority DESC, created_at").all() as any[];
+      if (tasks.length === 0) return 'No pending tasks.';
+      return tasks.map(t => `#${t.id} [${t.priority}] ${t.title}${t.due_date ? ` (עד ${t.due_date})` : ''}`).join('\n');
+    }
+
+    case 'complete_task': {
+      const result = db.prepare("UPDATE tasks SET status = 'done', completed_at = datetime('now') WHERE id = ? AND status = 'pending'").run(input.id);
+      return result.changes > 0 ? `Task #${input.id} completed!` : `Task #${input.id} not found or already done.`;
+    }
+
+    case 'send_file': {
+      if (!isPathAllowed(input.path)) return 'Error: Access denied.';
+      try {
+        const buf = readFileSync(input.path);
+        const ext = input.path.split('.').pop()?.toLowerCase();
+        if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) {
+          pendingMedia.push({ type: 'image', data: buf });
+        } else {
+          // For non-image files, send as text if small enough
+          const text = buf.toString('utf-8').slice(0, 10000);
+          return `File content (${input.path}):\n${text}`;
+        }
+        return `File sent: ${input.path}`;
+      } catch {
+        return 'Error: File not found.';
       }
     }
 

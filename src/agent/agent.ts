@@ -3,6 +3,7 @@ import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
 import { toolDefinitions, executeTool, collectMedia } from './tools.js';
+import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -188,6 +189,13 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
   replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
 
+  // Track API usage
+  try {
+    db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
+      modelUsed, totalInputTokens, totalOutputTokens, totalCost
+    );
+  } catch { /* ok */ }
+
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
 
@@ -205,6 +213,29 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   for (const m of media) {
     if (m.type === 'image') reply.image = m.data;
     if (m.type === 'voice') reply.voice = m.data;
+  }
+
+  // Voice-to-voice: if user sent voice message, auto-generate TTS reply
+  if (msg.isVoice && !reply.voice && config.elevenlabsApiKey) {
+    try {
+      // Strip the footer for TTS (don't read out model info)
+      const ttsText = replyText.replace(/\n\n_\u200E.*_$/, '').trim();
+      if (ttsText.length > 0 && ttsText.length < 3000) {
+        const isHebrew = /[\u0590-\u05FF]/.test(ttsText);
+        const voiceId = isHebrew ? config.elevenlabsVoiceId : 'nPczCjzI2devNBz1zQrb';
+        const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'xi-api-key': config.elevenlabsApiKey },
+          body: JSON.stringify({ text: ttsText, model_id: 'eleven_v3', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } }),
+        });
+        if (ttsRes.ok) {
+          reply.voice = Buffer.from(await ttsRes.arrayBuffer());
+          console.log(`[Agent] Voice-to-voice: generated ${reply.voice.length} bytes TTS`);
+        }
+      }
+    } catch (e: any) {
+      console.error('[Agent] Voice-to-voice TTS failed:', e.message);
+    }
   }
 
   return reply;
