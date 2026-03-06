@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
-import { toolDefinitions, executeTool, collectMedia } from './tools.js';
+import { toolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
 import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
@@ -57,11 +57,25 @@ function checkRateLimit(userId: string): boolean {
   return true;
 }
 
+// Cleanup stale rate limit entries every 10 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, timestamps] of rateLimitMap) {
+    const active = timestamps.filter(t => now - t < RATE_WINDOW_MS);
+    if (active.length === 0) rateLimitMap.delete(userId);
+    else rateLimitMap.set(userId, active);
+  }
+}, 10 * 60_000);
+
 export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> {
   // Rate limit check
   if (!checkRateLimit(msg.senderId)) {
     return { text: 'יותר מדי הודעות. נסה שוב בעוד דקה.' };
   }
+
+  // Per-request media isolation
+  const requestId = `${msg.channel}-${msg.senderId}-${Date.now()}`;
+  setCurrentRequestId(requestId);
 
   // Truncate excessively long messages
   if (msg.text.length > 4000) {
@@ -103,7 +117,10 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   // Detect [OPUS] tag for on-demand model upgrade
   const useOpus = msg.text.startsWith('[OPUS] ');
   if (useOpus) {
-    msg.text = msg.text.slice(7); // Strip the [OPUS] prefix
+    const cleanText = msg.text.slice(7);
+    // Update saved message to strip prefix (already saved above with prefix)
+    try { db.prepare("UPDATE messages SET content = ? WHERE channel = ? AND sender_id = ? ORDER BY id DESC LIMIT 1").run(cleanText, msg.channel, msg.senderId); } catch {}
+    msg.text = cleanText;
     // Update the last message in history to strip prefix too
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.role === 'user') {
@@ -227,8 +244,8 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     );
   }
 
-  // Collect any media from tool calls
-  const media = collectMedia();
+  // Collect any media from tool calls (per-request isolation)
+  const media = collectMedia(requestId);
   const reply: UnifiedReply = { text: replyText };
 
   for (const m of media) {

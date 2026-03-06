@@ -14,6 +14,7 @@ interface CronJob {
 type SendFn = (channel: string, targetId: string, text: string) => Promise<void>;
 
 const activeTasks = new Map<number, ReturnType<typeof cron.schedule>>();
+let currentSendFn: SendFn | null = null;
 
 const stmtInsert = db.prepare(
   `INSERT INTO cron_jobs (name, cron_expr, channel, target_id, message) VALUES (?, ?, ?, ?, ?)`
@@ -23,10 +24,23 @@ const stmtAll = db.prepare(`SELECT * FROM cron_jobs WHERE enabled = 1`);
 
 export function addCronJob(name: string, cronExpr: string, channel: string, targetId: string, message: string): number {
   const result = stmtInsert.run(name, cronExpr, channel, targetId, message);
-  return result.lastInsertRowid as number;
+  const id = result.lastInsertRowid as number;
+
+  // Register at runtime so new cron jobs fire without restart
+  if (currentSendFn && cron.validate(cronExpr)) {
+    const task = cron.schedule(cronExpr, async () => {
+      console.log(`[Cron] Firing: ${name}`);
+      await currentSendFn!(channel, targetId, message);
+    }, { timezone: 'Asia/Jerusalem' });
+    activeTasks.set(id, task);
+    console.log(`[Cron] Live-registered: "${name}" — ${cronExpr}`);
+  }
+
+  return id;
 }
 
 export function startAllCronJobs(sendFn: SendFn) {
+  currentSendFn = sendFn;
   const jobs = stmtAll.all() as CronJob[];
   console.log(`[Cron] Loading ${jobs.length} jobs`);
 

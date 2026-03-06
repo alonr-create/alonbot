@@ -255,9 +255,18 @@ export function getUnsummarizedMessages(channel: string, senderId: string): Mess
   return stmtUnsummarizedMessages.all(channel, senderId, channel, senderId) as MessageRow[];
 }
 
+const stmtUnsummarizedCount = db.prepare(
+  `SELECT COUNT(*) as count FROM messages
+   WHERE channel = ? AND sender_id = ?
+   AND created_at > COALESCE(
+     (SELECT to_date FROM conversation_summaries WHERE channel = ? AND sender_id = ? ORDER BY created_at DESC LIMIT 1),
+     '2000-01-01'
+   )`
+);
+
 export function shouldSummarize(channel: string, senderId: string): boolean {
-  const unsummarized = getUnsummarizedMessages(channel, senderId);
-  return unsummarized.length >= 40;
+  const row = stmtUnsummarizedCount.get(channel, senderId, channel, senderId) as { count: number };
+  return row.count >= 40;
 }
 
 // --- Memory Maintenance (Phase 3) ---
@@ -307,12 +316,14 @@ export function runMemoryMaintenance(): { decayed: number; consolidated: number;
   let consolidated = 0;
   const allMemories = stmtAllMemories.all() as Memory[];
   for (const m of allMemories) {
-    // Extract first 10 chars as key phrase for duplicate check
-    const keyPhrase = m.content.slice(0, 15);
-    if (keyPhrase.length < 5) continue;
+    // Use first 30 chars as key phrase for duplicate check (15 is too short for Hebrew)
+    const keyPhrase = m.content.slice(0, 30);
+    if (keyPhrase.length < 10) continue;
     const dupes = stmtDuplicateCheck.all(`%${keyPhrase}%`, m.id) as Memory[];
     for (const dupe of dupes) {
-      if (dupe.importance <= m.importance) {
+      // Only merge if content length is similar (within 50%) to avoid false positives
+      const lenRatio = Math.min(m.content.length, dupe.content.length) / Math.max(m.content.length, dupe.content.length);
+      if (lenRatio > 0.5 && dupe.importance <= m.importance) {
         stmtDeleteMemory.run(dupe.id);
         stmtDeleteVector.run(BigInt(dupe.id));
         consolidated++;

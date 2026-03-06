@@ -6,6 +6,15 @@ import { db } from '../utils/db.js';
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
+// Security headers
+app.use((_req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('X-XSS-Protection', '1; mode=block');
+  next();
+});
+
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok', mode: config.mode, uptime: process.uptime(), localConnected: !!config.localApiUrl });
 });
@@ -179,7 +188,7 @@ app.post('/api/chat', dashAuth, async (req, res) => {
     const reply = await handleMessage(msg);
     res.json({ text: reply.text });
   } catch (e: any) {
-    res.status(500).json({ error: e.message });
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
@@ -208,7 +217,12 @@ export function startServer() {
   });
 }
 
+function escapeJsString(s: string): string {
+  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c').replace(/>/g, '\\x3e');
+}
+
 function getDashboardHTML(token: string): string {
+  const safeToken = escapeJsString(token);
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -286,7 +300,7 @@ function getDashboardHTML(token: string): string {
 </div>
 
 <script>
-const TOKEN = '${token}';
+const TOKEN = '${safeToken}';
 const API = (path) => '/api/dashboard/' + path + '?token=' + TOKEN;
 let currentTab = 'memories';
 
@@ -390,6 +404,7 @@ setInterval(loadAll, 30000); // refresh every 30s
 }
 
 function getChatHTML(token: string): string {
+  const safeToken = escapeJsString(token);
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -423,7 +438,7 @@ function getChatHTML(token: string): string {
 <body>
 <div class="header">
   <h1>AlonBot Chat</h1>
-  <a href="/dashboard?token=${token}">Dashboard</a>
+  <a href="/dashboard?token=${safeToken}">Dashboard</a>
 </div>
 <div class="messages" id="messages"></div>
 <div class="typing" id="typing">AlonBot חושב...</div>
@@ -432,7 +447,7 @@ function getChatHTML(token: string): string {
   <button id="send" onclick="send()">שלח</button>
 </div>
 <script>
-const TOKEN = '${token}';
+const TOKEN = '${safeToken}';
 const msgEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const typingEl = document.getElementById('typing');

@@ -38,8 +38,7 @@ export function registerAdapter(adapter: ChannelAdapter) {
         clearInterval(typingInterval);
         console.error(`[${msg.channel}] Error:`, error.message, error.stack?.slice(0, 500));
         try {
-          const errDetail = `${error.message || 'Unknown'}`.slice(0, 200);
-          await adapter.sendReply(msg, { text: `סליחה, קרתה שגיאה: ${errDetail}` });
+          await adapter.sendReply(msg, { text: 'סליחה, קרתה שגיאה. נסה שוב בעוד כמה רגעים.' });
         } catch {}
       }
     } else {
@@ -50,8 +49,7 @@ export function registerAdapter(adapter: ChannelAdapter) {
       } catch (error: any) {
         console.error(`[${msg.channel}] Error:`, error.message, error.stack?.slice(0, 500));
         try {
-          const errDetail = `${error.message || 'Unknown'}`.slice(0, 200);
-          await adapter.sendReply(msg, { text: `סליחה, קרתה שגיאה: ${errDetail}` });
+          await adapter.sendReply(msg, { text: 'סליחה, קרתה שגיאה. נסה שוב בעוד כמה רגעים.' });
         } catch {}
       }
     }

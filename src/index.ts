@@ -53,6 +53,8 @@ startAllCronJobs(sendToChannel);
 
 // Daily brief — 08:00 Israel time
 cron.schedule('0 8 * * *', async () => {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId) return;
   console.log('[Cron] Daily brief firing');
   const briefMsg = `סיכום בוקר יומי:
 1. מה התאריך היום (עברי ולועזי)?
@@ -60,7 +62,7 @@ cron.schedule('0 8 * * *', async () => {
 3. יש לידים חדשים בדקל לפרישה?
 4. מה התזכורות הפעילות שלי?
 5. תן ציטוט השראה קצר.`;
-  await sendAgentMessage('telegram', config.allowedTelegram[0] || '', briefMsg);
+  await sendAgentMessage('telegram', targetId, briefMsg);
 }, { timezone: 'Asia/Jerusalem' });
 
 // Embed any memories that don't have vectors yet (background)
@@ -180,21 +182,27 @@ cron.schedule('* * * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
-// Simple cron expression matcher for current minute
+// Simple cron expression matcher for current minute (Israel timezone)
 function matchesCronNow(expr: string, now: Date): boolean {
   const parts = expr.split(/\s+/);
   if (parts.length !== 5) return false;
-  const minute = now.getMinutes();
-  const hour = now.getHours();
-  const dayOfMonth = now.getDate();
-  const month = now.getMonth() + 1;
-  const dayOfWeek = now.getDay();
+  // Use Israel timezone to avoid UTC mismatch on cloud
+  const israelStr = now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' });
+  const israelDate = new Date(israelStr);
+  const minute = israelDate.getMinutes();
+  const hour = israelDate.getHours();
+  const dayOfMonth = israelDate.getDate();
+  const month = israelDate.getMonth() + 1;
+  const dayOfWeek = israelDate.getDay();
   const fields = [minute, hour, dayOfMonth, month, dayOfWeek];
   return parts.every((part, i) => {
     if (part === '*') return true;
     if (part.includes('/')) {
-      const [, step] = part.split('/');
-      return fields[i] % parseInt(step) === 0;
+      const [base, step] = part.split('/');
+      const stepNum = parseInt(step);
+      if (stepNum <= 0) return false;
+      const start = base === '*' ? 0 : parseInt(base);
+      return (fields[i] - start) % stepNum === 0 && fields[i] >= start;
     }
     if (part.includes(',')) return part.split(',').map(Number).includes(fields[i]);
     if (part.includes('-')) {
@@ -218,5 +226,6 @@ console.log('[AlonBot] Ready!');
 process.on('SIGINT', async () => {
   console.log('\n[AlonBot] Shutting down...');
   if (telegram && config.mode === 'cloud') await telegram.stop();
+  try { db.close(); } catch {}
   process.exit(0);
 });

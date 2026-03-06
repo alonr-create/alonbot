@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { readFileSync, writeFileSync, realpathSync } from 'fs';
+import { readFileSync, writeFileSync, realpathSync, unlinkSync } from 'fs';
 import { resolve } from 'path';
 import { createTransport } from 'nodemailer';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -10,12 +10,21 @@ import { addCronJob } from '../cron/scheduler.js';
 import { ingestUrl, ingestText, searchKnowledge, listDocs, deleteDoc } from './knowledge.js';
 import { addWorkflow, listWorkflows, deleteWorkflow, toggleWorkflow, matchKeywordWorkflows, type WorkflowAction } from './workflows.js';
 
-// --- Media side-channel: tools can attach media to be sent with the reply ---
-let pendingMedia: Array<{ type: 'image' | 'voice'; data: Buffer }> = [];
+// --- Media side-channel: per-request to prevent cross-user leakage ---
+const pendingMediaMap = new Map<string, Array<{ type: 'image' | 'voice'; data: Buffer }>>();
+let currentRequestId = 'default';
 
-export function collectMedia(): Array<{ type: 'image' | 'voice'; data: Buffer }> {
-  const media = [...pendingMedia];
-  pendingMedia = [];
+export function setCurrentRequestId(id: string) { currentRequestId = id; }
+
+function addPendingMedia(item: { type: 'image' | 'voice'; data: Buffer }) {
+  if (!pendingMediaMap.has(currentRequestId)) pendingMediaMap.set(currentRequestId, []);
+  pendingMediaMap.get(currentRequestId)!.push(item);
+}
+
+export function collectMedia(requestId?: string): Array<{ type: 'image' | 'voice'; data: Buffer }> {
+  const id = requestId || currentRequestId;
+  const media = pendingMediaMap.get(id) || [];
+  pendingMediaMap.delete(id);
   return media;
 }
 
@@ -26,13 +35,14 @@ const ALLOWED_COMMANDS = [
 ];
 
 // Block shell metacharacters that enable command chaining/injection
-const SHELL_INJECTION_PATTERN = /[;|&`$(){}!<>]/;
+const SHELL_INJECTION_PATTERN = /[;|&`$(){}!<>\n\r]/;
 
 function isCommandAllowed(cmd: string): boolean {
   const trimmed = cmd.trim();
   if (SHELL_INJECTION_PATTERN.test(trimmed)) return false;
   const base = trimmed.split(/\s+/)[0];
-  return ALLOWED_COMMANDS.some(a => base === a || base.endsWith(`/${a}`));
+  const baseName = base.split('/').pop() || base;
+  return ALLOWED_COMMANDS.includes(baseName);
 }
 
 // --- Security: file path restrictions ---
@@ -41,10 +51,15 @@ const BLOCKED_FILE_PATTERNS = ['.env', '.git/', '.ssh/', '.claude/', 'credential
 
 function isPathAllowed(filePath: string): boolean {
   const resolved = resolve(filePath);
-  // Block dotfiles and sensitive patterns
   if (BLOCKED_FILE_PATTERNS.some(p => resolved.includes(p))) return false;
-  // Must be under allowed directories
-  return ALLOWED_FILE_DIRS.some(d => resolved.startsWith(d));
+  // Use realpathSync to follow symlinks and prevent symlink escape
+  try {
+    const real = realpathSync(resolved);
+    return ALLOWED_FILE_DIRS.some(d => real.startsWith(d));
+  } catch {
+    // File doesn't exist yet (write_file) — check resolved path
+    return ALLOWED_FILE_DIRS.some(d => resolved.startsWith(d));
+  }
 }
 
 // --- Security: URL validation for SSRF prevention ---
@@ -53,10 +68,13 @@ function isUrlAllowed(url: string): boolean {
     const parsed = new URL(url);
     if (!['http:', 'https:'].includes(parsed.protocol)) return false;
     const host = parsed.hostname.toLowerCase();
-    // Block internal/private IPs
+    // Block internal/private IPs (IPv4 + IPv6)
     if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false;
-    if (host.startsWith('10.') || host.startsWith('192.168.') || host.startsWith('169.254.')) return false;
+    if (host === '::1' || host.startsWith('[')) return false; // IPv6 loopback/brackets
+    if (/^(10\.|192\.168\.|169\.254\.|0\.)/.test(host)) return false;
     if (host.startsWith('172.') && parseInt(host.split('.')[1]) >= 16 && parseInt(host.split('.')[1]) <= 31) return false;
+    if (/^\d+$/.test(host)) return false; // Decimal IP encoding
+    if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return false; // Private IPv6
     return true;
   } catch {
     return false;
@@ -160,7 +178,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
     // Collect proxied media
     if (proxy.media) {
       for (const m of proxy.media) {
-        pendingMedia.push({ type: m.type as any, data: Buffer.from(m.data, 'base64') });
+        addPendingMedia({ type: m.type as any, data: Buffer.from(m.data, 'base64') });
       }
     }
     return proxy.result;
@@ -350,7 +368,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         for (const part of parts) {
           if (part.inlineData?.mimeType?.startsWith('image/')) {
             const buf = Buffer.from(part.inlineData.data, 'base64');
-            pendingMedia.push({ type: 'image', data: buf });
+            addPendingMedia({ type: 'image', data: buf });
             return 'Image generated and sent.';
           }
         }
@@ -432,7 +450,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         );
         if (!res.ok) return `Error: ElevenLabs returned ${res.status}`;
         const buf = Buffer.from(await res.arrayBuffer());
-        pendingMedia.push({ type: 'voice', data: buf });
+        addPendingMedia({ type: 'voice', data: buf });
         return 'Voice message generated and sent.';
       } catch (e: any) {
         return `Error: Voice generation failed.`;
@@ -467,7 +485,8 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         const tmpPath = `/tmp/alonbot-screenshot-${Date.now()}.png`;
         execSync(`screencapture -x ${tmpPath}`, { timeout: 5000 });
         const buf = readFileSync(tmpPath);
-        pendingMedia.push({ type: 'image', data: buf });
+        try { unlinkSync(tmpPath); } catch {}
+        addPendingMedia({ type: 'image', data: buf });
         return 'Screenshot taken and sent.';
       } catch (e: any) {
         return `Error: Screenshot failed.`;
@@ -481,7 +500,8 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         month: "created_at >= datetime('now', '-30 days')",
         all: '1=1',
       };
-      const where = periods[input.period] || periods.all;
+      const where = periods[input.period];
+      if (!where) return `Invalid period. Use: today, week, month, all`;
       const rows = db.prepare(`
         SELECT model, COUNT(*) as calls, SUM(input_tokens) as input_t, SUM(output_tokens) as output_t,
                ROUND(SUM(cost_usd), 4) as total_cost
@@ -517,7 +537,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         const buf = readFileSync(input.path);
         const ext = input.path.split('.').pop()?.toLowerCase();
         if (['png', 'jpg', 'jpeg', 'gif', 'webp'].includes(ext || '')) {
-          pendingMedia.push({ type: 'image', data: buf });
+          addPendingMedia({ type: 'image', data: buf });
         } else {
           // For non-image files, send as text if small enough
           const text = buf.toString('utf-8').slice(0, 10000);
@@ -566,6 +586,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
     // --- Knowledge Base ---
     case 'learn_url': {
       if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY needed for embeddings.';
+      if (!isUrlAllowed(input.url)) return 'Error: URL not allowed (private/internal addresses blocked).';
       try {
         const result = await ingestUrl(input.url, input.title);
         return `Ingested "${input.title || input.url}": ${result.chunks} chunks saved to knowledge base (doc #${result.docId})`;
