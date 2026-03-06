@@ -23,9 +23,10 @@ export function registerAdapter(adapter: ChannelAdapter) {
         console.log(`[${msg.channel}] Reply sent (${reply.text.length} chars)`);
       } catch (error: any) {
         clearInterval(typingInterval);
-        console.error(`[${msg.channel}] Error:`, error.message);
+        console.error(`[${msg.channel}] Error:`, error.message, error.stack?.slice(0, 500));
         try {
-          await adapter.sendReply(msg, { text: 'סליחה, קרתה שגיאה. נסה שוב.' });
+          const errDetail = `${error.message || 'Unknown'}`.slice(0, 200);
+          await adapter.sendReply(msg, { text: `סליחה, קרתה שגיאה: ${errDetail}` });
         } catch {}
       }
     } else {
@@ -34,9 +35,10 @@ export function registerAdapter(adapter: ChannelAdapter) {
         await adapter.sendReply(msg, reply);
         console.log(`[${msg.channel}] Reply sent (${reply.text.length} chars)`);
       } catch (error: any) {
-        console.error(`[${msg.channel}] Error:`, error.message);
+        console.error(`[${msg.channel}] Error:`, error.message, error.stack?.slice(0, 500));
         try {
-          await adapter.sendReply(msg, { text: 'סליחה, קרתה שגיאה. נסה שוב.' });
+          const errDetail = `${error.message || 'Unknown'}`.slice(0, 200);
+          await adapter.sendReply(msg, { text: `סליחה, קרתה שגיאה: ${errDetail}` });
         } catch {}
       }
     }
