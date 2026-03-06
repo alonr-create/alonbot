@@ -111,7 +111,7 @@ const allToolDefinitions: Anthropic.Tool[] = [
       required: ['project', 'action'],
     },
   },
-  { name: 'schedule_message', description: 'Schedule a one-time message to be sent at a specific date/time (ISO 8601 or "YYYY-MM-DD HH:mm"). Auto-deletes after sending.', input_schema: { type: 'object' as const, properties: { message: { type: 'string', description: 'Message to send' }, send_at: { type: 'string', description: 'When to send (e.g. "2026-03-07 09:00")' }, label: { type: 'string', description: 'Short label for this scheduled message' } }, required: ['message', 'send_at'] } },
+  { name: 'schedule_message', description: 'Schedule a one-time reminder/message at a specific Israel time ("YYYY-MM-DD HH:mm"). Use for "remind me in X minutes/hours" or "remind me at HH:mm". Calculate the target time based on current Israel time.', input_schema: { type: 'object' as const, properties: { message: { type: 'string', description: 'Message to send' }, send_at: { type: 'string', description: 'Israel time to send (e.g. "2026-03-07 09:00")' }, label: { type: 'string', description: 'Short label for this scheduled message' } }, required: ['message', 'send_at'] } },
   // Knowledge Base tools
   { name: 'learn_url', description: 'Ingest a web page into knowledge base for later retrieval', input_schema: { type: 'object' as const, properties: { url: { type: 'string' }, title: { type: 'string' } }, required: ['url'] } },
   { name: 'learn_text', description: 'Ingest text content into knowledge base', input_schema: { type: 'object' as const, properties: { text: { type: 'string' }, title: { type: 'string' } }, required: ['text', 'title'] } },

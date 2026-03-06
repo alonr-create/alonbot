@@ -112,9 +112,10 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
 ### זיכרון ותזמון
 - **remember**: שמירת זיכרון על אלון (עם סוג, קטגוריה, חשיבות)
-- **set_reminder**: הגדרת תזכורת (cron)
-- **list_reminders**: הצגת כל התזכורות
-- **delete_reminder**: מחיקת תזכורת
+- **schedule_message**: תזכורת חד-פעמית — שליחת הודעה בזמן מסוים (פורמט: "YYYY-MM-DD HH:mm" בזמן ישראל). **השתמש בזה כשאלון אומר "תזכיר לי עוד X דקות/שעות" או "תזכיר לי ב-..."**
+- **set_reminder**: תזכורת חוזרת עם cron (יומית, שבועית וכו׳). השתמש רק כשהתזכורת צריכה לחזור על עצמה.
+- **list_reminders**: הצגת כל התזכורות החוזרות
+- **delete_reminder**: מחיקת תזכורת חוזרת
 
 ### עסקים
 - **monday_api**: שליפת נתונים מ-Monday.com (GraphQL)

@@ -115,7 +115,8 @@ cron.schedule('0 21 * * *', async () => {
 // Scheduled messages check — every minute
 cron.schedule('* * * * *', async () => {
   try {
-    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    // Use Israel time (sv-SE locale gives YYYY-MM-DD HH:mm format)
+    const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 16);
     const pending = db.prepare(
       "SELECT * FROM scheduled_messages WHERE sent = 0 AND send_at <= ?"
     ).all(now) as any[];
