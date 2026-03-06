@@ -242,7 +242,9 @@ export function createTelegramAdapter(): ChannelAdapter {
       'אפשר פשוט לכתוב לי בטקסט חופשי, או להשתמש בתפריט:\n' +
       '/menu — תפריט פעולות מהירות\n' +
       '/tasks — משימות פתוחות\n' +
-      '/export — ייצוא היסטוריית שיחה\n\n' +
+      '/search — חיפוש בהיסטוריה\n' +
+      '/dashboard — דאשבורד\n' +
+      '/help — כל מה שאני יודע לעשות\n\n' +
       'מה תרצה לעשות?'
     );
   });
@@ -251,6 +253,83 @@ export function createTelegramAdapter(): ChannelAdapter {
   bot.command('tasks', async (ctx) => {
     if (!ctx.from || !isAllowed(String(ctx.from.id)) || !messageHandler) return;
     messageHandler(makeUnified(ctx, 'הצג משימות פתוחות'));
+  });
+
+  // Handle /help command — explain what the bot can do
+  bot.command('help', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+    await ctx.reply(
+      '*AlonBot — מה אני יודע לעשות?*\n\n' +
+      '*חיפוש ומידע:* חדשות, מזג אוויר, חיפוש באינטרנט, מחקר עמוק, סיכום דפי אינטרנט\n\n' +
+      '*יצירת תוכן:* כתיבת פוסטים, מיילים, יצירת תמונות AI, הודעות קוליות\n\n' +
+      '*זיכרון:* אני זוכר מה שמספרים לי, ומשתמש בזה בהמשך\n\n' +
+      '*משימות:* ניהול רשימת מטלות עם עדיפות ותאריכי יעד\n\n' +
+      '*תזכורות:* הגדרת תזכורות חוזרות או חד-פעמיות\n\n' +
+      '*עסקים:* שליפת לידים ונתונים מ-Monday.com, שליחת מיילים\n\n' +
+      '*קבצים:* קריאה, כתיבה, צילום מסך (כשהמחשב מחובר)\n\n' +
+      '*בסיס ידע:* טעינת מסמכים/URLs/PDFs וחיפוש סמנטי בהם\n\n' +
+      '*אוטומציות:* יצירת תגובות אוטומטיות לפי מילות מפתח\n\n' +
+      '*תמונות:* שליחת תמונה ואני מנתח מה יש בה (OCR, תיאור)\n\n' +
+      '*קול:* שליחת הודעה קולית ואני מתמלל ועונה (גם בקול)\n\n' +
+      '*פקודות:*\n' +
+      '/menu — תפריט פעולות מהירות\n' +
+      '/tasks — משימות פתוחות\n' +
+      '/summary — סיכום השיחה האחרונה\n' +
+      '/search מילה — חיפוש בהיסטוריה\n' +
+      '/export — ייצוא שיחה כקובץ\n' +
+      '/dashboard — קישור לדאשבורד\n' +
+      '/help — ההודעה הזאת',
+      { parse_mode: 'Markdown' }
+    );
+  });
+
+  // Handle /summary command — summarize recent conversation
+  bot.command('summary', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id)) || !messageHandler) return;
+    messageHandler(makeUnified(ctx, 'סכם את השיחה האחרונה שלנו ב-3-5 משפטים'));
+  });
+
+  // Handle /search command — search message history
+  bot.command('search', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+    const query = ctx.match?.trim();
+    if (!query) {
+      await ctx.reply('שימוש: /search מילת חיפוש\nדוגמה: /search דקל');
+      return;
+    }
+
+    try {
+      const { db } = await import('../utils/db.js');
+      const rows = db.prepare(
+        `SELECT sender_name, role, content, created_at FROM messages
+         WHERE channel = 'telegram' AND sender_id = ? AND content LIKE ?
+         ORDER BY id DESC LIMIT 10`
+      ).all(String(ctx.from.id), `%${query}%`) as any[];
+
+      if (rows.length === 0) {
+        await ctx.reply(`לא נמצאו תוצאות עבור "${query}"`);
+        return;
+      }
+
+      const results = rows.map((r: any, i: number) => {
+        const who = r.role === 'user' ? r.sender_name : 'Bot';
+        const content = r.content.length > 150 ? r.content.slice(0, 150) + '...' : r.content;
+        return `${i + 1}. [${r.created_at}] ${who}:\n${content}`;
+      }).join('\n\n');
+
+      await ctx.reply(`חיפוש: "${query}" — ${rows.length} תוצאות:\n\n${results}`);
+    } catch (err: any) {
+      console.error('[Telegram] Search error:', err.message);
+      await ctx.reply('שגיאה בחיפוש.');
+    }
+  });
+
+  // Handle /dashboard command — send link to dashboard
+  bot.command('dashboard', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+    const keyboard = new InlineKeyboard()
+      .url('פתח דאשבורד', `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}`);
+    await ctx.reply('לחץ לפתיחת הדאשבורד:', { reply_markup: keyboard });
   });
 
   // Handle inline button callbacks
@@ -369,8 +448,11 @@ export function createTelegramAdapter(): ChannelAdapter {
         await bot.api.setMyCommands([
           { command: 'menu', description: 'תפריט פעולות מהירות' },
           { command: 'tasks', description: 'משימות פתוחות' },
+          { command: 'summary', description: 'סיכום השיחה האחרונה' },
+          { command: 'search', description: 'חיפוש בהיסטוריה' },
+          { command: 'dashboard', description: 'פתח דאשבורד' },
           { command: 'export', description: 'ייצוא היסטוריית שיחה' },
-          { command: 'start', description: 'התחל מחדש' },
+          { command: 'help', description: 'מה אני יודע לעשות?' },
         ]);
       } catch (e: any) {
         console.warn('[Telegram] Failed to set commands:', e.message);

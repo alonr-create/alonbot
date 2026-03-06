@@ -81,20 +81,53 @@ function chunkText(text: string, maxChunkSize: number = 800, overlap: number = 1
 export async function ingestUrl(url: string, title?: string): Promise<{ docId: number; chunks: number }> {
   const res = await fetch(url, {
     headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlonBot/1.0)' },
-    signal: AbortSignal.timeout(15000),
+    signal: AbortSignal.timeout(30000),
   });
   if (!res.ok) throw new Error(`Failed to fetch URL: ${res.status}`);
 
-  const html = await res.text();
-  const text = html
-    .replace(/<script[\s\S]*?<\/script>/gi, '')
-    .replace(/<style[\s\S]*?<\/style>/gi, '')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  const contentType = res.headers.get('content-type') || '';
+
+  let text: string;
+  if (contentType.includes('application/pdf')) {
+    // PDF: extract text using Gemini vision/document understanding
+    const pdfBuffer = Buffer.from(await res.arrayBuffer());
+    text = await extractPdfText(pdfBuffer);
+  } else {
+    // HTML: strip tags
+    const html = await res.text();
+    text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, '')
+      .replace(/<style[\s\S]*?<\/style>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
 
   const docTitle = title || url.split('/').pop()?.split('?')[0] || url;
-  return ingestText(text, docTitle, 'url', url);
+  return ingestText(text, docTitle, contentType.includes('pdf') ? 'pdf' : 'url', url);
+}
+
+async function extractPdfText(pdfBuffer: Buffer): Promise<string> {
+  if (!config.geminiApiKey) throw new Error('Gemini API key required for PDF extraction');
+
+  const base64 = pdfBuffer.toString('base64');
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{
+        parts: [
+          { inline_data: { mime_type: 'application/pdf', data: base64 } },
+          { text: 'Extract ALL text content from this PDF document. Return only the raw text, preserving paragraph structure. Do not summarize or analyze — just extract the text as-is.' },
+        ],
+      }],
+      generationConfig: { maxOutputTokens: 8192 },
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (!res.ok) throw new Error(`Gemini PDF extraction failed: ${res.status}`);
+  const data = await res.json() as any;
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 export async function ingestText(text: string, title: string, sourceType: string = 'text', sourceRef?: string): Promise<{ docId: number; chunks: number }> {

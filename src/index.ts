@@ -87,6 +87,24 @@ cron.schedule('0 9 * * 0', async () => {
   );
 }, { timezone: 'Asia/Jerusalem' });
 
+// Cost alert — check at 21:00 if daily spend exceeded $0.50
+cron.schedule('0 21 * * *', async () => {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId) return;
+  try {
+    const row = db.prepare(
+      "SELECT COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls FROM api_usage WHERE date(created_at) = date('now')"
+    ).get() as any;
+    if (row.cost > 0.50) {
+      await sendToChannel('telegram', targetId,
+        `💰 התראת עלויות: שילמת היום $${row.cost.toFixed(4)} על ${row.calls} קריאות API.\nתקציב יומי מומלץ: $0.50`
+      );
+    }
+  } catch (e: any) {
+    console.error('[Proactive] Cost alert failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {
   console.log('[Cron] Memory maintenance');
