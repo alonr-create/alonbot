@@ -6,8 +6,28 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', mode: config.mode, uptime: process.uptime() });
+  res.json({ status: 'ok', mode: config.mode, uptime: process.uptime(), localConnected: !!config.localApiUrl });
 });
+
+// Cloud mode: allow local Mac to register its tunnel URL
+if (config.mode === 'cloud') {
+  app.post('/api/register-local', (req, res) => {
+    const authHeader = req.headers['authorization'];
+    if (authHeader !== `Bearer ${config.localApiSecret}`) {
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+    const { url } = req.body;
+    if (!url || typeof url !== 'string') {
+      res.status(400).json({ error: 'Missing url' });
+      return;
+    }
+    // Update config in memory (no restart needed)
+    (config as any).localApiUrl = url;
+    console.log(`[Server] Local Mac registered: ${url}`);
+    res.json({ ok: true, registered: url });
+  });
+}
 
 // Local mode: expose tools as API for cloud proxy
 if (config.mode === 'local') {
