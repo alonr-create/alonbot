@@ -2,8 +2,8 @@ FROM node:22-slim
 
 WORKDIR /app
 
-# Install build deps for better-sqlite3
-RUN apt-get update && apt-get install -y python3 make g++ && rm -rf /var/lib/apt/lists/*
+# Install build deps + useful tools for shell access
+RUN apt-get update && apt-get install -y python3 make g++ curl git jq && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json ./
 RUN npm ci --production=false
@@ -17,8 +17,8 @@ RUN npx tsc
 # Remove dev dependencies
 RUN npm prune --production
 
-# Create data dir
-RUN mkdir -p data
+# Create data + workspace dirs
+RUN mkdir -p data workspace
 
 EXPOSE 3700
 

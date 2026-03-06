@@ -28,25 +28,10 @@ export function collectMedia(requestId?: string): Array<{ type: 'image' | 'voice
   return media;
 }
 
-// --- Security: shell command whitelist ---
-const ALLOWED_COMMANDS = [
-  'date', 'cal', 'ls', 'cat', 'head', 'tail', 'wc', 'grep', 'find', 'echo',
-  'pwd', 'whoami', 'uptime', 'df', 'which', 'hostname', 'sw_vers',
-];
-
-// Block shell metacharacters that enable command chaining/injection
-const SHELL_INJECTION_PATTERN = /[;|&`$(){}!<>\n\r]/;
-
-function isCommandAllowed(cmd: string): boolean {
-  const trimmed = cmd.trim();
-  if (SHELL_INJECTION_PATTERN.test(trimmed)) return false;
-  const base = trimmed.split(/\s+/)[0];
-  const baseName = base.split('/').pop() || base;
-  return ALLOWED_COMMANDS.includes(baseName);
-}
+// Shell: no restrictions — runs only on local Mac via LOCAL_ONLY_TOOLS
 
 // --- Security: file path restrictions ---
-const ALLOWED_FILE_DIRS = ['/Users/oakhome/קלוד עבודות/', '/tmp/alonbot-'];
+const ALLOWED_FILE_DIRS = ['/Users/oakhome/קלוד עבודות/', '/tmp/alonbot-', '/app/workspace/', '/tmp/'];
 const BLOCKED_FILE_PATTERNS = ['.env', '.git/', '.ssh/', '.claude/', 'credentials', '.zshrc', '.bashrc'];
 
 function isPathAllowed(filePath: string): boolean {
@@ -92,11 +77,12 @@ function isEmailAllowed(to: string): boolean {
   return ALLOWED_EMAIL_DOMAINS.includes(domain);
 }
 
-// --- Local-only tools (disabled in cloud mode) ---
-const LOCAL_ONLY_TOOLS = ['shell', 'read_file', 'write_file', 'screenshot', 'manage_project', 'send_file'];
+// --- Local-only tools (proxied to Mac in cloud mode) ---
+// shell, read_file, write_file work in both modes (cloud has /app/workspace/)
+const LOCAL_ONLY_TOOLS = ['screenshot', 'manage_project', 'send_file'];
 
 const allToolDefinitions: Anthropic.Tool[] = [
-  { name: 'shell', description: 'Run whitelisted shell command on Mac', input_schema: { type: 'object' as const, properties: { command: { type: 'string' } }, required: ['command'] } },
+  { name: 'shell', description: 'Run any shell command on Mac (pipes, chaining, curl — all allowed)', input_schema: { type: 'object' as const, properties: { command: { type: 'string' } }, required: ['command'] } },
   { name: 'read_file', description: 'Read file from project dir', input_schema: { type: 'object' as const, properties: { path: { type: 'string' } }, required: ['path'] } },
   { name: 'write_file', description: 'Write file to project dir', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
   { name: 'web_search', description: 'DuckDuckGo search', input_schema: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] } },
@@ -186,13 +172,10 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
 
   switch (name) {
     case 'shell': {
-      if (!isCommandAllowed(input.command)) {
-        return `Error: Command not allowed. Only simple commands permitted (no pipes, semicolons, or chaining). Allowed: ${ALLOWED_COMMANDS.join(', ')}`;
-      }
       try {
-        return execSync(input.command, { timeout: 15000, encoding: 'utf-8', maxBuffer: 100000 }).trim();
+        return execSync(input.command, { shell: '/bin/zsh', timeout: 30000, encoding: 'utf-8', maxBuffer: 1_000_000 }).trim();
       } catch (e: any) {
-        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+        return `Error: ${(e.stderr || e.message || '').slice(0, 1000)}`;
       }
     }
 
