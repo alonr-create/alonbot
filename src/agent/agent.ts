@@ -186,7 +186,7 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   const costOutput = (totalOutputTokens / 1_000_000) * 15; // $15/M output tokens
   const totalCost = costInput + costOutput;
   const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
-  replyText += `\n\n_${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
+  replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
 
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
