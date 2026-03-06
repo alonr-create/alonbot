@@ -132,39 +132,182 @@ export function createTelegramAdapter(): ChannelAdapter {
     }
   });
 
-  // Handle /menu command — quick action buttons
+  // --- Menu categories for inline keyboard ---
+  const menuCategories: Record<string, { label: string; items: Array<{ label: string; action: string }> }> = {
+    info: {
+      label: '🔍 מידע ואינטרנט',
+      items: [
+        { label: '📰 חדשות', action: 'מה החדשות היום בישראל?' },
+        { label: '🌤 מזג אוויר', action: 'מה מזג האוויר בתל אביב?' },
+        { label: '📅 תאריך עברי', action: 'מה התאריך העברי היום?' },
+        { label: '🔎 חפש באינטרנט', action: 'חפש באינטרנט: ' },
+      ],
+    },
+    system: {
+      label: '🖥️ מערכת',
+      items: [
+        { label: '📸 צלם מסך', action: 'צלם מסך' },
+        { label: '📊 סטטוס פרויקטים', action: 'מה הסטטוס של כל הפרויקטים?' },
+        { label: '💰 עלויות API', action: 'הצג עלויות API' },
+        { label: '🧠 מה אתה זוכר?', action: 'מה אתה זוכר עליי?' },
+      ],
+    },
+    content: {
+      label: '🎨 יצירת תוכן',
+      items: [
+        { label: '✍️ כתוב פוסט', action: 'כתוב פוסט שיווקי קצר על ' },
+        { label: '📧 נסח מייל', action: 'נסח מייל מקצועי בנושא ' },
+        { label: '💡 רעיונות תוכן', action: 'תן לי 5 רעיונות לתוכן עבור ' },
+        { label: '📝 סכם טקסט', action: 'סכם את הטקסט הבא: ' },
+      ],
+    },
+    memory: {
+      label: '🧠 זיכרון ותזמון',
+      items: [
+        { label: '⏰ תזכורות', action: 'הצג תזכורות' },
+        { label: '📋 סיכום יומי', action: 'תן לי סיכום יומי' },
+        { label: '💭 על מה דיברנו?', action: 'על מה דיברנו לאחרונה?' },
+        { label: '🔔 הגדר תזכורת', action: 'הגדר תזכורת ל' },
+      ],
+    },
+    business: {
+      label: '💼 עסקים — דקל',
+      items: [
+        { label: '📈 לידים חדשים', action: 'מה הלידים החדשים בדקל?' },
+        { label: '📊 דוח יומי', action: 'הכן דוח יומי לדקל' },
+        { label: '📋 משימות פתוחות', action: 'הצג משימות פתוחות' },
+        { label: '📆 פגישות השבוע', action: 'מה הפגישות שלי השבוע?' },
+      ],
+    },
+    tasks: {
+      label: '✅ משימות',
+      items: [
+        { label: '📋 משימות פתוחות', action: 'הצג משימות פתוחות' },
+        { label: '➕ הוסף משימה', action: 'הוסף משימה: ' },
+        { label: '✅ סמן כבוצע', action: 'סמן משימה מספר ' },
+        { label: '📊 סיכום שבועי', action: 'תן סיכום שבועי' },
+      ],
+    },
+    projects: {
+      label: '🛠 פרויקטים',
+      items: [
+        { label: '📂 קרא קובץ', action: 'קרא את הקובץ ' },
+        { label: '📁 רשימת קבצים', action: 'הצג קבצים בתיקייה ' },
+        { label: '🔧 הרץ פקודה', action: 'הרץ: ' },
+      ],
+    },
+    knowledge: {
+      label: '📚 בסיס ידע',
+      items: [
+        { label: '🌐 למד מ-URL', action: 'למד את התוכן מ-' },
+        { label: '📖 רשימת מסמכים', action: 'הצג רשימת מסמכים בבסיס הידע' },
+        { label: '🔍 חפש בידע', action: 'חפש בבסיס הידע: ' },
+      ],
+    },
+    automations: {
+      label: '⚡ אוטומציות',
+      items: [
+        { label: '📋 הצג אוטומציות', action: 'הצג אוטומציות פעילות' },
+        { label: '➕ צור אוטומציה', action: 'צור אוטומציה חדשה: ' },
+        { label: '📊 הצג cron jobs', action: 'הצג cron jobs פעילים' },
+      ],
+    },
+  };
+
+  // Handle /menu command — show category buttons
   bot.command('menu', async (ctx) => {
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
-    const keyboard = new InlineKeyboard()
-      .text('צלם מסך', 'action:צלם מסך').text('סטטוס פרויקטים', 'action:מה הסטטוס של כל הפרויקטים?').row()
-      .text('לידים חדשים', 'action:מה הלידים החדשים בדקל?').text('תזכורות', 'action:הצג תזכורות').row()
-      .text('סיכום יומי', 'action:תן לי סיכום יומי').text('חדשות', 'action:מה החדשות היום בישראל?').row();
+    const keyboard = new InlineKeyboard();
+    const cats = Object.entries(menuCategories);
+    for (let i = 0; i < cats.length; i++) {
+      keyboard.text(cats[i][1].label, `cat:${cats[i][0]}`);
+      if (i % 2 === 1) keyboard.row();
+    }
+    if (cats.length % 2 === 1) keyboard.row();
 
-    await ctx.reply('מה תרצה לעשות?', { reply_markup: keyboard });
+    await ctx.reply('בחר קטגוריה:', { reply_markup: keyboard });
+  });
+
+  // Handle /start command
+  bot.command('start', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+    await ctx.reply(
+      'שלום! אני AlonBot — העוזר האישי שלך.\n\n' +
+      'אפשר פשוט לכתוב לי בטקסט חופשי, או להשתמש בתפריט:\n' +
+      '/menu — תפריט פעולות מהירות\n' +
+      '/tasks — משימות פתוחות\n' +
+      '/export — ייצוא היסטוריית שיחה\n\n' +
+      'מה תרצה לעשות?'
+    );
+  });
+
+  // Handle /tasks command — quick view of open tasks
+  bot.command('tasks', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id)) || !messageHandler) return;
+    messageHandler(makeUnified(ctx, 'הצג משימות פתוחות'));
   });
 
   // Handle inline button callbacks
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
-    if (!data.startsWith('action:')) return;
     await ctx.answerCallbackQuery();
 
-    const text = data.slice('action:'.length);
-    if (!messageHandler) return;
+    // Category selection — show items in that category
+    if (data.startsWith('cat:')) {
+      const catKey = data.slice(4);
+      const cat = menuCategories[catKey];
+      if (!cat) return;
 
-    // Create a unified message from the callback
-    const unified: UnifiedMessage = {
-      id: String(ctx.callbackQuery.id),
-      channel: 'telegram',
-      senderId: String(ctx.from.id),
-      senderName: ctx.from.first_name || 'Unknown',
-      text,
-      timestamp: Date.now(),
-      raw: ctx,
-    };
+      const keyboard = new InlineKeyboard();
+      for (let i = 0; i < cat.items.length; i++) {
+        keyboard.text(cat.items[i].label, `action:${cat.items[i].action}`);
+        if (i % 2 === 1) keyboard.row();
+      }
+      if (cat.items.length % 2 === 1) keyboard.row();
+      keyboard.text('◀️ חזור לתפריט', 'back:menu');
 
-    messageHandler(unified);
+      await ctx.editMessageText(`${cat.label}:`, { reply_markup: keyboard });
+      return;
+    }
+
+    // Back to main menu
+    if (data === 'back:menu') {
+      const keyboard = new InlineKeyboard();
+      const cats = Object.entries(menuCategories);
+      for (let i = 0; i < cats.length; i++) {
+        keyboard.text(cats[i][1].label, `cat:${cats[i][0]}`);
+        if (i % 2 === 1) keyboard.row();
+      }
+      if (cats.length % 2 === 1) keyboard.row();
+
+      await ctx.editMessageText('בחר קטגוריה:', { reply_markup: keyboard });
+      return;
+    }
+
+    // Action execution
+    if (data.startsWith('action:')) {
+      const actionText = data.slice('action:'.length);
+      if (!messageHandler) return;
+
+      // If action ends with space/colon, it needs user input — prompt them
+      if (actionText.endsWith(' ') || actionText.endsWith(': ')) {
+        await ctx.editMessageText(`כתוב את ההמשך:\n\`${actionText}...\``, { parse_mode: 'Markdown' });
+        return;
+      }
+
+      const unified: UnifiedMessage = {
+        id: String(ctx.callbackQuery.id),
+        channel: 'telegram',
+        senderId: String(ctx.from.id),
+        senderName: ctx.from.first_name || 'Unknown',
+        text: actionText,
+        timestamp: Date.now(),
+        raw: ctx,
+      };
+
+      messageHandler(unified);
+    }
   });
 
   // Handle voice messages (STT → text)
@@ -215,6 +358,19 @@ export function createTelegramAdapter(): ChannelAdapter {
         return;
       }
       console.log('[Telegram] Starting bot...');
+
+      // Set bot commands (shows in Telegram's "/" menu)
+      try {
+        await bot.api.setMyCommands([
+          { command: 'menu', description: 'תפריט פעולות מהירות' },
+          { command: 'tasks', description: 'משימות פתוחות' },
+          { command: 'export', description: 'ייצוא היסטוריית שיחה' },
+          { command: 'start', description: 'התחל מחדש' },
+        ]);
+      } catch (e: any) {
+        console.warn('[Telegram] Failed to set commands:', e.message);
+      }
+
       bot.start();
       console.log('[Telegram] Bot running');
     },

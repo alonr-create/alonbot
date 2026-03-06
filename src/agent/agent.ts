@@ -181,23 +181,23 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
-  // Append model/usage footer
-  const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
+  // Track API usage
   const costInput = (totalInputTokens / 1_000_000) * 3;   // $3/M input tokens
   const costOutput = (totalOutputTokens / 1_000_000) * 15; // $15/M output tokens
   const totalCost = costInput + costOutput;
-  const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
-  replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
-
-  // Track API usage
   try {
     db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
       modelUsed, totalInputTokens, totalOutputTokens, totalCost
     );
   } catch { /* ok */ }
 
-  // Save assistant response
+  // Save assistant response WITHOUT footer (keeps history clean for Claude)
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
+
+  // Append model/usage footer AFTER saving (display-only, not in history)
+  const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
+  const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
+  replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
 
   // Auto-summarize old messages if threshold reached
   if (shouldSummarize(msg.channel, msg.senderId)) {
