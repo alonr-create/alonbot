@@ -165,8 +165,9 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
       replyText = 'קיבלתי את ההודעה אבל לא הצלחתי לייצר תשובה. נסה שוב.';
     }
   } catch (err: any) {
-    // Fallback to Gemini on rate limit (429) or overload (529)
-    if (err?.status === 429 || err?.status === 529) {
+    // Fallback to Gemini on rate limit (429), overload (529), or billing/auth errors (400/401)
+    const fallbackStatuses = [400, 401, 429, 529];
+    if (fallbackStatuses.includes(err?.status)) {
       console.warn(`[Agent] Claude ${err.status} — falling back to Gemini`);
       try {
         const fallback = await callGeminiFallback(systemPrompt, messages);
