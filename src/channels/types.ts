@@ -33,5 +33,9 @@ export interface ChannelAdapter {
   stop(): Promise<void>;
   sendReply(original: UnifiedMessage, reply: UnifiedReply): Promise<void>;
   sendTyping?(original: UnifiedMessage): Promise<void>;
+  /** Send initial text and return message ID for streaming edits */
+  sendStreamStart?(original: UnifiedMessage, text: string): Promise<number | null>;
+  /** Edit a previously sent message (for streaming) */
+  editStreamMessage?(original: UnifiedMessage, messageId: number, text: string): Promise<void>;
   onMessage(handler: (msg: UnifiedMessage) => void): void;
 }

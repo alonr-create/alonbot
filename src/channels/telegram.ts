@@ -628,6 +628,31 @@ export function createTelegramAdapter(): ChannelAdapter {
       }
     },
 
+    async sendStreamStart(original: UnifiedMessage, text: string): Promise<number | null> {
+      const ctx = original.raw as any;
+      if (!ctx?.reply) return null;
+      try {
+        const sent = await ctx.reply(text);
+        return sent.message_id;
+      } catch {
+        return null;
+      }
+    },
+
+    async editStreamMessage(original: UnifiedMessage, messageId: number, text: string) {
+      const ctx = original.raw as any;
+      const chatId = ctx?.chat?.id || Number(original.senderId);
+      if (!chatId) return;
+      try {
+        await bot.api.editMessageText(chatId, messageId, text);
+      } catch (err: any) {
+        // Ignore "message not modified" errors (same content)
+        if (!err.message?.includes('message is not modified')) {
+          console.error('[Telegram] Edit stream error:', err.message);
+        }
+      }
+    },
+
     async sendReply(original: UnifiedMessage, reply: UnifiedReply) {
       const ctx = original.raw as any;
 

@@ -67,7 +67,9 @@ setInterval(() => {
   }
 }, 10 * 60_000);
 
-export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> {
+export type StreamCallback = (text: string, toolName?: string) => void;
+
+export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallback): Promise<UnifiedReply> {
   // Rate limit check
   if (!checkRateLimit(msg.senderId)) {
     return { text: 'יותר מדי הודעות. נסה שוב בעוד דקה.' };
@@ -133,22 +135,51 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
   const modelId = useOpus ? 'claude-opus-4-20250514' : 'claude-sonnet-4-20250514';
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
+  // Detect complex queries for extended thinking
+  const thinkingKeywords = ['נתח', 'השווה', 'תכנן', 'אסטרטגיה', 'הסבר לעומק', 'ניתוח', 'יתרונות וחסרונות', 'מה ההבדל', 'תחשוב'];
+  const isComplex = useOpus || msg.text.length > 150 || thinkingKeywords.some(kw => msg.text.includes(kw));
+  const useThinking = isComplex && !msg.image && !msg.document; // Thinking doesn't mix well with vision
+
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
   let modelUsed = useOpus ? 'Claude Opus 4' : 'Claude Sonnet 4';
+  if (useThinking) modelUsed += ' 🧠';
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
   try {
-    let response = await client.messages.create({
+    const createParams: any = {
       model: modelId,
-      max_tokens: useOpus ? 8192 : 4096,
+      max_tokens: useOpus ? 16000 : 8192,
       system: systemPrompt,
       tools: toolDefinitions,
       messages,
-    });
+    };
+    if (useThinking) {
+      createParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
+    }
+    // Helper: call Claude with optional streaming
+    async function callClaude(params: any): Promise<Anthropic.Message> {
+      if (onStream) {
+        const stream = client.messages.stream(params);
+        stream.on('text', (text) => onStream(text));
+        const msg = await stream.finalMessage();
+        return msg;
+      }
+      return client.messages.create(params);
+    }
+
+    let response = await callClaude(createParams);
     totalInputTokens += response.usage?.input_tokens || 0;
     totalOutputTokens += response.usage?.output_tokens || 0;
+    // Log cache metrics
+    const usage = response.usage as any;
+    if (usage?.cache_read_input_tokens) {
+      console.log(`[Cache] Hit: ${usage.cache_read_input_tokens} tokens read from cache`);
+    }
+    if (usage?.cache_creation_input_tokens) {
+      console.log(`[Cache] Created: ${usage.cache_creation_input_tokens} tokens cached`);
+    }
 
     // Process tool calls in a loop (max 15 iterations to prevent runaway)
     const MAX_TOOL_ITERATIONS = 15;
@@ -159,8 +190,8 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
         (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
       );
 
-      const toolResults: Anthropic.ToolResultBlockParam[] = [];
-      for (const block of toolBlocks) {
+      // Execute tools in parallel (Claude already decides which tools are independent)
+      const toolPromises = toolBlocks.map(async (block) => {
         console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
         const toolStart = Date.now();
         const result = await executeTool(block.name, block.input as Record<string, any>);
@@ -168,28 +199,39 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
         const toolSuccess = !result.startsWith('Error:') ? 1 : 0;
         console.log(`[Tool] → ${result.slice(0, 100)} (${toolDuration}ms)`);
         try { db.prepare('INSERT INTO tool_usage (tool_name, success, duration_ms) VALUES (?, ?, ?)').run(block.name, toolSuccess, toolDuration); } catch {}
-        toolResults.push({
+        return {
           type: 'tool_result' as const,
           tool_use_id: block.id,
           content: result,
-        });
-      }
+        };
+      });
+      const toolResults: Anthropic.ToolResultBlockParam[] = await Promise.all(toolPromises);
 
       messages.push({ role: 'assistant', content: response.content });
       messages.push({ role: 'user', content: toolResults });
 
-      response = await client.messages.create({
+      const continueParams: any = {
         model: modelId,
-        max_tokens: useOpus ? 8192 : 4096,
+        max_tokens: useOpus ? 16000 : 8192,
         system: systemPrompt,
         tools: toolDefinitions,
         messages,
-      });
+      };
+      if (useThinking) {
+        continueParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
+      }
+      // Notify streaming user about tool execution
+      if (onStream) {
+        for (const block of toolBlocks) {
+          onStream('', block.name);
+        }
+      }
+      response = await callClaude(continueParams);
       totalInputTokens += response.usage?.input_tokens || 0;
       totalOutputTokens += response.usage?.output_tokens || 0;
     }
 
-    // Extract text response
+    // Extract text response (filter out thinking blocks)
     const textBlocks = response.content.filter(
       (b): b is Anthropic.TextBlock => b.type === 'text'
     );
@@ -205,7 +247,9 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     if (fallbackStatuses.includes(err?.status)) {
       console.warn(`[Agent] Claude ${err.status} — falling back to Gemini`);
       try {
-        const fallback = await callGeminiFallback(systemPrompt, messages);
+        // Flatten system prompt for Gemini (it only accepts string)
+        const flatPrompt = Array.isArray(systemPrompt) ? systemPrompt.map((b: any) => b.text).join('\n') : systemPrompt;
+        const fallback = await callGeminiFallback(flatPrompt, messages);
         replyText = fallback.text;
         modelUsed = `${fallback.model} (fallback)`;
       } catch (geminiErr: any) {
