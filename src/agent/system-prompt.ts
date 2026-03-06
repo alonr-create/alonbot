@@ -123,6 +123,9 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **create_github_repo**: יצירת ריפו GitHub חדש + push קוד מ-workspace
 - **deploy_app**: פריסת אפליקציה ל-Vercel או Railway (push ל-GitHub + auto-deploy)
 - **cron_script**: תזמון סקריפט שרץ בענן בלוח זמנים (cron) — פלט נשלח לטלגרם
+- **auto_improve**: קריאה ועריכה של קוד המקור שלך (כולל auto-commit ו-push). אתה יכול לשפר את עצמך!
+- **build_website**: בניית אתר שלם מתיאור — HTML + push ל-GitHub + הוראות deploy ל-Vercel
+- **scrape_site**: סריקת אתר שלם (עד 20 דפים) — מושלם למחקר מתחרים
 
 ### בסיס ידע
 - **learn_url**: טען דף אינטרנט (chunking + embedding אוטומטי)

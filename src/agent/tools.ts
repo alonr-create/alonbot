@@ -172,6 +172,50 @@ const allToolDefinitions: Anthropic.Tool[] = [
       required: ['name', 'cron_expr', 'script'],
     },
   },
+  // Auto-improve — bot modifies its own code
+  {
+    name: 'auto_improve',
+    description: 'Read and modify AlonBot source code. Use to add features, fix bugs, or improve yourself. Changes take effect after next deploy.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        action: { type: 'string', enum: ['read', 'edit', 'list'], description: 'read: read a source file, edit: modify a file, list: list source files' },
+        file: { type: 'string', description: 'File path relative to project root (e.g. "src/agent/tools.ts")' },
+        search: { type: 'string', description: 'For edit: exact text to find and replace' },
+        replace: { type: 'string', description: 'For edit: replacement text' },
+      },
+      required: ['action'],
+    },
+  },
+  // Build website — full site from prompt to live URL
+  {
+    name: 'build_website',
+    description: 'Build a complete website from a description, push to GitHub, and deploy to Vercel. Returns live URL.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Project name (used for repo + URL, e.g. "pizza-shop")' },
+        description: { type: 'string', description: 'What the website should be — detailed description' },
+        html: { type: 'string', description: 'Full HTML content for index.html' },
+        css: { type: 'string', description: 'Optional CSS (if not inline in HTML)' },
+        js: { type: 'string', description: 'Optional JavaScript (if not inline in HTML)' },
+      },
+      required: ['name', 'description', 'html'],
+    },
+  },
+  // Scrape site — crawl entire website
+  {
+    name: 'scrape_site',
+    description: 'Crawl an entire website (up to 20 pages). Returns text content from all pages. Great for competitor research.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        url: { type: 'string', description: 'Starting URL to crawl' },
+        max_pages: { type: 'number', description: 'Max pages to crawl (default 10, max 20)' },
+      },
+      required: ['url'],
+    },
+  },
   // Google Calendar
   { name: 'calendar_list', description: 'List upcoming calendar events (next 7 days)', input_schema: { type: 'object' as const, properties: { days: { type: 'number', description: 'Number of days to look ahead (default 7)' } } } },
   { name: 'calendar_add', description: 'Add a new event to Google Calendar', input_schema: { type: 'object' as const, properties: { title: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD' }, time: { type: 'string', description: 'HH:mm (24h format)' }, duration_minutes: { type: 'number', description: 'Duration in minutes (default 60)' }, description: { type: 'string' } }, required: ['title', 'date'] } },
@@ -838,6 +882,159 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         const message = JSON.stringify({ type: 'script', script: input.script, notify });
         const id = addCronJob(input.name, input.cron_expr, 'telegram', targetId, message);
         return `Cron script #${id} created: "${input.name}" — ${input.cron_expr}\nScript: ${input.script}\nNotify: ${notify ? 'yes' : 'no'}`;
+      } catch (e: any) {
+        return `Error: ${e.message}`;
+      }
+    }
+
+    // --- Auto-improve ---
+    case 'auto_improve': {
+      const projectRoot = config.mode === 'cloud' ? '/app' : process.cwd();
+      switch (input.action) {
+        case 'list': {
+          try {
+            const output = execSync(`find src -name "*.ts" | sort`, {
+              cwd: projectRoot, encoding: 'utf-8', timeout: 5000,
+            }).trim();
+            return output || 'No source files found.';
+          } catch (e: any) {
+            return `Error: ${e.message}`;
+          }
+        }
+        case 'read': {
+          if (!input.file) return 'Error: file parameter required.';
+          try {
+            const filePath = resolve(projectRoot, input.file);
+            return readFileSync(filePath, 'utf-8').slice(0, 15000);
+          } catch (e: any) {
+            return `Error: ${e.message}`;
+          }
+        }
+        case 'edit': {
+          if (!input.file || !input.search || !input.replace) return 'Error: file, search, and replace parameters required.';
+          try {
+            const filePath = resolve(projectRoot, input.file);
+            const content = readFileSync(filePath, 'utf-8');
+            if (!content.includes(input.search)) return 'Error: search text not found in file.';
+            const newContent = content.replace(input.search, input.replace);
+            writeFileSync(filePath, newContent);
+            // Auto-commit and push if in cloud with git
+            if (config.mode === 'cloud' && process.env.GITHUB_TOKEN) {
+              try {
+                const token = process.env.GITHUB_TOKEN;
+                execSync(`cd "${projectRoot}" && git add "${input.file}" && git commit -m "Auto-improve: ${input.file}" && git push https://${token}@github.com/alonr-create/alonbot.git main`, {
+                  shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+                });
+                return `File edited and pushed to GitHub. Will auto-deploy shortly.\nChanged in ${input.file}: "${input.search.slice(0, 50)}..." → "${input.replace.slice(0, 50)}..."`;
+              } catch (gitErr: any) {
+                return `File edited locally but git push failed: ${(gitErr.stderr || gitErr.message || '').slice(0, 200)}\nChange saved in: ${input.file}`;
+              }
+            }
+            return `File edited: ${input.file}\nChanged: "${input.search.slice(0, 50)}..." → "${input.replace.slice(0, 50)}..."`;
+          } catch (e: any) {
+            return `Error: ${e.message}`;
+          }
+        }
+        default:
+          return 'Error: action must be "list", "read", or "edit".';
+      }
+    }
+
+    // --- Build Website ---
+    case 'build_website': {
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) return 'Error: GITHUB_TOKEN not configured.';
+      const siteName = input.name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
+      const siteDir = `/app/workspace/${siteName}`;
+
+      try {
+        // Create project directory
+        execSync(`mkdir -p "${siteDir}"`, { shell: '/bin/bash' });
+
+        // Write HTML
+        writeFileSync(`${siteDir}/index.html`, input.html);
+        if (input.css) writeFileSync(`${siteDir}/style.css`, input.css);
+        if (input.js) writeFileSync(`${siteDir}/script.js`, input.js);
+
+        // Create/push to GitHub
+        const pushUrl = `https://${token}@github.com/alonr-create/${siteName}.git`;
+
+        // Check if repo exists
+        const checkRes = await fetch(`https://api.github.com/repos/alonr-create/${siteName}`, {
+          headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+        });
+
+        if (checkRes.status === 404) {
+          await fetch('https://api.github.com/user/repos', {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json' },
+            body: JSON.stringify({ name: siteName, description: input.description, private: false }),
+          });
+        }
+
+        execSync(`cd "${siteDir}" && git init && git add -A && git commit -m "Build website: ${input.description.slice(0, 50)}" && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
+          shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+        });
+
+        return `Website built and pushed!\n\nGitHub: https://github.com/alonr-create/${siteName}\n\nTo deploy:\n• Vercel: https://vercel.com/new → import ${siteName}\n• Or connect at vercel.com for auto-deploy\n\nExpected URL: https://${siteName}.vercel.app`;
+      } catch (e: any) {
+        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+      }
+    }
+
+    // --- Scrape Site ---
+    case 'scrape_site': {
+      if (!isUrlAllowed(input.url)) return 'Error: URL not allowed.';
+      const maxPages = Math.min(input.max_pages || 10, 20);
+      const visited = new Set<string>();
+      const results: string[] = [];
+
+      try {
+        const baseUrl = new URL(input.url);
+        const queue = [input.url];
+
+        while (queue.length > 0 && visited.size < maxPages) {
+          const currentUrl = queue.shift()!;
+          if (visited.has(currentUrl)) continue;
+          visited.add(currentUrl);
+
+          try {
+            const res = await fetch(currentUrl, {
+              headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlonBot/1.0)' },
+              signal: AbortSignal.timeout(8000),
+            });
+            if (!res.ok) continue;
+            const html = await res.text();
+
+            // Extract text
+            const text = html
+              .replace(/<script[\s\S]*?<\/script>/gi, '')
+              .replace(/<style[\s\S]*?<\/style>/gi, '')
+              .replace(/<[^>]+>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim()
+              .slice(0, 3000);
+
+            results.push(`=== ${currentUrl} ===\n${text}`);
+
+            // Extract same-domain links
+            const linkRegex = /href="([^"]+)"/gi;
+            let linkMatch;
+            while ((linkMatch = linkRegex.exec(html)) && queue.length < maxPages * 2) {
+              try {
+                const href = new URL(linkMatch[1], currentUrl);
+                if (href.hostname === baseUrl.hostname && !visited.has(href.toString()) && !href.hash) {
+                  queue.push(href.toString());
+                }
+              } catch {}
+            }
+          } catch {
+            // Skip failed pages
+          }
+        }
+
+        if (results.length === 0) return 'Error: Could not fetch any pages.';
+        return `Scraped ${results.length} pages from ${baseUrl.hostname}:\n\n${results.join('\n\n').slice(0, 15000)}`;
       } catch (e: any) {
         return `Error: ${e.message}`;
       }

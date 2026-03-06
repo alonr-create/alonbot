@@ -249,6 +249,13 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
       );
 
+      // Notify streaming user BEFORE tool execution (so they see what's happening)
+      if (onStream) {
+        for (const block of toolBlocks) {
+          onStream('', block.name);
+        }
+      }
+
       // Execute tools in parallel (Claude already decides which tools are independent)
       const toolPromises = toolBlocks.map(async (block) => {
         console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
@@ -269,6 +276,11 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       messages.push({ role: 'assistant', content: response.content });
       messages.push({ role: 'user', content: toolResults });
 
+      // Notify streaming that tools finished and bot is thinking again
+      if (onStream) {
+        onStream('\n🤔 _חושב..._\n');
+      }
+
       const continueParams: any = {
         model: modelId,
         max_tokens: useOpus ? 16000 : 8192,
@@ -278,12 +290,6 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       };
       if (useThinking) {
         continueParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
-      }
-      // Notify streaming user about tool execution
-      if (onStream) {
-        for (const block of toolBlocks) {
-          onStream('', block.name);
-        }
       }
       response = await callClaude(continueParams);
       totalInputTokens += response.usage?.input_tokens || 0;
