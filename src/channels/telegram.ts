@@ -83,12 +83,12 @@ export function createTelegramAdapter(): ChannelAdapter {
       const res = await fetch(fileUrl);
 
       if (mimeType === 'application/pdf') {
-        // For PDF, save locally and tell the agent where it is
+        // Send PDF as base64 document to Claude API
         const buf = Buffer.from(await res.arrayBuffer());
-        const tmpPath = `/tmp/alonbot-${fileName}`;
-        const { writeFileSync } = await import('fs');
-        writeFileSync(tmpPath, buf);
-        messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את המסמך'}\n[קובץ PDF נשמר ב: ${tmpPath}]`));
+        messageHandler(makeUnified(ctx, ctx.message.caption || 'נתח את המסמך הזה', {
+          document: buf.toString('base64'),
+          documentName: fileName,
+        }));
       } else {
         // Text files — read content directly
         const text = await res.text();

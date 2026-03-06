@@ -53,6 +53,17 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
+  // If user sent a PDF document, add it to the last message
+  if (msg.document) {
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.content = [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: msg.document } },
+        { type: 'text', text: msg.text || 'נתח את המסמך הזה' },
+      ];
+    }
+  }
+
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Agent loop — handle tool calls

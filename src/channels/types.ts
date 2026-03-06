@@ -11,6 +11,10 @@ export interface UnifiedMessage {
   image?: string;
   /** MIME type of the image (e.g. image/jpeg, image/png, image/webp) */
   imageMediaType?: 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+  /** Base64 PDF/document data */
+  document?: string;
+  /** Original filename of the document */
+  documentName?: string;
   /** Raw platform-specific context for replies */
   raw: unknown;
 }
