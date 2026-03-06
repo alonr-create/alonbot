@@ -1,4 +1,5 @@
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
+import * as sqliteVec from 'sqlite-vec';
 import { config } from './config.js';
 import { mkdirSync } from 'fs';
 
@@ -7,6 +8,9 @@ mkdirSync(config.dataDir, { recursive: true });
 const db: DatabaseType = new Database(`${config.dataDir}/alonbot.db`);
 db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
+
+// Load sqlite-vec extension for vector search
+sqliteVec.load(db);
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS messages (
@@ -58,6 +62,13 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type, category);
   CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC);
   CREATE INDEX IF NOT EXISTS idx_summaries_channel ON conversation_summaries(channel, sender_id, created_at);
+`);
+
+// Vector table for semantic memory search (768-dim Gemini embedding)
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
+    embedding float[768]
+  );
 `);
 
 // Migration: move old facts table data into memories if facts table exists

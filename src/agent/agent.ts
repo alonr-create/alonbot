@@ -53,7 +53,7 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
-  const systemPrompt = buildSystemPrompt(msg.text, msg.channel, msg.senderId);
+  const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Agent loop — handle tool calls
   let response = await client.messages.create({

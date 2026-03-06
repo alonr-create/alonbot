@@ -3,6 +3,7 @@ import { registerAdapter, sendToChannel, sendAgentMessage } from './gateway/rout
 import { createTelegramAdapter } from './channels/telegram.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
+import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
 import cron from 'node-cron';
 
 console.log('=== AlonBot ===');
@@ -59,6 +60,18 @@ if (config.mode === 'cloud') {
 
   console.log('[AlonBot] Local mode — cron jobs only (Telegram bot runs in cloud)');
 }
+
+// Embed any memories that don't have vectors yet (background)
+embedUnembeddedMemories().catch(err =>
+  console.error('[Embed] Startup embed failed:', err.message)
+);
+
+// Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
+cron.schedule('0 3 * * *', () => {
+  console.log('[Cron] Memory maintenance');
+  const stats = runMemoryMaintenance();
+  console.log(`[Memory] Maintenance done: ${stats.decayed} decayed, ${stats.consolidated} consolidated, ${stats.deleted} deleted`);
+}, { timezone: 'Asia/Jerusalem' });
 
 console.log('[AlonBot] Ready!');
 

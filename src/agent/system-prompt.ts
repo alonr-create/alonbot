@@ -31,9 +31,9 @@ function formatMemories(memories: Memory[]): string {
   return block;
 }
 
-export function buildSystemPrompt(userMessage?: string, channel?: string, senderId?: string): string {
+export async function buildSystemPrompt(userMessage?: string, channel?: string, senderId?: string): Promise<string> {
   const now = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-  const memories = getRelevantMemories(userMessage || '');
+  const memories = await getRelevantMemories(userMessage || '');
   const skills = loadAllSkills();
 
   const memoriesBlock = formatMemories(memories);
