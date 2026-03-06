@@ -43,100 +43,7 @@ export function createTelegramAdapter(): ChannelAdapter {
     };
   }
 
-  // Handle text messages
-  bot.on('message:text', async (ctx) => {
-    const senderId = String(ctx.from.id);
-
-    // Group chats: only respond if @mentioned or replied to
-    if (isGroupChat(ctx)) {
-      if (!isAllowed(senderId)) return; // Silent in groups for unauthorized users
-      if (!isMentioned(ctx)) return; // Ignore messages that don't mention the bot
-      if (!messageHandler) return;
-      const text = stripMention(ctx.message.text);
-      if (!text) return;
-      messageHandler(makeUnified(ctx, text));
-      return;
-    }
-
-    // Private chats: existing behavior
-    if (!isAllowed(senderId)) { await ctx.reply('Unauthorized.'); return; }
-    if (!messageHandler) return;
-
-    const text = ctx.message.text;
-
-    // Auto-detect bare URL messages → ask to summarize
-    const urlOnly = text.match(/^(https?:\/\/\S+)$/);
-    if (urlOnly) {
-      messageHandler(makeUnified(ctx, `סכם את התוכן של הדף הזה: ${urlOnly[1]}`));
-      return;
-    }
-
-    messageHandler(makeUnified(ctx, text));
-  });
-
-  // Handle photo messages (image understanding)
-  bot.on('message:photo', async (ctx) => {
-    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
-
-    try {
-      const photos = ctx.message.photo;
-      const largest = photos[photos.length - 1];
-      const file = await ctx.api.getFile(largest.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
-
-      const res = await fetch(fileUrl);
-      const buf = Buffer.from(await res.arrayBuffer());
-
-      // Detect media type from file extension (Telegram compresses to JPEG)
-      const ext = file.file_path?.split('.').pop()?.toLowerCase();
-      const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
-
-      messageHandler(makeUnified(ctx, ctx.message.caption || 'מה יש בתמונה?', {
-        image: buf.toString('base64'),
-        imageMediaType: mediaType,
-      }));
-    } catch (err: any) {
-      console.error('[Telegram] Photo error:', err.message);
-    }
-  });
-
-  // Handle document messages (PDF, text files, etc)
-  bot.on('message:document', async (ctx) => {
-    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
-
-    try {
-      const doc = ctx.message.document;
-      const fileName = doc.file_name || 'document';
-      const mimeType = doc.mime_type || '';
-
-      // Only handle text-based documents
-      const textTypes = ['application/pdf', 'text/', 'application/json', 'application/xml', 'application/csv'];
-      if (!textTypes.some(t => mimeType.startsWith(t)) && !fileName.match(/\.(txt|md|json|csv|xml|html|js|ts|py|sh)$/i)) {
-        messageHandler(makeUnified(ctx, `[קובץ: ${fileName} (${mimeType}) — לא נתמך לניתוח]`));
-        return;
-      }
-
-      const file = await ctx.api.getFile(doc.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
-      const res = await fetch(fileUrl);
-
-      if (mimeType === 'application/pdf') {
-        // Send PDF as base64 document to Claude API
-        const buf = Buffer.from(await res.arrayBuffer());
-        messageHandler(makeUnified(ctx, ctx.message.caption || 'נתח את המסמך הזה', {
-          document: buf.toString('base64'),
-          documentName: fileName,
-        }));
-      } else {
-        // Text files — read content directly
-        const text = await res.text();
-        const truncated = text.slice(0, 6000);
-        messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את הקובץ'}\n\n--- ${fileName} ---\n${truncated}`));
-      }
-    } catch (err: any) {
-      console.error('[Telegram] Document error:', err.message);
-    }
-  });
+  // === COMMANDS (must be registered BEFORE bot.on('message:text') in grammY) ===
 
   // Handle /export command — export chat history as file
   bot.command('export', async (ctx) => {
@@ -405,6 +312,103 @@ export function createTelegramAdapter(): ChannelAdapter {
       .row()
       .webApp('Chat', `https://alonbot.onrender.com/chat?token=${config.localApiSecret}`);
     await ctx.reply('פתח ממשק:', { reply_markup: keyboard });
+  });
+
+  // === MESSAGE HANDLERS (after commands, so commands take priority) ===
+
+  // Handle text messages
+  bot.on('message:text', async (ctx) => {
+    const senderId = String(ctx.from.id);
+
+    // Group chats: only respond if @mentioned or replied to
+    if (isGroupChat(ctx)) {
+      if (!isAllowed(senderId)) return; // Silent in groups for unauthorized users
+      if (!isMentioned(ctx)) return; // Ignore messages that don't mention the bot
+      if (!messageHandler) return;
+      const text = stripMention(ctx.message.text);
+      if (!text) return;
+      messageHandler(makeUnified(ctx, text));
+      return;
+    }
+
+    // Private chats: existing behavior
+    if (!isAllowed(senderId)) { await ctx.reply('Unauthorized.'); return; }
+    if (!messageHandler) return;
+
+    const text = ctx.message.text;
+
+    // Auto-detect bare URL messages → ask to summarize
+    const urlOnly = text.match(/^(https?:\/\/\S+)$/);
+    if (urlOnly) {
+      messageHandler(makeUnified(ctx, `סכם את התוכן של הדף הזה: ${urlOnly[1]}`));
+      return;
+    }
+
+    messageHandler(makeUnified(ctx, text));
+  });
+
+  // Handle photo messages (image understanding)
+  bot.on('message:photo', async (ctx) => {
+    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
+
+    try {
+      const photos = ctx.message.photo;
+      const largest = photos[photos.length - 1];
+      const file = await ctx.api.getFile(largest.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
+
+      const res = await fetch(fileUrl);
+      const buf = Buffer.from(await res.arrayBuffer());
+
+      // Detect media type from file extension (Telegram compresses to JPEG)
+      const ext = file.file_path?.split('.').pop()?.toLowerCase();
+      const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
+      messageHandler(makeUnified(ctx, ctx.message.caption || 'מה יש בתמונה?', {
+        image: buf.toString('base64'),
+        imageMediaType: mediaType,
+      }));
+    } catch (err: any) {
+      console.error('[Telegram] Photo error:', err.message);
+    }
+  });
+
+  // Handle document messages (PDF, text files, etc)
+  bot.on('message:document', async (ctx) => {
+    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
+
+    try {
+      const doc = ctx.message.document;
+      const fileName = doc.file_name || 'document';
+      const mimeType = doc.mime_type || '';
+
+      // Only handle text-based documents
+      const textTypes = ['application/pdf', 'text/', 'application/json', 'application/xml', 'application/csv'];
+      if (!textTypes.some(t => mimeType.startsWith(t)) && !fileName.match(/\.(txt|md|json|csv|xml|html|js|ts|py|sh)$/i)) {
+        messageHandler(makeUnified(ctx, `[קובץ: ${fileName} (${mimeType}) — לא נתמך לניתוח]`));
+        return;
+      }
+
+      const file = await ctx.api.getFile(doc.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
+      const res = await fetch(fileUrl);
+
+      if (mimeType === 'application/pdf') {
+        // Send PDF as base64 document to Claude API
+        const buf = Buffer.from(await res.arrayBuffer());
+        messageHandler(makeUnified(ctx, ctx.message.caption || 'נתח את המסמך הזה', {
+          document: buf.toString('base64'),
+          documentName: fileName,
+        }));
+      } else {
+        // Text files — read content directly
+        const text = await res.text();
+        const truncated = text.slice(0, 6000);
+        messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את הקובץ'}\n\n--- ${fileName} ---\n${truncated}`));
+      }
+    } catch (err: any) {
+      console.error('[Telegram] Document error:', err.message);
+    }
   });
 
   // Handle inline button callbacks
