@@ -91,6 +91,10 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
 
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
+  let modelUsed = 'Claude Sonnet 4';
+  let totalInputTokens = 0;
+  let totalOutputTokens = 0;
+
   try {
     let response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -99,6 +103,8 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
       tools: toolDefinitions,
       messages,
     });
+    totalInputTokens += response.usage?.input_tokens || 0;
+    totalOutputTokens += response.usage?.output_tokens || 0;
 
     // Process tool calls in a loop (max 15 iterations to prevent runaway)
     const MAX_TOOL_ITERATIONS = 15;
@@ -131,6 +137,8 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
         tools: toolDefinitions,
         messages,
       });
+      totalInputTokens += response.usage?.input_tokens || 0;
+      totalOutputTokens += response.usage?.output_tokens || 0;
     }
 
     // Extract text response
@@ -142,16 +150,25 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     // Fallback to Gemini on rate limit (429) or overload (529)
     if (err?.status === 429 || err?.status === 529) {
       console.warn(`[Agent] Claude ${err.status} — falling back to Gemini 2.0 Flash`);
+      modelUsed = 'Gemini 2.0 Flash (fallback)';
       try {
         replyText = await callGeminiFallback(systemPrompt, messages);
       } catch (geminiErr: any) {
         console.error('[Agent] Gemini fallback also failed:', geminiErr.message);
-        throw err; // re-throw original
+        throw err;
       }
     } else {
       throw err;
     }
   }
+
+  // Append model/usage footer
+  const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
+  const costInput = (totalInputTokens / 1_000_000) * 3;   // $3/M input tokens
+  const costOutput = (totalOutputTokens / 1_000_000) * 15; // $15/M output tokens
+  const totalCost = costInput + costOutput;
+  const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
+  replyText += `\n\n_${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
 
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
