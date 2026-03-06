@@ -145,7 +145,12 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     const textBlocks = response.content.filter(
       (b): b is Anthropic.TextBlock => b.type === 'text'
     );
-    replyText = textBlocks.map(b => b.text).join('\n') || 'לא הצלחתי לעבד את ההודעה.';
+    replyText = textBlocks.map(b => b.text).join('\n');
+    if (!replyText && toolIteration >= MAX_TOOL_ITERATIONS) {
+      replyText = 'ביצעתי פעולות אבל הגעתי למגבלת הכלים. נסה לנסח את הבקשה מחדש.';
+    } else if (!replyText) {
+      replyText = 'קיבלתי את ההודעה אבל לא הצלחתי לייצר תשובה. נסה שוב.';
+    }
   } catch (err: any) {
     // Fallback to Gemini on rate limit (429) or overload (529)
     if (err?.status === 429 || err?.status === 529) {
