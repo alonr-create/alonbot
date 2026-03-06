@@ -370,19 +370,20 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
       if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY not configured.';
       try {
         const res = await fetch(
-          'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent',
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${config.geminiApiKey}`,
           {
             method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': config.geminiApiKey,
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               contents: [{ parts: [{ text: input.prompt }] }],
               generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
             }),
           },
         );
+        if (!res.ok) {
+          const errText = await res.text();
+          return `Error: Gemini API returned ${res.status}: ${errText.slice(0, 200)}`;
+        }
         const data = await res.json() as any;
         const parts = data?.candidates?.[0]?.content?.parts || [];
         for (const part of parts) {

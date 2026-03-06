@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>AlonBot - Status Report</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Heebo', sans-serif;
+    background: #f8f9fa;
+    color: #1a1a2e;
+    padding: 40px;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+
+  .page { max-width: 800px; margin: 0 auto; }
+
+  .header {
+    background: linear-gradient(135deg, #1A0E3C, #2D1B69);
+    color: white;
+    padding: 30px 40px;
+    border-radius: 16px;
+    margin-bottom: 30px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header h1 { font-size: 28px; font-weight: 900; }
+  .header .subtitle { font-size: 14px; opacity: 0.8; margin-top: 4px; }
+  .header .date { font-size: 13px; opacity: 0.7; text-align: left; }
+  .header .version { font-size: 20px; font-weight: 700; color: #B026FF; }
+
+  .section {
+    background: white;
+    border-radius: 12px;
+    padding: 24px 28px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  .section h2 {
+    font-size: 18px;
+    font-weight: 700;
+    color: #1A0E3C;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #f0f0f0;
+  }
+
+  .phase {
+    margin-bottom: 20px;
+    padding: 16px 20px;
+    border-radius: 10px;
+    border-right: 4px solid #ddd;
+  }
+
+  .phase.done { border-right-color: #22c55e; background: #f0fdf4; }
+  .phase.partial { border-right-color: #f59e0b; background: #fffbeb; }
+  .phase.pending { border-right-color: #94a3b8; background: #f8fafc; }
+
+  .phase h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .badge {
+    font-size: 11px;
+    padding: 2px 10px;
+    border-radius: 20px;
+    font-weight: 500;
+  }
+
+  .badge.done { background: #dcfce7; color: #166534; }
+  .badge.partial { background: #fef3c7; color: #92400e; }
+  .badge.pending { background: #f1f5f9; color: #475569; }
+
+  .checklist { list-style: none; padding: 0; }
+
+  .checklist li {
+    padding: 6px 0;
+    padding-right: 28px;
+    position: relative;
+    font-size: 13px;
+  }
+
+  .checklist li::before {
+    position: absolute;
+    right: 0;
+    top: 6px;
+    font-size: 16px;
+    width: 20px;
+    text-align: center;
+  }
+
+  .checklist li.done::before { content: "\2705"; }
+  .checklist li.todo::before { content: "\2B1C"; }
+
+  .checklist li.done { color: #166534; }
+  .checklist li.todo { color: #64748b; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  .stat-card .number {
+    font-size: 28px;
+    font-weight: 900;
+    color: #1A0E3C;
+  }
+
+  .stat-card .label {
+    font-size: 11px;
+    color: #64748b;
+    margin-top: 2px;
+  }
+
+  .commit-list { list-style: none; padding: 0; }
+
+  .commit-list li {
+    padding: 8px 0;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+  }
+
+  .commit-list li:last-child { border-bottom: none; }
+
+  .commit-num {
+    background: #1A0E3C;
+    color: white;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .tools-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+
+  .tool-chip {
+    background: #f1f5f9;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    text-align: center;
+    font-family: monospace;
+    color: #334155;
+  }
+
+  .arch-diagram {
+    background: #1A0E3C;
+    color: #e2e8f0;
+    padding: 20px;
+    border-radius: 10px;
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    direction: ltr;
+    text-align: center;
+    white-space: pre;
+    margin: 12px 0;
+  }
+
+  .footer {
+    text-align: center;
+    color: #94a3b8;
+    font-size: 11px;
+    margin-top: 20px;
+    padding: 10px;
+  }
+
+  @media print {
+    body { padding: 20px; }
+    .section { break-inside: avoid; }
+    .page-break { page-break-before: always; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+<div class="header">
+  <div>
+    <h1>AlonBot</h1>
+    <div class="subtitle">עוזר AI אישי ועסקי</div>
+  </div>
+  <div style="text-align: left;">
+    <div class="version">v1.0</div>
+    <div class="date">6 במרץ 2026</div>
+  </div>
+</div>
+
+<div class="stats">
+  <div class="stat-card">
+    <div class="number">10</div>
+    <div class="label">Commits</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">16</div>
+    <div class="label">Tools</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">14</div>
+    <div class="label">Source Files</div>
+  </div>
+  <div class="stat-card">
+    <div class="number">5</div>
+    <div class="label">DB Tables</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>ארכיטקטורה</h2>
+  <div class="arch-diagram">
+Telegram (grammy) ──> Gateway (Express :3700) ──> Claude API
+                            |                        |
+                       Memory (SQLite)          16 Tools
+                       Skills (.md)        Cloud <-> Local Proxy
+                       Cron Jobs          (Cloudflare Tunnel)
+  </div>
+</div>
+
+<div class="section">
+  <h2>התקדמות לפי שלבים</h2>
+
+  <div class="phase done">
+    <h3>שלב 1: תשתית בסיסית <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">מבנה פרויקט TypeScript + ESM</li>
+      <li class="done">Express server (port 3700) + health check</li>
+      <li class="done">SQLite database (better-sqlite3, WAL mode)</li>
+      <li class="done">Config loader (.env, dotenv)</li>
+      <li class="done">Unified message interface (ChannelAdapter)</li>
+      <li class="done">Gateway router (message dispatch)</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 2: חיבור ערוצים <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Telegram adapter (grammy) - טקסט, תמונות, קול, מסמכים</li>
+      <li class="done">Telegram commands (/start, /export, /menu)</li>
+      <li class="done">Typing indicator בזמן עיבוד</li>
+      <li class="done">WhatsApp adapter (Baileys) - מוכן, לא מחובר</li>
+      <li class="todo">WhatsApp QR pairing + חיבור לייב</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 3: מוח — Claude Agent <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Claude API integration (claude-sonnet-4)</li>
+      <li class="done">System prompt דינמי (עברית, עסקים, כלים)</li>
+      <li class="done">Agentic tool loop (מקס 15 איטרציות)</li>
+      <li class="done">Rate limiting (10 הודעות/דקה למשתמש)</li>
+      <li class="done">Message truncation (4000 תווים)</li>
+      <li class="done">Vision support (תמונות base64)</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 4: כלים (16 Tools) <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">shell - הרצת פקודות (24 פקודות מותרות)</li>
+      <li class="done">read_file / write_file - קריאה/כתיבה מאובטחת</li>
+      <li class="done">screenshot - צילום מסך macOS</li>
+      <li class="done">web_search - חיפוש DuckDuckGo</li>
+      <li class="done">browse_url - קריאת תוכן URL</li>
+      <li class="done">generate_image - יצירת תמונה (Gemini)</li>
+      <li class="done">send_voice - הודעה קולית (ElevenLabs v3)</li>
+      <li class="done">remember - שמירת זיכרון (מובנה עם type/category/importance)</li>
+      <li class="done">set_reminder / list_reminders / delete_reminder - תזכורות</li>
+      <li class="done">monday_api - GraphQL queries ל-Monday.com</li>
+      <li class="done">send_email - Gmail עם whitelist</li>
+      <li class="done">manage_project - git status/log/pull/diff</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 5: Voice I/O <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">STT: Groq Whisper (הודעות קוליות בטלגרם)</li>
+      <li class="done">TTS: ElevenLabs v3 (עברית ואנגלית)</li>
+      <li class="done">Auto-detect שפה (עברית/אנגלית)</li>
+      <li class="done">Voice ID: Jessy Peres clone (עברית) + Brian (אנגלית)</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 6: Skills + Cron <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Skill loader (Markdown files)</li>
+      <li class="done">daily-brief.md - סיכום יומי 08:00</li>
+      <li class="done">morning-greeting.md - ברכת בוקר 07:00</li>
+      <li class="done">Cron scheduler (node-cron, Israel timezone)</li>
+      <li class="todo">Skills נוספים (דוחות דקל, חיפוש אינטרנט מתקדם) — עתידי</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 7: Deploy + Cloud/Local <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Dockerfile (Node 22, multi-stage)</li>
+      <li class="done">render.yaml - Render.com blueprint</li>
+      <li class="done">Cloud mode (MODE=cloud) - Telegram polling + cron</li>
+      <li class="done">Local mode (MODE=local) - cron + tool API</li>
+      <li class="done">Cloudflare tunnel (cloud-to-local proxy)</li>
+      <li class="done">UptimeRobot (anti-sleep ping)</li>
+      <li class="todo">Permanent named tunnel (URL changes on restart) — עתידי</li>
+      <li class="todo">LaunchAgent for auto-start on Mac — עתידי</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 8: אבטחה <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Shell injection prevention (metachar blocking)</li>
+      <li class="done">File path allowlist + .env/.git blocking</li>
+      <li class="done">SSRF prevention (private IP blocking)</li>
+      <li class="done">Email domain/address whitelist</li>
+      <li class="done">Telegram user allowlist (empty = deny)</li>
+      <li class="done">Rate limiting per user</li>
+      <li class="done">System prompt anti-injection rules</li>
+      <li class="done">API key in header (not URL)</li>
+      <li class="done">Error messages sanitized</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 9: זיכרון מתקדם - פאזה 1 <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">טבלת memories (type, category, importance, source)</li>
+      <li class="done">Smart retrieval (high-importance + keyword + category)</li>
+      <li class="done">Category auto-detection (דקל, מצפן, אישי...)</li>
+      <li class="done">Auto-summarize כל 40 הודעות</li>
+      <li class="done">Conversation summaries injected to prompt</li>
+      <li class="done">Migration from old facts table</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 10: זיכרון מתקדם - פאזה 2 (Vector Search) <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">sqlite-vec - vector search extension</li>
+      <li class="done">Embedding pipeline (Gemini gemini-embedding-001, 768 dims)</li>
+      <li class="done">Semantic search (cosine similarity &lt; 1.2)</li>
+      <li class="done">Memory vectors table (vec0 virtual table)</li>
+      <li class="done">Auto-embed at startup (embedUnembeddedMemories)</li>
+    </ul>
+  </div>
+
+  <div class="phase done">
+    <h3>שלב 11: זיכרון מתקדם - פאזה 3 (Maintenance) <span class="badge done">הושלם</span></h3>
+    <ul class="checklist">
+      <li class="done">Memory consolidation — מיזוג כפילויות</li>
+      <li class="done">Importance decay (60+ ימים בלי גישה, importance &lt; 8)</li>
+      <li class="done">Duplicate merging (first 15 chars match)</li>
+      <li class="done">Stale event cleanup (30+ ימים, importance &le; 2)</li>
+      <li class="done">Nightly cron 03:00 Israel time</li>
+    </ul>
+  </div>
+
+  <div class="phase pending">
+    <h3>שלב 12: הרחבות עתידיות <span class="badge pending">עתידי</span></h3>
+    <ul class="checklist">
+      <li class="todo">WhatsApp חיבור לייב</li>
+      <li class="todo">Vision analysis (ניתוח תמונות/מסמכים)</li>
+      <li class="todo">Google Calendar integration</li>
+      <li class="todo">Expense tracking</li>
+      <li class="todo">Web dashboard</li>
+      <li class="todo">Telegram Mini App</li>
+    </ul>
+  </div>
+</div>
+
+<div class="section">
+  <h2>היסטוריית Commits</h2>
+  <ol class="commit-list">
+    <li><span class="commit-num">1</span> Initial commit - מבנה בסיסי, TypeScript, Express, SQLite</li>
+    <li><span class="commit-num">2</span> 15 כלים, typing indicator, voice I/O, inline buttons, LaunchAgent</li>
+    <li><span class="commit-num">3</span> Markdown replies, טיפול במסמכים, סיכום URL, /export, daily brief cron</li>
+    <li><span class="commit-num">4</span> Dockerfile + Render.com blueprint לפריסת ענן</li>
+    <li><span class="commit-num">5</span> Security hardening - תיקון 10 פגיעויות קריטיות</li>
+    <li><span class="commit-num">6</span> Cloud/Local mode split - הפרדת ענן ומקומי</li>
+    <li><span class="commit-num">7</span> Cloud-to-local proxy via Cloudflare tunnel</li>
+    <li><span class="commit-num">8</span> ElevenLabs v3 + זיהוי שפה אוטומטי</li>
+    <li><span class="commit-num">9</span> שדרוג ארכיטקטורת זיכרון - סוגים, חיפוש חכם, סיכום אוטומטי</li>
+    <li><span class="commit-num">10</span> Vector semantic search (sqlite-vec) + memory maintenance (decay, consolidation)</li>
+  </ol>
+</div>
+
+<div class="section">
+  <h2>כלים זמינים (16)</h2>
+  <div class="tools-grid">
+    <div class="tool-chip">shell</div>
+    <div class="tool-chip">read_file</div>
+    <div class="tool-chip">write_file</div>
+    <div class="tool-chip">screenshot</div>
+    <div class="tool-chip">web_search</div>
+    <div class="tool-chip">browse_url</div>
+    <div class="tool-chip">generate_image</div>
+    <div class="tool-chip">send_voice</div>
+    <div class="tool-chip">remember</div>
+    <div class="tool-chip">set_reminder</div>
+    <div class="tool-chip">list_reminders</div>
+    <div class="tool-chip">delete_reminder</div>
+    <div class="tool-chip">monday_api</div>
+    <div class="tool-chip">send_email</div>
+    <div class="tool-chip">manage_project</div>
+    <div class="tool-chip">send_message</div>
+  </div>
+</div>
+
+<div class="section">
+  <h2>Environment Variables (15)</h2>
+  <div class="tools-grid">
+    <div class="tool-chip">MODE</div>
+    <div class="tool-chip">PORT</div>
+    <div class="tool-chip">ANTHROPIC_API_KEY</div>
+    <div class="tool-chip">TELEGRAM_BOT_TOKEN</div>
+    <div class="tool-chip">MONDAY_API_KEY</div>
+    <div class="tool-chip">GEMINI_API_KEY</div>
+    <div class="tool-chip">ELEVENLABS_API_KEY</div>
+    <div class="tool-chip">ELEVENLABS_VOICE_ID</div>
+    <div class="tool-chip">GROQ_API_KEY</div>
+    <div class="tool-chip">GMAIL_USER</div>
+    <div class="tool-chip">GMAIL_APP_PASSWORD</div>
+    <div class="tool-chip">ALLOWED_TELEGRAM</div>
+    <div class="tool-chip">ALLOWED_WHATSAPP</div>
+    <div class="tool-chip">LOCAL_API_SECRET</div>
+    <div class="tool-chip">LOCAL_API_URL</div>
+  </div>
+</div>
+
+<div class="footer">
+  AlonBot v1.0 | Generated 2026-03-06 | github.com/alonr-create/alonbot
+</div>
+
+</div>
+</body>
+</html>
