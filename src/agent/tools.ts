@@ -128,6 +128,50 @@ const allToolDefinitions: Anthropic.Tool[] = [
   { name: 'list_workflows', description: 'List all automated workflows', input_schema: { type: 'object' as const, properties: {} } },
   { name: 'delete_workflow', description: 'Delete a workflow', input_schema: { type: 'object' as const, properties: { id: { type: 'number' } }, required: ['id'] } },
   { name: 'toggle_workflow', description: 'Enable/disable a workflow', input_schema: { type: 'object' as const, properties: { id: { type: 'number' }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] } },
+  // GitHub
+  {
+    name: 'create_github_repo',
+    description: 'Create a new GitHub repo, optionally push local code from workspace. Uses GITHUB_TOKEN.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Repo name (e.g. "my-cool-app")' },
+        description: { type: 'string', description: 'Repo description' },
+        private: { type: 'boolean', description: 'Private repo? (default: false)' },
+        push_dir: { type: 'string', description: 'Optional: local dir to push (e.g. "/app/workspace/my-app")' },
+      },
+      required: ['name'],
+    },
+  },
+  // Deploy
+  {
+    name: 'deploy_app',
+    description: 'Deploy an app to Vercel (static/serverless) or Railway (Docker/Node). Pushes code and triggers deploy.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        platform: { type: 'string', enum: ['vercel', 'railway'], description: 'Deploy target' },
+        project_dir: { type: 'string', description: 'Local dir with the code (e.g. "/app/workspace/my-app")' },
+        project_name: { type: 'string', description: 'Project name on the platform' },
+      },
+      required: ['platform', 'project_dir'],
+    },
+  },
+  // Cron Script
+  {
+    name: 'cron_script',
+    description: 'Schedule a script to run periodically in the cloud. The script runs as a shell command on cron schedule.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        name: { type: 'string', description: 'Script name' },
+        cron_expr: { type: 'string', description: 'Cron expression (e.g. "0 */6 * * *" = every 6 hours)' },
+        script: { type: 'string', description: 'Shell command or script to run' },
+        notify: { type: 'boolean', description: 'Send output to Telegram? (default: true)' },
+      },
+      required: ['name', 'cron_expr', 'script'],
+    },
+  },
   // Google Calendar
   { name: 'calendar_list', description: 'List upcoming calendar events (next 7 days)', input_schema: { type: 'object' as const, properties: { days: { type: 'number', description: 'Number of days to look ahead (default 7)' } } } },
   { name: 'calendar_add', description: 'Add a new event to Google Calendar', input_schema: { type: 'object' as const, properties: { title: { type: 'string' }, date: { type: 'string', description: 'YYYY-MM-DD' }, time: { type: 'string', description: 'HH:mm (24h format)' }, duration_minutes: { type: 'number', description: 'Duration in minutes (default 60)' }, description: { type: 'string' } }, required: ['title', 'date'] } },
@@ -681,6 +725,121 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         return data.success ? `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}` : `Error: ${data.error || 'Unknown'}`;
       } catch (e: any) {
         return `Error: Calendar request failed.`;
+      }
+    }
+
+    // --- GitHub ---
+    case 'create_github_repo': {
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) return 'Error: GITHUB_TOKEN not configured.';
+      try {
+        // Create repo via GitHub API
+        const res = await fetch('https://api.github.com/user/repos', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+            'Accept': 'application/vnd.github+json',
+          },
+          body: JSON.stringify({
+            name: input.name,
+            description: input.description || '',
+            private: input.private || false,
+            auto_init: !input.push_dir,
+          }),
+        });
+        const data = await res.json() as any;
+        if (!res.ok) return `Error: GitHub API ${res.status} — ${data.message || JSON.stringify(data.errors)}`;
+        const repoUrl = data.html_url;
+        const cloneUrl = data.clone_url;
+
+        // If push_dir specified, init and push
+        if (input.push_dir) {
+          const dir = input.push_dir;
+          const pushUrl = cloneUrl.replace('https://', `https://${token}@`);
+          execSync(`cd "${dir}" && git init && git add -A && git commit -m "Initial commit" && git branch -M main && git remote add origin "${pushUrl}" && git push -u origin main`, {
+            shell: '/bin/bash',
+            timeout: 30000,
+            encoding: 'utf-8',
+          });
+          return `Repo created and code pushed!\n${repoUrl}`;
+        }
+
+        return `Repo created: ${repoUrl}`;
+      } catch (e: any) {
+        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+      }
+    }
+
+    // --- Deploy ---
+    case 'deploy_app': {
+      const token = process.env.GITHUB_TOKEN;
+      if (!token) return 'Error: GITHUB_TOKEN not configured (needed for git push).';
+      const dir = input.project_dir;
+      const projectName = input.project_name || dir.split('/').pop() || 'app';
+
+      try {
+        if (input.platform === 'vercel') {
+          // Push to GitHub first, then use Vercel deploy hook or CLI
+          // Check if repo exists, if not create it
+          const checkRes = await fetch(`https://api.github.com/repos/alonr-create/${projectName}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+          });
+
+          if (checkRes.status === 404) {
+            // Create repo
+            await fetch('https://api.github.com/user/repos', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json' },
+              body: JSON.stringify({ name: projectName, private: false }),
+            });
+          }
+
+          const pushUrl = `https://${token}@github.com/alonr-create/${projectName}.git`;
+          execSync(`cd "${dir}" && git init && git add -A && git commit -m "Deploy" --allow-empty && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
+            shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+          });
+          return `Code pushed to github.com/alonr-create/${projectName}\nConnect this repo to Vercel at https://vercel.com/new to deploy.\nIf already connected, deploy will start automatically.`;
+
+        } else if (input.platform === 'railway') {
+          // Same pattern — push to GitHub, Railway auto-deploys
+          const checkRes = await fetch(`https://api.github.com/repos/alonr-create/${projectName}`, {
+            headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json' },
+          });
+
+          if (checkRes.status === 404) {
+            await fetch('https://api.github.com/user/repos', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json', 'Accept': 'application/vnd.github+json' },
+              body: JSON.stringify({ name: projectName, private: false }),
+            });
+          }
+
+          const pushUrl = `https://${token}@github.com/alonr-create/${projectName}.git`;
+          execSync(`cd "${dir}" && git init && git add -A && git commit -m "Deploy" --allow-empty && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
+            shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+          });
+          return `Code pushed to github.com/alonr-create/${projectName}\nConnect this repo to Railway at https://railway.com/new to deploy.\nIf already connected, deploy will start automatically.`;
+
+        } else {
+          return `Error: Unknown platform "${input.platform}". Use "vercel" or "railway".`;
+        }
+      } catch (e: any) {
+        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+      }
+    }
+
+    // --- Cron Script ---
+    case 'cron_script': {
+      try {
+        // Store the script as a cron job — reuse cron_jobs table with script type
+        const notify = input.notify !== false;
+        const targetId = config.allowedTelegram[0] || '';
+        const message = JSON.stringify({ type: 'script', script: input.script, notify });
+        const id = addCronJob(input.name, input.cron_expr, 'telegram', targetId, message);
+        return `Cron script #${id} created: "${input.name}" — ${input.cron_expr}\nScript: ${input.script}\nNotify: ${notify ? 'yes' : 'no'}`;
+      } catch (e: any) {
+        return `Error: ${e.message}`;
       }
     }
 

@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import { execSync } from 'child_process';
 import { db } from '../utils/db.js';
 
 interface CronJob {
@@ -28,15 +29,47 @@ export function addCronJob(name: string, cronExpr: string, channel: string, targ
 
   // Register at runtime so new cron jobs fire without restart
   if (currentSendFn && cron.validate(cronExpr)) {
-    const task = cron.schedule(cronExpr, async () => {
-      console.log(`[Cron] Firing: ${name}`);
-      await currentSendFn!(channel, targetId, message);
-    }, { timezone: 'Asia/Jerusalem' });
+    const task = cron.schedule(cronExpr, () => fireCronJob(name, channel, targetId, message), { timezone: 'Asia/Jerusalem' });
     activeTasks.set(id, task);
     console.log(`[Cron] Live-registered: "${name}" — ${cronExpr}`);
   }
 
   return id;
+}
+
+async function fireCronJob(name: string, channel: string, targetId: string, message: string) {
+  console.log(`[Cron] Firing: ${name}`);
+  if (!currentSendFn) return;
+
+  // Check if this is a script-type cron job
+  try {
+    const parsed = JSON.parse(message);
+    if (parsed.type === 'script') {
+      console.log(`[Cron] Running script: ${parsed.script}`);
+      try {
+        const output = execSync(parsed.script, {
+          shell: '/bin/bash',
+          timeout: 60000,
+          encoding: 'utf-8',
+          maxBuffer: 1_000_000,
+          cwd: '/app/workspace',
+        }).trim();
+        if (parsed.notify !== false && output) {
+          await currentSendFn(channel, targetId, `📋 *${name}*\n\`\`\`\n${output.slice(0, 3000)}\n\`\`\``);
+        }
+      } catch (e: any) {
+        const errMsg = (e.stderr || e.message || '').slice(0, 500);
+        if (parsed.notify !== false) {
+          await currentSendFn(channel, targetId, `⚠️ *${name}* — script error:\n${errMsg}`);
+        }
+      }
+      return;
+    }
+  } catch {
+    // Not JSON — regular message cron job
+  }
+
+  await currentSendFn(channel, targetId, message);
 }
 
 export function startAllCronJobs(sendFn: SendFn) {
@@ -50,10 +83,7 @@ export function startAllCronJobs(sendFn: SendFn) {
       continue;
     }
 
-    const task = cron.schedule(job.cron_expr, async () => {
-      console.log(`[Cron] Firing: ${job.name}`);
-      await sendFn(job.channel, job.target_id, job.message);
-    }, { timezone: 'Asia/Jerusalem' });
+    const task = cron.schedule(job.cron_expr, () => fireCronJob(job.name, job.channel, job.target_id, job.message), { timezone: 'Asia/Jerusalem' });
 
     activeTasks.set(job.id, task);
     console.log(`[Cron] Scheduled: "${job.name}" — ${job.cron_expr}`);

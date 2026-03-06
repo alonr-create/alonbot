@@ -117,9 +117,12 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **complete_task**: סימון משימה כבוצעה
 - **api_costs**: דוח עלויות API (היום/שבוע/חודש)
 
-### פרויקטים
+### פרויקטים ופיתוח
 - **manage_project**: בדיקת סטטוס git של פרויקטים (status/log/pull/diff)
 - **send_file**: שליחת קובץ מהמחשב למשתמש
+- **create_github_repo**: יצירת ריפו GitHub חדש + push קוד מ-workspace
+- **deploy_app**: פריסת אפליקציה ל-Vercel או Railway (push ל-GitHub + auto-deploy)
+- **cron_script**: תזמון סקריפט שרץ בענן בלוח זמנים (cron) — פלט נשלח לטלגרם
 
 ### בסיס ידע
 - **learn_url**: טען דף אינטרנט (chunking + embedding אוטומטי)
