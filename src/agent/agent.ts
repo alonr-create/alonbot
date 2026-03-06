@@ -3,6 +3,7 @@ import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
 import { toolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
+import { searchKnowledge } from './knowledge.js';
 import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
@@ -135,6 +136,16 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   const modelId = useOpus ? 'claude-opus-4-20250514' : 'claude-sonnet-4-20250514';
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
+  // Multi-turn caching: mark the second-to-last message for cache breakpoint
+  // Claude will cache everything up to this point (system + history) across turns
+  if (messages.length >= 3) {
+    const cacheMsgIdx = messages.length - 2;
+    const cacheMsg = messages[cacheMsgIdx];
+    if (typeof cacheMsg.content === 'string') {
+      messages[cacheMsgIdx] = { ...cacheMsg, content: [{ type: 'text', text: cacheMsg.content, cache_control: { type: 'ephemeral' } }] as any };
+    }
+  }
+
   // Detect complex queries for extended thinking
   const thinkingKeywords = ['נתח', 'השווה', 'תכנן', 'אסטרטגיה', 'הסבר לעומק', 'ניתוח', 'יתרונות וחסרונות', 'מה ההבדל', 'תחשוב'];
   const isComplex = useOpus || msg.text.length > 150 || thinkingKeywords.some(kw => msg.text.includes(kw));
@@ -148,6 +159,30 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   let totalOutputTokens = 0;
 
   try {
+    // Knowledge base: inject as document blocks for citation support
+    let hasKnowledgeDocs = false;
+    if (msg.text.length >= 5 && !msg.image && !msg.document) {
+      try {
+        const kResults = await searchKnowledge(msg.text, 3);
+        if (kResults.length > 0) {
+          hasKnowledgeDocs = true;
+          const lastMsg = messages[messages.length - 1];
+          if (lastMsg && lastMsg.role === 'user') {
+            const docBlocks: any[] = kResults.map(r => ({
+              type: 'document',
+              source: { type: 'text', media_type: 'text/plain', data: r.content },
+              title: r.title,
+              citations: { enabled: true },
+            }));
+            const userContent = typeof lastMsg.content === 'string'
+              ? [{ type: 'text', text: lastMsg.content }]
+              : lastMsg.content;
+            lastMsg.content = [...docBlocks, ...(userContent as any[])];
+          }
+        }
+      } catch {}
+    }
+
     const createParams: any = {
       model: modelId,
       max_tokens: useOpus ? 16000 : 8192,
@@ -158,6 +193,30 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     if (useThinking) {
       createParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
     }
+    if (hasKnowledgeDocs) {
+      createParams.citations = { enabled: true };
+    }
+
+    // Token counting: log input size and auto-trim if near context limit
+    try {
+      const tokenCount = await client.messages.countTokens({
+        model: modelId,
+        system: systemPrompt,
+        tools: toolDefinitions as any,
+        messages,
+      });
+      const contextLimit = useOpus ? 200000 : 200000;
+      console.log(`[Tokens] Input: ${tokenCount.input_tokens.toLocaleString()} / ${contextLimit.toLocaleString()}`);
+      if (tokenCount.input_tokens > contextLimit * 0.85) {
+        // Trim oldest messages to stay within budget
+        const trimCount = Math.min(Math.ceil(messages.length / 3), messages.length - 2);
+        messages.splice(0, trimCount);
+        console.log(`[Tokens] Trimmed ${trimCount} old messages to fit context`);
+      }
+    } catch (e: any) {
+      console.warn(`[Tokens] countTokens failed: ${e.message}`);
+    }
+
     // Helper: call Claude with optional streaming
     async function callClaude(params: any): Promise<Anthropic.Message> {
       if (onStream) {
@@ -231,11 +290,25 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       totalOutputTokens += response.usage?.output_tokens || 0;
     }
 
-    // Extract text response (filter out thinking blocks)
-    const textBlocks = response.content.filter(
-      (b): b is Anthropic.TextBlock => b.type === 'text'
-    );
-    replyText = textBlocks.map(b => b.text).join('\n');
+    // Extract text response (filter out thinking blocks, include citations)
+    const textParts: string[] = [];
+    const citedSources = new Set<string>();
+    for (const block of response.content) {
+      if (block.type === 'text') {
+        textParts.push(block.text);
+        // Check for citation markers within text blocks
+        if ('citations' in block && Array.isArray((block as any).citations)) {
+          for (const cite of (block as any).citations) {
+            if (cite.document_title) citedSources.add(cite.document_title);
+          }
+        }
+      }
+    }
+    replyText = textParts.join('\n');
+    // Append cited sources footer if any
+    if (citedSources.size > 0) {
+      replyText += `\n\n📎 מקורות: ${[...citedSources].join(', ')}`;
+    }
     if (!replyText && toolIteration >= MAX_TOOL_ITERATIONS) {
       replyText = 'ביצעתי פעולות אבל הגעתי למגבלת הכלים. נסה לנסח את הבקשה מחדש.';
     } else if (!replyText) {

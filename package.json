@@ -12,7 +12,7 @@
   "private": true,
   "author": "Alon",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0",
+    "@anthropic-ai/sdk": "^0.78.0",
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.16",
     "better-sqlite3": "^12.6.2",
