@@ -189,6 +189,7 @@ app.get('/chat', dashAuth, (_req, res) => {
 export function startServer() {
   app.listen(config.port, () => {
     console.log(`[Server] Health check: http://localhost:${config.port}/health`);
+    console.log(`[Server] Chat: http://localhost:${config.port}/chat?token=${config.localApiSecret}`);
     console.log(`[Server] Dashboard: http://localhost:${config.port}/dashboard?token=${config.localApiSecret}`);
     if (config.mode === 'local') {
       console.log(`[Server] Tool API: http://localhost:${config.port}/api/tool`);
