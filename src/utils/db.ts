@@ -83,11 +83,47 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_summaries_channel ON conversation_summaries(channel, sender_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage(created_at);
   CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status, priority DESC);
+
+  CREATE TABLE IF NOT EXISTS knowledge_docs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    source_type TEXT NOT NULL CHECK(source_type IN ('url', 'pdf', 'text', 'file')),
+    source_ref TEXT,
+    chunk_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS knowledge_chunks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_id INTEGER NOT NULL REFERENCES knowledge_docs(id) ON DELETE CASCADE,
+    chunk_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_doc ON knowledge_chunks(doc_id, chunk_index);
+
+  CREATE TABLE IF NOT EXISTS workflows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    trigger_type TEXT NOT NULL CHECK(trigger_type IN ('keyword', 'cron', 'event')),
+    trigger_value TEXT NOT NULL,
+    actions TEXT NOT NULL,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Vector table for semantic memory search (768-dim Gemini embedding)
 db.exec(`
   CREATE VIRTUAL TABLE IF NOT EXISTS memory_vectors USING vec0(
+    embedding float[768]
+  );
+`);
+
+// Vector table for knowledge chunk search (768-dim Gemini embedding)
+db.exec(`
+  CREATE VIRTUAL TABLE IF NOT EXISTS knowledge_vectors USING vec0(
     embedding float[768]
   );
 `);

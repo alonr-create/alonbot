@@ -7,6 +7,8 @@ import { config } from '../utils/config.js';
 import { saveMemory } from './memory.js';
 import { db } from '../utils/db.js';
 import { addCronJob } from '../cron/scheduler.js';
+import { ingestUrl, ingestText, searchKnowledge, listDocs, deleteDoc } from './knowledge.js';
+import { addWorkflow, listWorkflows, deleteWorkflow, toggleWorkflow, matchKeywordWorkflows, type WorkflowAction } from './workflows.js';
 
 // --- Media side-channel: tools can attach media to be sent with the reply ---
 let pendingMedia: Array<{ type: 'image' | 'voice'; data: Buffer }> = [];
@@ -109,6 +111,17 @@ const allToolDefinitions: Anthropic.Tool[] = [
       required: ['project', 'action'],
     },
   },
+  // Knowledge Base tools
+  { name: 'learn_url', description: 'Ingest a web page into knowledge base for later retrieval', input_schema: { type: 'object' as const, properties: { url: { type: 'string' }, title: { type: 'string' } }, required: ['url'] } },
+  { name: 'learn_text', description: 'Ingest text content into knowledge base', input_schema: { type: 'object' as const, properties: { text: { type: 'string' }, title: { type: 'string' } }, required: ['text', 'title'] } },
+  { name: 'search_knowledge', description: 'Search knowledge base (ingested docs) by semantic query', input_schema: { type: 'object' as const, properties: { query: { type: 'string' }, top_k: { type: 'number' } }, required: ['query'] } },
+  { name: 'list_knowledge', description: 'List all documents in knowledge base', input_schema: { type: 'object' as const, properties: {} } },
+  { name: 'delete_knowledge', description: 'Delete document from knowledge base', input_schema: { type: 'object' as const, properties: { doc_id: { type: 'number' } }, required: ['doc_id'] } },
+  // Workflow tools
+  { name: 'create_workflow', description: 'Create automated workflow (trigger → actions). Trigger types: keyword, cron, event. Action types: send_message, add_task, send_email, remember, set_reminder', input_schema: { type: 'object' as const, properties: { name: { type: 'string' }, trigger_type: { type: 'string', enum: ['keyword', 'cron', 'event'] }, trigger_value: { type: 'string', description: 'Keywords (comma-separated), cron expr, or event name' }, actions: { type: 'array', items: { type: 'object', properties: { type: { type: 'string' }, params: { type: 'object' } }, required: ['type', 'params'] } } }, required: ['name', 'trigger_type', 'trigger_value', 'actions'] } },
+  { name: 'list_workflows', description: 'List all automated workflows', input_schema: { type: 'object' as const, properties: {} } },
+  { name: 'delete_workflow', description: 'Delete a workflow', input_schema: { type: 'object' as const, properties: { id: { type: 'number' } }, required: ['id'] } },
+  { name: 'toggle_workflow', description: 'Enable/disable a workflow', input_schema: { type: 'object' as const, properties: { id: { type: 'number' }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] } },
 ];
 
 // In cloud mode: keep all tools, but proxy local-only ones to Mac
@@ -533,7 +546,120 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
       }
     }
 
+    // --- Knowledge Base ---
+    case 'learn_url': {
+      if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY needed for embeddings.';
+      try {
+        const result = await ingestUrl(input.url, input.title);
+        return `Ingested "${input.title || input.url}": ${result.chunks} chunks saved to knowledge base (doc #${result.docId})`;
+      } catch (e: any) {
+        return `Error: ${e.message}`;
+      }
+    }
+
+    case 'learn_text': {
+      if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY needed for embeddings.';
+      try {
+        const result = await ingestText(input.text, input.title);
+        return `Ingested "${input.title}": ${result.chunks} chunks saved to knowledge base (doc #${result.docId})`;
+      } catch (e: any) {
+        return `Error: ${e.message}`;
+      }
+    }
+
+    case 'search_knowledge': {
+      if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY needed for search.';
+      try {
+        const results = await searchKnowledge(input.query, input.top_k || 5);
+        if (results.length === 0) return 'No relevant knowledge found.';
+        return results.map((r, i) => `[${i + 1}] (${r.title}) ${r.content}`).join('\n\n');
+      } catch (e: any) {
+        return `Error: ${e.message}`;
+      }
+    }
+
+    case 'list_knowledge': {
+      const docs = listDocs();
+      if (docs.length === 0) return 'Knowledge base is empty.';
+      return docs.map(d => `#${d.id} "${d.title}" (${d.source_type}, ${d.chunk_count} chunks, ${d.created_at})`).join('\n');
+    }
+
+    case 'delete_knowledge': {
+      const success = deleteDoc(input.doc_id);
+      return success ? `Document #${input.doc_id} deleted from knowledge base.` : `Document #${input.doc_id} not found.`;
+    }
+
+    // --- Workflows ---
+    case 'create_workflow': {
+      try {
+        const id = addWorkflow(input.name, input.trigger_type, input.trigger_value, input.actions);
+        return `Workflow #${id} created: "${input.name}" (${input.trigger_type}: ${input.trigger_value}) → ${input.actions.length} actions`;
+      } catch (e: any) {
+        return `Error: ${e.message}`;
+      }
+    }
+
+    case 'list_workflows': {
+      const workflows = listWorkflows();
+      if (workflows.length === 0) return 'No workflows configured.';
+      return workflows.map(w => {
+        const status = w.enabled ? 'ON' : 'OFF';
+        const actions = w.actions.map((a: WorkflowAction) => a.type).join(', ');
+        return `#${w.id} [${status}] "${w.name}" — ${w.trigger_type}:${w.trigger_value} → ${actions}`;
+      }).join('\n');
+    }
+
+    case 'delete_workflow': {
+      const success = deleteWorkflow(input.id);
+      return success ? `Workflow #${input.id} deleted.` : `Workflow #${input.id} not found.`;
+    }
+
+    case 'toggle_workflow': {
+      const success = toggleWorkflow(input.id, input.enabled);
+      return success ? `Workflow #${input.id} ${input.enabled ? 'enabled' : 'disabled'}.` : `Workflow #${input.id} not found.`;
+    }
+
     default:
       return `Unknown tool: ${name}`;
   }
+}
+
+// --- Workflow Execution (called from router) ---
+export async function executeWorkflowActions(actions: WorkflowAction[], context: { channel: string; targetId: string }): Promise<string[]> {
+  const results: string[] = [];
+  for (const action of actions) {
+    try {
+      switch (action.type) {
+        case 'add_task': {
+          const r = await executeTool('add_task', action.params);
+          results.push(r);
+          break;
+        }
+        case 'send_email': {
+          const r = await executeTool('send_email', action.params);
+          results.push(r);
+          break;
+        }
+        case 'remember': {
+          const r = await executeTool('remember', action.params);
+          results.push(r);
+          break;
+        }
+        case 'set_reminder': {
+          const r = await executeTool('set_reminder', action.params);
+          results.push(r);
+          break;
+        }
+        case 'send_message': {
+          results.push(`Message: ${action.params.text || action.params.message}`);
+          break;
+        }
+        default:
+          results.push(`Unknown action type: ${action.type}`);
+      }
+    } catch (e: any) {
+      results.push(`Action ${action.type} failed: ${e.message}`);
+    }
+  }
+  return results;
 }

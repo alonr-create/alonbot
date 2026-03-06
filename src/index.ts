@@ -1,6 +1,7 @@
 import { startServer } from './gateway/server.js';
 import { registerAdapter, sendToChannel, sendAgentMessage } from './gateway/router.js';
 import { createTelegramAdapter } from './channels/telegram.js';
+import { createWhatsAppAdapter } from './channels/whatsapp.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
@@ -16,51 +17,44 @@ startServer();
 
 let telegram: ReturnType<typeof createTelegramAdapter> | null = null;
 
+// --- Telegram ---
+telegram = createTelegramAdapter();
+registerAdapter(telegram);
+
 if (config.mode === 'cloud') {
-  // --- CLOUD MODE: Telegram bot + cron (no local tools) ---
-  telegram = createTelegramAdapter();
-  registerAdapter(telegram);
+  // Cloud mode: full Telegram polling
   await telegram.start();
-
-  // Start cron jobs from DB
-  startAllCronJobs(sendToChannel);
-
-  // Daily brief — 08:00 Israel time
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[Cron] Daily brief firing');
-    const briefMsg = `סיכום בוקר יומי:
-1. מה התאריך היום (עברי ולועזי)?
-2. מה מזג האוויר בתל אביב?
-3. יש לידים חדשים בדקל לפרישה?
-4. מה התזכורות הפעילות שלי?
-5. תן ציטוט השראה קצר.`;
-    await sendAgentMessage('telegram', config.allowedTelegram[0] || '', briefMsg);
-  }, { timezone: 'Asia/Jerusalem' });
-
 } else {
-  // --- LOCAL MODE: cron only, no Telegram bot (avoids token conflict) ---
-  // Register Telegram adapter for sending only (cron messages), but don't start polling
-  telegram = createTelegramAdapter();
-  registerAdapter(telegram);
-  // Note: we don't call telegram.start() — no polling, just send-only via bot.api
+  // Local mode: send-only (no polling — avoids token conflict with cloud)
+  console.log('[AlonBot] Local mode — Telegram send-only');
+}
 
-  // Start cron jobs
-  startAllCronJobs(sendToChannel);
+// --- WhatsApp (optional, local mode only) ---
+if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
+  try {
+    const whatsapp = createWhatsAppAdapter();
+    registerAdapter(whatsapp);
+    await whatsapp.start();
+    console.log('[AlonBot] WhatsApp adapter started');
+  } catch (err: any) {
+    console.warn('[AlonBot] WhatsApp failed to start:', err.message);
+  }
+}
 
-  // Daily brief
-  cron.schedule('0 8 * * *', async () => {
-    console.log('[Cron] Daily brief firing');
-    const briefMsg = `סיכום בוקר יומי:
+// Start cron jobs from DB
+startAllCronJobs(sendToChannel);
+
+// Daily brief — 08:00 Israel time
+cron.schedule('0 8 * * *', async () => {
+  console.log('[Cron] Daily brief firing');
+  const briefMsg = `סיכום בוקר יומי:
 1. מה התאריך היום (עברי ולועזי)?
 2. מה מזג האוויר בתל אביב?
 3. יש לידים חדשים בדקל לפרישה?
 4. מה התזכורות הפעילות שלי?
 5. תן ציטוט השראה קצר.`;
-    await sendAgentMessage('telegram', config.allowedTelegram[0] || '', briefMsg);
-  }, { timezone: 'Asia/Jerusalem' });
-
-  console.log('[AlonBot] Local mode — cron jobs only (Telegram bot runs in cloud)');
-}
+  await sendAgentMessage('telegram', config.allowedTelegram[0] || '', briefMsg);
+}, { timezone: 'Asia/Jerusalem' });
 
 // Embed any memories that don't have vectors yet (background)
 embedUnembeddedMemories().catch(err =>

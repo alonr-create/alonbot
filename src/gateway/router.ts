@@ -1,5 +1,7 @@
 import type { ChannelAdapter, UnifiedMessage } from '../channels/types.js';
 import { handleMessage } from '../agent/agent.js';
+import { matchKeywordWorkflows } from '../agent/workflows.js';
+import { executeWorkflowActions } from '../agent/tools.js';
 
 const adapters = new Map<string, ChannelAdapter>();
 
@@ -8,6 +10,17 @@ export function registerAdapter(adapter: ChannelAdapter) {
 
   adapter.onMessage(async (msg: UnifiedMessage) => {
     console.log(`[${msg.channel}] ${msg.senderName}: ${msg.text.slice(0, 80)}`);
+
+    // Check for keyword workflows (fire-and-forget, don't block response)
+    try {
+      const matched = matchKeywordWorkflows(msg.text);
+      for (const wf of matched) {
+        console.log(`[Workflow] Triggered: "${wf.name}"`);
+        executeWorkflowActions(wf.actions, { channel: msg.channel, targetId: msg.senderId }).catch(err =>
+          console.error(`[Workflow] ${wf.name} error:`, err.message)
+        );
+      }
+    } catch {}
 
     // Send typing indicator
     if (adapter.sendTyping) {

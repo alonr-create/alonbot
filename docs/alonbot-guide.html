@@ -1,0 +1,1154 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<title>AlonBot — מדריך מלא</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Heebo', sans-serif;
+    color: #1a1a2e;
+    background: #fff;
+    line-height: 1.7;
+    font-size: 14px;
+  }
+
+  .cover {
+    height: 100vh;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    text-align: center;
+    page-break-after: always;
+  }
+
+  .cover h1 {
+    font-size: 64px;
+    font-weight: 900;
+    margin-bottom: 10px;
+    background: linear-gradient(90deg, #00d2ff, #7b2ff7);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .cover .subtitle {
+    font-size: 22px;
+    font-weight: 300;
+    color: #b8b8d4;
+    margin-bottom: 40px;
+  }
+
+  .cover .version {
+    font-size: 14px;
+    color: #6c6c8a;
+    margin-top: 60px;
+  }
+
+  .cover .logo-icon {
+    font-size: 80px;
+    margin-bottom: 20px;
+  }
+
+  .page {
+    padding: 50px 60px;
+    max-width: 900px;
+    margin: 0 auto;
+    page-break-after: always;
+  }
+
+  .page:last-child { page-break-after: avoid; }
+
+  h2 {
+    font-size: 28px;
+    font-weight: 900;
+    color: #302b63;
+    margin-bottom: 20px;
+    padding-bottom: 8px;
+    border-bottom: 3px solid #7b2ff7;
+  }
+
+  h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #24243e;
+    margin: 25px 0 10px;
+  }
+
+  h4 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #302b63;
+    margin: 15px 0 8px;
+  }
+
+  p { margin-bottom: 12px; }
+
+  ul, ol {
+    margin: 10px 20px 15px;
+  }
+
+  li { margin-bottom: 6px; }
+
+  code {
+    font-family: 'Courier New', monospace;
+    background: #f0eef8;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    direction: ltr;
+    unicode-bidi: embed;
+  }
+
+  pre {
+    background: #1a1a2e;
+    color: #e0e0ff;
+    padding: 16px 20px;
+    border-radius: 10px;
+    margin: 12px 0 18px;
+    overflow-x: auto;
+    direction: ltr;
+    text-align: left;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  pre code {
+    background: none;
+    padding: 0;
+    color: inherit;
+  }
+
+  .highlight { color: #7b2ff7; font-weight: 700; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 15px 0 20px;
+    font-size: 13px;
+  }
+
+  th {
+    background: #302b63;
+    color: white;
+    padding: 10px 12px;
+    text-align: right;
+    font-weight: 700;
+  }
+
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e8e6f0;
+  }
+
+  tr:nth-child(even) td { background: #f8f7fc; }
+
+  .card {
+    background: #f8f7fc;
+    border: 1px solid #e0ddf0;
+    border-radius: 12px;
+    padding: 20px;
+    margin: 15px 0;
+  }
+
+  .card-title {
+    font-weight: 700;
+    color: #302b63;
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .badge-required { background: #ffe0e0; color: #c00; }
+  .badge-optional { background: #e0f0e0; color: #060; }
+  .badge-free { background: #e0f0ff; color: #006; }
+
+  .arch-diagram {
+    background: #1a1a2e;
+    color: #e0e0ff;
+    padding: 25px;
+    border-radius: 12px;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    direction: ltr;
+    text-align: center;
+    line-height: 1.4;
+    white-space: pre;
+    margin: 15px 0;
+  }
+
+  .toc {
+    list-style: none;
+    margin: 20px 0;
+    padding: 0;
+  }
+
+  .toc li {
+    padding: 8px 0;
+    border-bottom: 1px dotted #ccc;
+    font-size: 16px;
+  }
+
+  .toc .num {
+    display: inline-block;
+    width: 30px;
+    color: #7b2ff7;
+    font-weight: 700;
+  }
+
+  .warning {
+    background: #fff8e0;
+    border: 1px solid #f0d060;
+    border-radius: 10px;
+    padding: 15px 20px;
+    margin: 15px 0;
+  }
+
+  .warning-title {
+    font-weight: 700;
+    color: #8a6d00;
+    margin-bottom: 5px;
+  }
+
+  .step {
+    display: flex;
+    gap: 15px;
+    margin: 15px 0;
+    align-items: flex-start;
+  }
+
+  .step-num {
+    background: #7b2ff7;
+    color: white;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    flex-shrink: 0;
+    font-size: 15px;
+  }
+
+  .step-content { flex: 1; }
+
+  .footer {
+    text-align: center;
+    color: #888;
+    font-size: 12px;
+    margin-top: 40px;
+    padding-top: 20px;
+    border-top: 1px solid #e0e0e0;
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER PAGE -->
+<div class="cover">
+  <div class="logo-icon">🤖</div>
+  <h1>AlonBot</h1>
+  <div class="subtitle">עוזר AI אישי ועסקי — מדריך מלא</div>
+  <div style="color: #8888aa; font-size: 16px; margin-top: 10px;">
+    Claude API &bull; Telegram &bull; 22 כלים &bull; זיכרון חכם
+  </div>
+  <div class="version">
+    גרסה 1.0 &bull; מרץ 2026<br>
+    נבנה עם Claude Code
+  </div>
+</div>
+
+<!-- TABLE OF CONTENTS -->
+<div class="page">
+  <h2>תוכן עניינים</h2>
+  <ul class="toc">
+    <li><span class="num">1</span> סקירה כללית</li>
+    <li><span class="num">2</span> ארכיטקטורה</li>
+    <li><span class="num">3</span> התקנה מהירה</li>
+    <li><span class="num">4</span> הגדרת API Keys</li>
+    <li><span class="num">5</span> כלים (22 כלים)</li>
+    <li><span class="num">6</span> מערכת זיכרון</li>
+    <li><span class="num">7</span> Cron ותזמון</li>
+    <li><span class="num">8</span> Cloud + Local Mac</li>
+    <li><span class="num">9</span> Docker ו-Render</li>
+    <li><span class="num">10</span> אבטחה</li>
+    <li><span class="num">11</span> קסטומיזציה</li>
+    <li><span class="num">12</span> פתרון בעיות</li>
+  </ul>
+</div>
+
+<!-- 1. OVERVIEW -->
+<div class="page">
+  <h2>1. סקירה כללית</h2>
+
+  <p>AlonBot הוא עוזר AI אישי ועסקי שרץ דרך Telegram. הוא משלב את Claude API של Anthropic עם מגוון כלים מעשיים — חיפוש באינטרנט, ניהול משימות, שליטה במחשב, יצירת תמונות, שליחת מיילים, ועוד.</p>
+
+  <h3>יכולות עיקריות</h3>
+  <ul>
+    <li><strong>שיחת AI חכמה</strong> — Claude Sonnet 4 עם fallback אוטומטי ל-Gemini</li>
+    <li><strong>הודעות קוליות</strong> — תמלול אוטומטי (Whisper) + תשובה קולית (ElevenLabs)</li>
+    <li><strong>זיכרון מתקדם</strong> — זוכר עובדות, העדפות, אירועים עם חיפוש סמנטי</li>
+    <li><strong>יצירת תמונות</strong> — Gemini Flash ישירות לצ'אט</li>
+    <li><strong>ניתוח תמונות ומסמכים</strong> — Vision API לתמונות, OCR, PDF</li>
+    <li><strong>חיפוש אינטרנט</strong> — DuckDuckGo + מחקר מעמיק עם Gemini</li>
+    <li><strong>Monday.com</strong> — שאילתות GraphQL ללוחות עסקיים</li>
+    <li><strong>ניהול משימות</strong> — רשימת TODO עם עדיפויות ותאריכי יעד</li>
+    <li><strong>תזכורות Cron</strong> — תזמון הודעות עתידיות</li>
+    <li><strong>שליחת מיילים</strong> — דרך Gmail לכתובות מורשות</li>
+    <li><strong>שליטה במחשב</strong> — פקודות shell, קריאת/כתיבת קבצים, צילום מסך</li>
+    <li><strong>מעקב עלויות</strong> — דוח עלות API בזמן אמת</li>
+    <li><strong>התראות פרואקטיביות</strong> — משימות שעבר זמנן, סיכום שבועי</li>
+    <li><strong>מצב שקט</strong> — תשובות קצרות בלילה ובשבת</li>
+  </ul>
+
+  <h3>טכנולוגיות</h3>
+  <table>
+    <tr><th>רכיב</th><th>טכנולוגיה</th></tr>
+    <tr><td>שפה</td><td>TypeScript (ESM)</td></tr>
+    <tr><td>Runtime</td><td>Node.js 20+</td></tr>
+    <tr><td>AI ראשי</td><td>Claude Sonnet 4 (Anthropic)</td></tr>
+    <tr><td>AI גיבוי</td><td>Gemini 2.5 Pro → Gemini 2.0 Flash</td></tr>
+    <tr><td>מסד נתונים</td><td>SQLite (better-sqlite3) + sqlite-vec</td></tr>
+    <tr><td>צ'אט</td><td>Telegram (grammY) + WhatsApp (Baileys)</td></tr>
+    <tr><td>TTS</td><td>ElevenLabs</td></tr>
+    <tr><td>STT</td><td>Groq Whisper</td></tr>
+    <tr><td>תמונות</td><td>Gemini Flash</td></tr>
+    <tr><td>שרת</td><td>Express 5</td></tr>
+  </table>
+</div>
+
+<!-- 2. ARCHITECTURE -->
+<div class="page">
+  <h2>2. ארכיטקטורה</h2>
+
+  <div class="arch-diagram">
+┌─────────────┐
+│  Telegram    │
+│    User      │
+└──────┬───────┘
+       │
+       ▼
+┌──────────────────────┐     ┌─────────────────────┐
+│   Cloud (Render)     │     │   Local (Mac)        │
+│                      │     │                      │
+│  • Telegram Bot      │────▶│  • Shell commands    │
+│  • Claude API        │     │  • File read/write   │
+│  • Gemini fallback   │◀────│  • Screenshots       │
+│  • SQLite + Memory   │     │  • Git operations    │
+│  • Cron scheduler    │     │  • Cloudflare tunnel │
+│  • Express server    │     │  • Express tool API  │
+└──────────────────────┘     └─────────────────────┘
+       │                              │
+       └──────── proxy ───────────────┘
+  </div>
+
+  <h3>מבנה הקבצים</h3>
+  <pre><code>alonbot/
+├── src/
+│   ├── agent/
+│   │   ├── agent.ts          # לולאת סוכן (Claude + Gemini)
+│   │   ├── tools.ts          # 22 כלים + הרצה
+│   │   ├── memory.ts         # זיכרון + embedding + סיכום
+│   │   └── system-prompt.ts  # פרומפט דינמי
+│   ├── channels/
+│   │   ├── telegram.ts       # אדפטר Telegram
+│   │   ├── whatsapp.ts       # אדפטר WhatsApp
+│   │   └── types.ts          # טיפוסים משותפים
+│   ├── gateway/
+│   │   ├── router.ts         # ניתוב הודעות
+│   │   └── server.ts         # Express (health, API)
+│   ├── cron/
+│   │   └── scheduler.ts      # מתזמן cron מ-DB
+│   ├── skills/
+│   │   └── loader.ts         # טוען skills מ-markdown
+│   └── utils/
+│       ├── config.ts         # הגדרות מ-.env
+│       ├── db.ts             # SQLite schema + migrations
+│       └── embeddings.ts     # Gemini embeddings
+├── skills/                   # קבצי skill (markdown)
+├── scripts/                  # סקריפטי התקנה
+├── data/                     # SQLite DB (gitignored)
+├── .env.example              # תבנית הגדרות
+├── Dockerfile                # Docker build
+├── render.yaml               # Render deploy config
+└── CLAUDE.md                 # הנחיות לקלוד קוד</code></pre>
+
+  <h3>זרימת הודעה</h3>
+  <ol>
+    <li>משתמש שולח הודעה ב-Telegram</li>
+    <li>אדפטר Telegram מתרגם ל-<code>UnifiedMessage</code></li>
+    <li>Router מעביר ל-Agent</li>
+    <li>Agent בונה system prompt עם זיכרונות רלוונטיים</li>
+    <li>שולח ל-Claude API עם 22 tool definitions</li>
+    <li>Claude מחליט אילו כלים להפעיל (עד 15 סיבובים)</li>
+    <li>כלים מופעלים (מקומיים או proxy לענן/Mac)</li>
+    <li>תשובה נשלחת חזרה ל-Telegram עם footer של מודל/עלות</li>
+    <li>הודעה נשמרת ב-DB + בדיקת סיכום אוטומטי</li>
+  </ol>
+</div>
+
+<!-- 3. INSTALLATION -->
+<div class="page">
+  <h2>3. התקנה מהירה</h2>
+
+  <h3>דרישות מקדימות</h3>
+  <ul>
+    <li>Node.js 20+ (<code>node -v</code>)</li>
+    <li>npm (<code>npm -v</code>)</li>
+    <li>Git (<code>git --version</code>)</li>
+    <li>חשבון Anthropic עם API key</li>
+    <li>בוט Telegram (מ-@BotFather)</li>
+  </ul>
+
+  <h3>שלבי התקנה</h3>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <h4>שכפול הפרויקט</h4>
+      <pre><code>git clone https://github.com/alonr-create/alonbot.git
+cd alonbot</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <h4>הרצת סקריפט התקנה</h4>
+      <pre><code>./scripts/setup.sh</code></pre>
+      <p>הסקריפט בודק Node.js, מתקין dependencies, מעתיק <code>.env.example</code> ל-<code>.env</code>, ובונה TypeScript.</p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <h4>הגדרת API Keys</h4>
+      <pre><code># ערוך את .env עם המפתחות שלך
+nano .env</code></pre>
+      <p>מינימום נדרש: <code>ANTHROPIC_API_KEY</code>, <code>TELEGRAM_BOT_TOKEN</code>, <code>ALLOWED_TELEGRAM</code></p>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-content">
+      <h4>הרצת הבוט</h4>
+      <pre><code># פיתוח (auto-reload):
+npm run dev
+
+# פרודקשן:
+npm run build && npm start</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-content">
+      <h4>בדיקה</h4>
+      <p>שלח הודעה לבוט ב-Telegram. אם הכל עובד, תקבל תשובה עם footer שמציג את המודל והעלות.</p>
+    </div>
+  </div>
+
+  <div class="warning">
+    <div class="warning-title">חשוב!</div>
+    <p>לעולם אל תעלה את קובץ <code>.env</code> ל-Git. הוא מכיל מפתחות API רגישים. הקובץ כבר ב-<code>.gitignore</code>.</p>
+  </div>
+</div>
+
+<!-- 4. API KEYS -->
+<div class="page">
+  <h2>4. הגדרת API Keys</h2>
+
+  <table>
+    <tr>
+      <th>מפתח</th>
+      <th>חובה?</th>
+      <th>חינם?</th>
+      <th>שימוש</th>
+      <th>איפה להשיג</th>
+    </tr>
+    <tr>
+      <td><code>ANTHROPIC_API_KEY</code></td>
+      <td><span class="badge badge-required">חובה</span></td>
+      <td>לא ($3/M in, $15/M out)</td>
+      <td>מודל AI ראשי</td>
+      <td>console.anthropic.com</td>
+    </tr>
+    <tr>
+      <td><code>TELEGRAM_BOT_TOKEN</code></td>
+      <td><span class="badge badge-required">חובה</span></td>
+      <td><span class="badge badge-free">חינם</span></td>
+      <td>בוט Telegram</td>
+      <td>@BotFather ב-Telegram</td>
+    </tr>
+    <tr>
+      <td><code>ALLOWED_TELEGRAM</code></td>
+      <td><span class="badge badge-required">חובה</span></td>
+      <td>—</td>
+      <td>מזהה משתמש מורשה</td>
+      <td>@userinfobot ב-Telegram</td>
+    </tr>
+    <tr>
+      <td><code>GEMINI_API_KEY</code></td>
+      <td><span class="badge badge-optional">מומלץ</span></td>
+      <td><span class="badge badge-free">חינם</span></td>
+      <td>תמונות, vision, מחקר, fallback</td>
+      <td>aistudio.google.com/apikey</td>
+    </tr>
+    <tr>
+      <td><code>GROQ_API_KEY</code></td>
+      <td><span class="badge badge-optional">אופציונלי</span></td>
+      <td><span class="badge badge-free">חינם</span></td>
+      <td>תמלול הודעות קוליות</td>
+      <td>console.groq.com</td>
+    </tr>
+    <tr>
+      <td><code>ELEVENLABS_API_KEY</code></td>
+      <td><span class="badge badge-optional">אופציונלי</span></td>
+      <td>Freemium</td>
+      <td>הודעות קוליות TTS</td>
+      <td>elevenlabs.io</td>
+    </tr>
+    <tr>
+      <td><code>MONDAY_API_KEY</code></td>
+      <td><span class="badge badge-optional">אופציונלי</span></td>
+      <td>עם חשבון</td>
+      <td>שאילתות Monday.com</td>
+      <td>monday.com/developers</td>
+    </tr>
+    <tr>
+      <td><code>GMAIL_USER</code></td>
+      <td><span class="badge badge-optional">אופציונלי</span></td>
+      <td><span class="badge badge-free">חינם</span></td>
+      <td>שליחת מיילים</td>
+      <td>חשבון Gmail</td>
+    </tr>
+    <tr>
+      <td><code>GMAIL_APP_PASSWORD</code></td>
+      <td><span class="badge badge-optional">אופציונלי</span></td>
+      <td><span class="badge badge-free">חינם</span></td>
+      <td>אימות Gmail</td>
+      <td>myaccount.google.com/apppasswords</td>
+    </tr>
+  </table>
+
+  <h3>הגדרות נוספות</h3>
+  <table>
+    <tr><th>משתנה</th><th>ברירת מחדל</th><th>תיאור</th></tr>
+    <tr><td><code>MODE</code></td><td>cloud</td><td><code>cloud</code> = בוט מלא, <code>local</code> = cron בלבד</td></tr>
+    <tr><td><code>PORT</code></td><td>3700</td><td>פורט שרת Express</td></tr>
+    <tr><td><code>LOCAL_API_SECRET</code></td><td>—</td><td>סוד לגשר ענן-Mac</td></tr>
+    <tr><td><code>ELEVENLABS_VOICE_ID</code></td><td>JBFqnCBsd6RMkjVDRZzb</td><td>קול ברירת מחדל</td></tr>
+    <tr><td><code>ALLOWED_WHATSAPP</code></td><td>—</td><td>מספרי WhatsApp מורשים</td></tr>
+  </table>
+</div>
+
+<!-- 5. TOOLS -->
+<div class="page">
+  <h2>5. כלים (22 כלים)</h2>
+
+  <h3>מידע ואינטרנט</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>web_search</code></td>
+      <td>חיפוש DuckDuckGo — 8 תוצאות</td>
+      <td>"חפש מזג אוויר תל אביב"</td>
+    </tr>
+    <tr>
+      <td><code>web_research</code></td>
+      <td>מחקר מעמיק עם Gemini + Google Search</td>
+      <td>"מה החדשות האחרונות על AI?"</td>
+    </tr>
+    <tr>
+      <td><code>browse_url</code></td>
+      <td>קריאת תוכן מדף אינטרנט</td>
+      <td>שליחת URL → סיכום אוטומטי</td>
+    </tr>
+    <tr>
+      <td><code>analyze_image</code></td>
+      <td>ניתוח תמונה מ-URL (OCR, תיאור)</td>
+      <td>"מה כתוב בתמונה הזאת?"</td>
+    </tr>
+  </table>
+
+  <h3>יצירת תוכן</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>generate_image</code></td>
+      <td>יצירת תמונה עם Gemini Flash</td>
+      <td>"צור תמונה של חתול בחלל"</td>
+    </tr>
+    <tr>
+      <td><code>send_voice</code></td>
+      <td>הודעה קולית TTS (עברית/אנגלית)</td>
+      <td>"שלח הודעה קולית: שלום עולם"</td>
+    </tr>
+  </table>
+
+  <h3>זיכרון ותזמון</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>remember</code></td>
+      <td>שמירת זיכרון (עובדה/העדפה/אירוע/דפוס/אדם)</td>
+      <td>"אני אוהב פיצה" → נשמר אוטומטית</td>
+    </tr>
+    <tr>
+      <td><code>set_reminder</code></td>
+      <td>תזכורת cron</td>
+      <td>"תזכיר לי כל יום ב-9 בבוקר לבדוק מיילים"</td>
+    </tr>
+    <tr>
+      <td><code>list_reminders</code></td>
+      <td>הצגת כל התזכורות</td>
+      <td>"מה התזכורות שלי?"</td>
+    </tr>
+    <tr>
+      <td><code>delete_reminder</code></td>
+      <td>מחיקת תזכורת</td>
+      <td>"מחק תזכורת 3"</td>
+    </tr>
+  </table>
+
+  <h3>משימות</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>add_task</code></td>
+      <td>הוספת משימה (עדיפות 1-10, תאריך יעד)</td>
+      <td>"תוסיף משימה: לשלוח הצעת מחיר ללקוח, עדיפות 8, עד מחר"</td>
+    </tr>
+    <tr>
+      <td><code>list_tasks</code></td>
+      <td>הצגת משימות פתוחות</td>
+      <td>"מה המשימות שלי?"</td>
+    </tr>
+    <tr>
+      <td><code>complete_task</code></td>
+      <td>סימון משימה כבוצעה</td>
+      <td>"סמן משימה 5 כבוצעה"</td>
+    </tr>
+  </table>
+
+  <h3>עסקים</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>monday_api</code></td>
+      <td>שאילתת GraphQL ל-Monday.com</td>
+      <td>"כמה לידים חדשים יש בדקל?"</td>
+    </tr>
+    <tr>
+      <td><code>send_email</code></td>
+      <td>שליחת מייל Gmail (כתובות מורשות)</td>
+      <td>"שלח מייל ל-alon12@gmail.com..."</td>
+    </tr>
+    <tr>
+      <td><code>api_costs</code></td>
+      <td>דוח עלויות API</td>
+      <td>"כמה שילמתי על API השבוע?"</td>
+    </tr>
+  </table>
+</div>
+
+<!-- 5b. TOOLS continued -->
+<div class="page">
+  <h3>קבצים ומערכת (Mac בלבד)</h3>
+  <table>
+    <tr><th>כלי</th><th>תיאור</th><th>דוגמה</th></tr>
+    <tr>
+      <td><code>shell</code></td>
+      <td>הרצת פקודות מורשות (ls, cat, date...)</td>
+      <td>"מה התאריך?"</td>
+    </tr>
+    <tr>
+      <td><code>read_file</code></td>
+      <td>קריאת קובץ מתיקיית פרויקט</td>
+      <td>"תקרא את הקובץ X"</td>
+    </tr>
+    <tr>
+      <td><code>write_file</code></td>
+      <td>כתיבת קובץ לתיקיית פרויקט</td>
+      <td>"תכתוב קובץ..."</td>
+    </tr>
+    <tr>
+      <td><code>screenshot</code></td>
+      <td>צילום מסך ה-Mac</td>
+      <td>"צלם מסך"</td>
+    </tr>
+    <tr>
+      <td><code>manage_project</code></td>
+      <td>פקודות Git (status/log/pull/diff)</td>
+      <td>"מה הסטטוס של הפרויקט?"</td>
+    </tr>
+    <tr>
+      <td><code>send_file</code></td>
+      <td>שליחת קובץ מהמחשב</td>
+      <td>"שלח לי את הקובץ X"</td>
+    </tr>
+  </table>
+
+  <div class="card">
+    <div class="card-title">Cloud vs Local</div>
+    <p>כלים מקומיים (shell, files, screenshot, manage_project, send_file) זמינים רק כש-Mac מחובר דרך Cloudflare tunnel. בענן הם עוברים proxy אוטומטי ל-Mac.</p>
+  </div>
+
+  <h3>Voice-to-Voice</h3>
+  <p>כששולחים הודעה קולית ל-Telegram:</p>
+  <ol>
+    <li>Groq Whisper מתמלל את ההקלטה לטקסט (עברית)</li>
+    <li>Claude מעבד את הטקסט ומגיב</li>
+    <li>ElevenLabs מייצר הודעה קולית מהתשובה</li>
+    <li>שתי ההודעות נשלחות — טקסט + קול</li>
+  </ol>
+  <p>זיהוי שפה אוטומטי: עברית → קול עברי, אנגלית → קול אנגלי.</p>
+
+  <h3>פקודות Telegram מיוחדות</h3>
+  <table>
+    <tr><th>פקודה</th><th>תיאור</th></tr>
+    <tr><td><code>/menu</code></td><td>תפריט כפתורים מהירים (צילום מסך, לידים, חדשות...)</td></tr>
+    <tr><td><code>/export</code></td><td>ייצוא היסטוריית שיחה כקובץ טקסט</td></tr>
+  </table>
+
+  <h3>שליחת URL</h3>
+  <p>שליחת URL בודד (בלי טקסט נוסף) → הבוט מסכם אוטומטית את תוכן הדף.</p>
+</div>
+
+<!-- 6. MEMORY -->
+<div class="page">
+  <h2>6. מערכת זיכרון</h2>
+
+  <p>AlonBot משתמש במערכת זיכרון רב-שכבתית:</p>
+
+  <h3>שכבות זיכרון</h3>
+  <table>
+    <tr><th>שכבה</th><th>מה</th><th>איפה</th><th>משך</th></tr>
+    <tr>
+      <td><strong>עבודה</strong></td>
+      <td>20 הודעות אחרונות</td>
+      <td>messages</td>
+      <td>סשן</td>
+    </tr>
+    <tr>
+      <td><strong>אפיזודי</strong></td>
+      <td>סיכומי שיחות</td>
+      <td>conversation_summaries</td>
+      <td>חודשים</td>
+    </tr>
+    <tr>
+      <td><strong>סמנטי</strong></td>
+      <td>עובדות, העדפות, אירועים</td>
+      <td>memories + vectors</td>
+      <td>לתמיד</td>
+    </tr>
+  </table>
+
+  <h3>סוגי זיכרון</h3>
+  <ul>
+    <li><strong>fact</strong> — עובדה ("יום הולדת: 15 למאי")</li>
+    <li><strong>preference</strong> — העדפה ("אוהב סושי")</li>
+    <li><strong>event</strong> — אירוע ("פגישה עם רו"ח מחר")</li>
+    <li><strong>pattern</strong> — דפוס ("בודק מיילים בבוקר")</li>
+    <li><strong>relationship</strong> — אדם ("דני — שותף עסקי")</li>
+  </ul>
+
+  <h3>קטגוריות</h3>
+  <p><code>personal</code>, <code>work_dekel</code>, <code>work_mazpen</code>, <code>work_alon_dev</code>, <code>work_aliza</code>, <code>health</code>, <code>finance</code></p>
+
+  <h3>חשיבות (1-10)</h3>
+  <ul>
+    <li><strong>1-3</strong>: מידע שולי (צבע אהוב, שיר ששמע)</li>
+    <li><strong>4-6</strong>: מידע רגיל (העדפות אוכל, הרגלים)</li>
+    <li><strong>7-8</strong>: מידע חשוב (פגישות, לקוחות)</li>
+    <li><strong>9-10</strong>: מידע קריטי (ימי הולדת, מידע עסקי מהותי)</li>
+  </ul>
+
+  <h3>Smart Retrieval</h3>
+  <p>במקום לטעון את כל הזיכרונות, המערכת טוענת:</p>
+  <ol>
+    <li>כל הזיכרונות עם חשיבות 8+ (תמיד)</li>
+    <li>זיכרונות שניגשו אליהם לאחרונה (&lt; 7 ימים)</li>
+    <li>חיפוש vector סמנטי על ההודעה (top 5)</li>
+    <li>מקסימום 20 זיכרונות ב-prompt</li>
+  </ol>
+
+  <h3>סיכום אוטומטי</h3>
+  <p>כל 40+ הודעות → Claude מסכם את השיחה ל-3-5 משפטים → נשמר ב-<code>conversation_summaries</code> עם נושאים.</p>
+
+  <h3>תחזוקת זיכרון (03:00 יומי)</h3>
+  <ul>
+    <li><strong>Decay</strong>: זיכרונות שלא ניגשו 60+ ימים → חשיבות -1</li>
+    <li><strong>Consolidation</strong>: זיכרונות דומים מאוחדים</li>
+    <li><strong>Cleanup</strong>: חשיבות 0 → מחיקה</li>
+  </ul>
+</div>
+
+<!-- 7. CRON -->
+<div class="page">
+  <h2>7. Cron ותזמון</h2>
+
+  <h3>Cron מובנה</h3>
+  <table>
+    <tr><th>זמן</th><th>תיאור</th><th>סוג</th></tr>
+    <tr>
+      <td>03:00 יומי</td>
+      <td>תחזוקת זיכרון (decay, consolidation)</td>
+      <td>מערכת</td>
+    </tr>
+    <tr>
+      <td>08:00 יומי</td>
+      <td>סיכום בוקר (תאריך, מזג אוויר, לידים, תזכורות)</td>
+      <td>הודעה ל-Claude</td>
+    </tr>
+    <tr>
+      <td>18:00 יומי</td>
+      <td>התראה על משימות שעבר זמנן</td>
+      <td>ישירות</td>
+    </tr>
+    <tr>
+      <td>ראשון 09:00</td>
+      <td>סיכום שבועי (עלויות, משימות, לידים)</td>
+      <td>הודעה ל-Claude</td>
+    </tr>
+  </table>
+
+  <h3>תזכורות מותאמות אישית</h3>
+  <p>המשתמש יכול ליצור תזכורות cron דרך הצ'אט:</p>
+  <pre><code>"תזכיר לי כל יום ב-9 בבוקר לבדוק מיילים"
+→ set_reminder(name="בדיקת מיילים", cron_expr="0 9 * * *", message="תבדוק מיילים!")</code></pre>
+
+  <p>תזכורות נשמרות ב-SQLite ושורדות restart.</p>
+
+  <h3>תחביר Cron</h3>
+  <pre><code>┌──── דקה (0-59)
+│ ┌──── שעה (0-23)
+│ │ ┌──── יום בחודש (1-31)
+│ │ │ ┌──── חודש (1-12)
+│ │ │ │ ┌──── יום בשבוע (0-7, 0=ראשון)
+│ │ │ │ │
+* * * * *
+
+דוגמאות:
+0 9 * * *     = כל יום ב-09:00
+0 9 * * 1-5   = ימי חול ב-09:00
+*/30 * * * *  = כל 30 דקות
+0 8 1 * *     = 1 בכל חודש ב-08:00</code></pre>
+  <p>כל הזמנים באזור זמן ישראל (Asia/Jerusalem).</p>
+</div>
+
+<!-- 8. CLOUD + LOCAL -->
+<div class="page">
+  <h2>8. Cloud + Local Mac</h2>
+
+  <p>AlonBot תומך בשני מצבים — ענן ומקומי — שעובדים יחד:</p>
+
+  <div class="card">
+    <div class="card-title">מצב ענן (MODE=cloud)</div>
+    <ul>
+      <li>Telegram bot פעיל (polling)</li>
+      <li>Cron jobs רצים</li>
+      <li>כלים מקומיים עוברים proxy ל-Mac</li>
+      <li>רץ על Render/Docker/VPS</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">מצב מקומי (MODE=local)</div>
+    <ul>
+      <li>Telegram בשליחה בלבד (ללא polling — מונע conflict)</li>
+      <li>Cron jobs רצים</li>
+      <li>כלים מקומיים רצים ישירות</li>
+      <li>חושף tool API דרך Express</li>
+    </ul>
+  </div>
+
+  <h3>הגדרת Cloudflare Tunnel</h3>
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-content">
+      <h4>התקנת cloudflared</h4>
+      <pre><code>brew install cloudflared</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-content">
+      <h4>הרצת הבוט מקומית</h4>
+      <pre><code>MODE=local npm run dev</code></pre>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-content">
+      <h4>הפעלת tunnel</h4>
+      <pre><code>./scripts/start-tunnel.sh</code></pre>
+      <p>הסקריפט יוצר tunnel, מקבל URL, ורושם אותו אוטומטית בענן.</p>
+    </div>
+  </div>
+
+  <h3>הפעלה אוטומטית (macOS)</h3>
+  <pre><code># העתקת LaunchAgent
+cp scripts/com.alonbot-tunnel.plist ~/Library/LaunchAgents/
+
+# עריכת הנתיבים ב-plist
+nano ~/Library/LaunchAgents/com.alonbot-tunnel.plist
+
+# הפעלה
+launchctl load ~/Library/LaunchAgents/com.alonbot-tunnel.plist</code></pre>
+
+  <h3>איך ה-Proxy עובד</h3>
+  <ol>
+    <li>Mac עולה → tunnel נפתח → נרשם בענן (<code>/api/register-local</code>)</li>
+    <li>משתמש מבקש צילום מסך → ענן מזהה כלי מקומי</li>
+    <li>ענן שולח POST ל-Mac דרך tunnel (<code>/api/tool</code>)</li>
+    <li>Mac מריץ → מחזיר תוצאה (כולל media ב-base64)</li>
+    <li>ענן שולח תשובה ל-Telegram</li>
+  </ol>
+</div>
+
+<!-- 9. DOCKER & RENDER -->
+<div class="page">
+  <h2>9. Docker ו-Render</h2>
+
+  <h3>Docker</h3>
+  <pre><code># בנייה
+docker build -t alonbot .
+
+# הרצה
+docker run -d --name alonbot \
+  --env-file .env \
+  -e MODE=cloud \
+  -v alonbot-data:/app/data \
+  -p 3700:3700 \
+  alonbot</code></pre>
+
+  <p>ה-volume <code>alonbot-data</code> שומר את SQLite DB בין restarts.</p>
+
+  <h3>Render</h3>
+  <p>הפרויקט כולל <code>render.yaml</code> — Blueprint שמגדיר הכל:</p>
+  <ol>
+    <li>Push ל-GitHub</li>
+    <li>ב-Render: New → Blueprint → חבר repo</li>
+    <li>הגדר env vars בדשבורד</li>
+    <li>Deploy (ידני או אוטומטי)</li>
+  </ol>
+
+  <div class="warning">
+    <div class="warning-title">Render Free Tier</div>
+    <p>בתוכנית חינמית, השרת "נרדם" אחרי 15 דקות ללא תעבורה. הודעת Telegram הראשונה אחרי שינה תיקח 30-60 שניות. שקול תוכנית בתשלום ($7/חודש) לזמינות מלאה.</p>
+  </div>
+
+  <h3>Health Check</h3>
+  <pre><code>GET /health
+→ { "status": "ok", "mode": "cloud", "uptime": 3600, "localConnected": true }</code></pre>
+
+  <h3>Dockerfile</h3>
+  <pre><code>FROM node:22-slim
+# Install build deps for better-sqlite3
+RUN apt-get update && apt-get install -y python3 make g++
+COPY package.json package-lock.json ./
+RUN npm ci --production=false
+COPY tsconfig.json src/ skills/ ./
+RUN npx tsc && npm prune --production
+RUN mkdir -p data
+EXPOSE 3700
+CMD ["node", "dist/index.js"]</code></pre>
+</div>
+
+<!-- 10. SECURITY -->
+<div class="page">
+  <h2>10. אבטחה</h2>
+
+  <p>AlonBot מיישם מספר שכבות אבטחה:</p>
+
+  <h3>אימות משתמשים</h3>
+  <ul>
+    <li>רק מזהי Telegram/WhatsApp ב-<code>ALLOWED_*</code> יכולים לתקשר</li>
+    <li>הודעות ממשתמשים לא מורשים → "Unauthorized"</li>
+    <li>Rate limiting: 10 הודעות לדקה למשתמש</li>
+  </ul>
+
+  <h3>Shell Whitelist</h3>
+  <p>רק פקודות בטוחות מורשות:</p>
+  <pre><code>date, cal, ls, cat, head, tail, wc, grep, find, echo,
+pwd, whoami, uptime, df, which, hostname, sw_vers</code></pre>
+  <p>תווים מסוכנים חסומים: <code>; | &amp; ` $ ( ) { } ! &lt; &gt;</code></p>
+
+  <h3>הגבלת נתיבים</h3>
+  <ul>
+    <li>קריאה/כתיבה רק תחת תיקיות פרויקט</li>
+    <li>חסימת: <code>.env</code>, <code>.git/</code>, <code>.ssh/</code>, <code>.claude/</code>, <code>credentials</code></li>
+  </ul>
+
+  <h3>מניעת SSRF</h3>
+  <ul>
+    <li>רק <code>http:</code> ו-<code>https:</code> מותרים</li>
+    <li>חסימת localhost, 127.0.0.1, 10.x, 192.168.x, 169.254.x</li>
+  </ul>
+
+  <h3>Email Whitelist</h3>
+  <ul>
+    <li>רק כתובות/דומיינים מורשים</li>
+    <li>ברירת מחדל: <code>dprisha.co.il</code>, <code>gmail.com</code></li>
+  </ul>
+
+  <h3>Cloud-Local Bridge</h3>
+  <ul>
+    <li>אימות Bearer token ב-<code>LOCAL_API_SECRET</code></li>
+    <li>Timeout 20 שניות לכל proxy call</li>
+  </ul>
+
+  <h3>Prompt Injection Protection</h3>
+  <ul>
+    <li>System prompt מנחה לעולם לא לעקוב אחרי הוראות מתוצאות כלים</li>
+    <li>הגבלת אורך הודעה: 4000 תווים</li>
+    <li>חסימת חשיפת מפתחות/סיסמאות</li>
+  </ul>
+</div>
+
+<!-- 11. CUSTOMIZATION -->
+<div class="page">
+  <h2>11. קסטומיזציה</h2>
+
+  <h3>שינוי אישיות הבוט</h3>
+  <p>ערוך את <code>src/agent/system-prompt.ts</code>:</p>
+  <ul>
+    <li>שנה את השם, השפה, סגנון התשובות</li>
+    <li>הוסף/הסר עסקים וקטגוריות</li>
+    <li>שנה הנחיות זיכרון</li>
+  </ul>
+
+  <h3>הוספת כלי חדש</h3>
+  <p>ב-<code>src/agent/tools.ts</code>:</p>
+  <pre><code>// 1. הוסף הגדרה ל-allToolDefinitions
+{
+  name: 'my_tool',
+  description: 'What it does',
+  input_schema: {
+    type: 'object',
+    properties: {
+      param1: { type: 'string' }
+    },
+    required: ['param1']
+  }
+}
+
+// 2. הוסף case ב-executeTool
+case 'my_tool': {
+  // ... logic
+  return 'result';
+}
+
+// 3. אם מקומי בלבד:
+const LOCAL_ONLY_TOOLS = [..., 'my_tool'];</code></pre>
+
+  <h3>הוספת Skill</h3>
+  <p>צור קובץ markdown ב-<code>skills/</code>:</p>
+  <pre><code># skills/my-skill.md
+---
+name: my-skill
+description: What this skill does
+---
+Instructions for the AI when this skill is active...</code></pre>
+
+  <h3>שינוי מודל AI</h3>
+  <p>ב-<code>src/agent/agent.ts</code>, שנה:</p>
+  <pre><code>model: 'claude-sonnet-4-20250514'
+// ← שנה ל-claude-opus-4-6 / claude-haiku-4-5 / etc.</code></pre>
+
+  <h3>הוספת ערוץ חדש</h3>
+  <ol>
+    <li>צור קובץ ב-<code>src/channels/</code> שמממש <code>ChannelAdapter</code></li>
+    <li>רשום ב-<code>src/index.ts</code> עם <code>registerAdapter()</code></li>
+  </ol>
+
+  <h3>שינוי Cron Jobs</h3>
+  <p>ב-<code>src/index.ts</code> — ערוך את הביטויים והודעות ה-cron.</p>
+</div>
+
+<!-- 12. TROUBLESHOOTING -->
+<div class="page">
+  <h2>12. פתרון בעיות</h2>
+
+  <h3>בעיות נפוצות</h3>
+
+  <div class="card">
+    <div class="card-title">הבוט לא מגיב</div>
+    <ul>
+      <li>בדוק ש-<code>TELEGRAM_BOT_TOKEN</code> נכון</li>
+      <li>בדוק ש-<code>ALLOWED_TELEGRAM</code> מכיל את ה-ID שלך</li>
+      <li>בדוק ש-<code>MODE=cloud</code> (מצב local לא מקשיב להודעות)</li>
+      <li>בדוק לוגים: <code>npm run dev</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">שגיאת 429 (Rate Limit)</div>
+    <ul>
+      <li>Claude API מגביל ל-10K input tokens/דקה</li>
+      <li>הבוט עובר אוטומטית ל-Gemini fallback</li>
+      <li>אם גם Gemini כושל → המתן דקה ונסה שוב</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">"Mac לא מחובר"</div>
+    <ul>
+      <li>בדוק שהבוט רץ מקומית: <code>curl http://localhost:3700/health</code></li>
+      <li>בדוק שהtunnel פעיל: <code>./scripts/start-tunnel.sh</code></li>
+      <li>בדוק את ה-URL: <code>cat /tmp/alonbot-tunnel-url.txt</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">better-sqlite3 לא מתקין</div>
+    <ul>
+      <li>צריך build tools: <code>xcode-select --install</code> (Mac)</li>
+      <li>Docker: הDockerfile כבר כולל <code>python3 make g++</code></li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <div class="card-title">הודעות קוליות לא עובדות</div>
+    <ul>
+      <li>בדוק ש-<code>GROQ_API_KEY</code> מוגדר (לתמלול)</li>
+      <li>בדוק ש-<code>ELEVENLABS_API_KEY</code> מוגדר (ל-TTS)</li>
+      <li>ללא Groq: הבוט מבקש מהמשתמש לכתוב בטקסט</li>
+    </ul>
+  </div>
+
+  <h3>לוגים שימושיים</h3>
+  <pre><code>[Telegram] Bot running        ← הבוט עלה
+[Tool] web_search(...)        ← כלי הופעל
+[Tool] → result...            ← תוצאת כלי
+[Agent] Claude 429            ← rate limit, fallback
+[Cron] Firing: job-name       ← cron job רץ
+[Memory] Maintenance done     ← תחזוקת זיכרון
+[Tunnel] URL: https://...     ← tunnel פעיל</code></pre>
+
+  <div class="footer">
+    AlonBot v1.0 &bull; מרץ 2026 &bull; נבנה עם Claude Code &bull; github.com/alonr-create/alonbot
+  </div>
+</div>
+
+</body>
+</html>

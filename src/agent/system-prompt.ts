@@ -1,5 +1,6 @@
 import { getRelevantMemories, getRecentSummaries, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
+import { searchKnowledge } from './knowledge.js';
 
 function formatMemories(memories: Memory[]): string {
   if (memories.length === 0) return '';
@@ -58,6 +59,20 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     }
   }
 
+  // Knowledge base context (top 3 relevant chunks)
+  let knowledgeBlock = '';
+  if (userMessage && userMessage.length >= 5) {
+    try {
+      const kResults = await searchKnowledge(userMessage, 3);
+      if (kResults.length > 0) {
+        knowledgeBlock = '\n## מידע רלוונטי מבסיס הידע\n';
+        for (const r of kResults) {
+          knowledgeBlock += `### ${r.title}\n${r.content.slice(0, 400)}\n\n`;
+        }
+      }
+    } catch {}
+  }
+
   const skillsBlock = skills.length > 0
     ? `\n## Skills זמינים\n${skills.map(s => `- **${s.name}**: ${s.description}`).join('\n')}`
     : '';
@@ -113,6 +128,16 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **manage_project**: בדיקת סטטוס git של פרויקטים (status/log/pull/diff)
 - **send_file**: שליחת קובץ מהמחשב למשתמש
 
+### בסיס ידע
+- **learn_url**: טען דף אינטרנט (chunking + embedding אוטומטי)
+- **learn_text**: טען טקסט חופשי לבסיס הידע
+- **search_knowledge**: חיפוש סמנטי במסמכים שנטענו
+- **list_knowledge** / **delete_knowledge**: ניהול מסמכים
+
+### אוטומציות
+- **create_workflow**: יצירת אוטומציה (trigger → פעולות)
+- **list_workflows** / **delete_workflow** / **toggle_workflow**: ניהול
+
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
 - **type**: fact (עובדה), preference (העדפה), event (אירוע), pattern (דפוס), relationship (אדם שמכיר)
@@ -131,6 +156,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - תיקיית פרויקטים: /Users/oakhome/קלוד עבודות/
 ${memoriesBlock}
 ${summariesBlock}
+${knowledgeBlock}
 ${skillsBlock}
 
 ${isQuietHours ? '## שעות שקטות (לילה)\nעכשיו שעות לילה. תן תשובות קצרות במיוחד. אם הבקשה לא דחופה, הצע לאלון לטפל בזה בבוקר.\n' : ''}${isShabbat ? '## שבת\nעכשיו שבת. תן תשובות קצרות, אל תציע פעולות עסקיות.\n' : ''}## כללים
