@@ -105,6 +105,47 @@ cron.schedule('0 21 * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
+// Scheduled messages check — every minute
+cron.schedule('* * * * *', async () => {
+  try {
+    const now = new Date().toISOString().slice(0, 16).replace('T', ' ');
+    const pending = db.prepare(
+      "SELECT * FROM scheduled_messages WHERE sent = 0 AND send_at <= ?"
+    ).all(now) as any[];
+
+    for (const msg of pending) {
+      const prefix = msg.label ? `⏰ ${msg.label}:\n` : '⏰ תזכורת:\n';
+      await sendToChannel(msg.channel, msg.target_id, prefix + msg.message);
+      db.prepare('UPDATE scheduled_messages SET sent = 1 WHERE id = ?').run(msg.id);
+      console.log(`[Cron] Scheduled message #${msg.id} sent`);
+    }
+  } catch (e: any) {
+    console.error('[Cron] Scheduled messages check failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Daily DB backup — 02:00 Israel time (send to Telegram as file)
+cron.schedule('0 2 * * *', async () => {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId || !config.telegramBotToken) return;
+  try {
+    const backupPath = `/tmp/alonbot-backup-auto-${Date.now()}.db`;
+    db.exec(`VACUUM INTO '${backupPath}'`);
+    const { readFileSync, unlinkSync } = await import('fs');
+    const buf = readFileSync(backupPath);
+    const { Bot, InputFile } = await import('grammy');
+    const bot = new Bot(config.telegramBotToken);
+    await bot.api.sendDocument(Number(targetId),
+      new InputFile(buf, `alonbot-backup-${new Date().toISOString().slice(0, 10)}.db`),
+      { caption: `גיבוי אוטומטי — ${(buf.length / 1024).toFixed(0)} KB` }
+    );
+    unlinkSync(backupPath);
+    console.log('[Cron] DB backup sent to Telegram');
+  } catch (e: any) {
+    console.error('[Cron] DB backup failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {
   console.log('[Cron] Memory maintenance');

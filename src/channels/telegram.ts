@@ -6,9 +6,28 @@ export function createTelegramAdapter(): ChannelAdapter {
   const bot = new Bot(config.telegramBotToken);
   let messageHandler: ((msg: UnifiedMessage) => void) | null = null;
 
+  let botUsername = ''; // Set on start
+
   function isAllowed(senderId: string): boolean {
     if (config.allowedTelegram.length === 0) return false;
     return config.allowedTelegram.includes(senderId);
+  }
+
+  function isGroupChat(ctx: any): boolean {
+    return ctx.chat?.type === 'group' || ctx.chat?.type === 'supergroup';
+  }
+
+  function isMentioned(ctx: any): boolean {
+    const text = ctx.message?.text || ctx.message?.caption || '';
+    if (botUsername && text.includes(`@${botUsername}`)) return true;
+    // Also respond to replies to bot's messages
+    if (ctx.message?.reply_to_message?.from?.is_bot) return true;
+    return false;
+  }
+
+  function stripMention(text: string): string {
+    if (!botUsername) return text;
+    return text.replace(new RegExp(`@${botUsername}\\s*`, 'gi'), '').trim();
   }
 
   function makeUnified(ctx: any, text: string, extra?: Partial<UnifiedMessage>): UnifiedMessage {
@@ -26,7 +45,21 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle text messages
   bot.on('message:text', async (ctx) => {
-    if (!isAllowed(String(ctx.from.id))) { await ctx.reply('Unauthorized.'); return; }
+    const senderId = String(ctx.from.id);
+
+    // Group chats: only respond if @mentioned or replied to
+    if (isGroupChat(ctx)) {
+      if (!isAllowed(senderId)) return; // Silent in groups for unauthorized users
+      if (!isMentioned(ctx)) return; // Ignore messages that don't mention the bot
+      if (!messageHandler) return;
+      const text = stripMention(ctx.message.text);
+      if (!text) return;
+      messageHandler(makeUnified(ctx, text));
+      return;
+    }
+
+    // Private chats: existing behavior
+    if (!isAllowed(senderId)) { await ctx.reply('Unauthorized.'); return; }
     if (!messageHandler) return;
 
     const text = ctx.message.text;
@@ -271,11 +304,16 @@ export function createTelegramAdapter(): ChannelAdapter {
       '*אוטומציות:* יצירת תגובות אוטומטיות לפי מילות מפתח\n\n' +
       '*תמונות:* שליחת תמונה ואני מנתח מה יש בה (OCR, תיאור)\n\n' +
       '*קול:* שליחת הודעה קולית ואני מתמלל ועונה (גם בקול)\n\n' +
+      '*סטיקרים:* שלח סטיקר ואני אגיב\n\n' +
+      '*אודיו:* שלח קובץ MP3/M4A ואני מתמלל אותו\n\n' +
+      '*קבוצות:* הוסף אותי לקבוצה ותייג @' + (botUsername || 'alonbot') + '\n\n' +
       '*פקודות:*\n' +
       '/menu — תפריט פעולות מהירות\n' +
       '/tasks — משימות פתוחות\n' +
+      '/opus שאלה — שאלה ל-Claude Opus (מודל חזק יותר)\n' +
       '/summary — סיכום השיחה האחרונה\n' +
       '/search מילה — חיפוש בהיסטוריה\n' +
+      '/backup — גיבוי מסד הנתונים\n' +
       '/export — ייצוא שיחה כקובץ\n' +
       '/dashboard — קישור לדאשבורד\n' +
       '/help — ההודעה הזאת',
@@ -322,6 +360,41 @@ export function createTelegramAdapter(): ChannelAdapter {
       console.error('[Telegram] Search error:', err.message);
       await ctx.reply('שגיאה בחיפוש.');
     }
+  });
+
+  // Handle /backup command — send DB backup file
+  bot.command('backup', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
+
+    try {
+      const { db } = await import('../utils/db.js');
+      const { config: cfg } = await import('../utils/config.js');
+      // Use SQLite backup API via VACUUM INTO for a safe copy
+      const backupPath = `/tmp/alonbot-backup-${Date.now()}.db`;
+      db.exec(`VACUUM INTO '${backupPath}'`);
+      const { readFileSync, unlinkSync } = await import('fs');
+      const buf = readFileSync(backupPath);
+      await ctx.replyWithDocument(
+        new InputFile(buf, `alonbot-backup-${new Date().toISOString().slice(0, 10)}.db`),
+        { caption: `גיבוי DB — ${(buf.length / 1024).toFixed(0)} KB` }
+      );
+      unlinkSync(backupPath);
+    } catch (err: any) {
+      console.error('[Telegram] Backup error:', err.message);
+      await ctx.reply(`שגיאה בגיבוי: ${err.message}`);
+    }
+  });
+
+  // Handle /opus command — send one question to Claude Opus
+  bot.command('opus', async (ctx) => {
+    if (!ctx.from || !isAllowed(String(ctx.from.id)) || !messageHandler) return;
+    const question = ctx.match?.trim();
+    if (!question) {
+      await ctx.reply('שימוש: /opus השאלה שלך\nדוגמה: /opus נתח את האסטרטגיה העסקית של דקל');
+      return;
+    }
+    // Tag the message so agent.ts knows to use Opus
+    messageHandler(makeUnified(ctx, `[OPUS] ${question}`));
   });
 
   // Handle /dashboard command — send link to dashboard
@@ -394,6 +467,61 @@ export function createTelegramAdapter(): ChannelAdapter {
     }
   });
 
+  // Handle sticker messages
+  bot.on('message:sticker', async (ctx) => {
+    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
+
+    const sticker = ctx.message.sticker;
+    const emoji = sticker.emoji || '';
+    const setName = sticker.set_name || 'unknown';
+    messageHandler(makeUnified(ctx, `[סטיקר: ${emoji} מסט "${setName}"]`));
+  });
+
+  // Handle audio files (MP3, M4A, etc.) — transcribe with Whisper
+  bot.on('message:audio', async (ctx) => {
+    if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
+
+    try {
+      const audio = ctx.message.audio;
+      const file = await ctx.api.getFile(audio.file_id);
+      const fileUrl = `https://api.telegram.org/file/bot${config.telegramBotToken}/${file.file_path}`;
+
+      const audioRes = await fetch(fileUrl);
+      const audioBuffer = Buffer.from(await audioRes.arrayBuffer());
+
+      // Detect mime type from file extension
+      const ext = file.file_path?.split('.').pop()?.toLowerCase() || 'mp3';
+      const mimeMap: Record<string, string> = { mp3: 'audio/mpeg', m4a: 'audio/mp4', ogg: 'audio/ogg', wav: 'audio/wav', flac: 'audio/flac' };
+      const mimeType = mimeMap[ext] || 'audio/mpeg';
+
+      // Transcribe with Groq Whisper
+      const formData = new FormData();
+      formData.append('file', new Blob([audioBuffer], { type: mimeType }), `audio.${ext}`);
+      formData.append('model', 'whisper-large-v3');
+      formData.append('language', 'he');
+
+      const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${config.groqApiKey}` },
+        body: formData,
+      });
+
+      if (!sttRes.ok) {
+        messageHandler(makeUnified(ctx, `[קובץ אודיו: ${audio.file_name || 'audio'} (${audio.duration}s) — לא הצלחתי לתמלל]`));
+        return;
+      }
+
+      const sttData = await sttRes.json() as { text: string };
+      const caption = ctx.message.caption || '';
+      const transcription = sttData.text;
+      console.log(`[Telegram] Audio transcribed: ${transcription.slice(0, 80)}`);
+
+      messageHandler(makeUnified(ctx, `${caption ? caption + '\n\n' : ''}[תמלול אודיו "${audio.file_name || 'audio'}":]:\n${transcription}`));
+    } catch (err: any) {
+      console.error('[Telegram] Audio error:', err.message);
+    }
+  });
+
   // Handle voice messages (STT → text)
   bot.on('message:voice', async (ctx) => {
     if (!isAllowed(String(ctx.from.id)) || !messageHandler) return;
@@ -443,13 +571,24 @@ export function createTelegramAdapter(): ChannelAdapter {
       }
       console.log('[Telegram] Starting bot...');
 
+      // Get bot username for @mention detection in groups
+      try {
+        const me = await bot.api.getMe();
+        botUsername = me.username || '';
+        console.log(`[Telegram] Bot username: @${botUsername}`);
+      } catch (e: any) {
+        console.warn('[Telegram] Could not get bot username:', e.message);
+      }
+
       // Set bot commands (shows in Telegram's "/" menu)
       try {
         await bot.api.setMyCommands([
           { command: 'menu', description: 'תפריט פעולות מהירות' },
           { command: 'tasks', description: 'משימות פתוחות' },
+          { command: 'opus', description: 'שאלה ל-Claude Opus (מודל חזק)' },
           { command: 'summary', description: 'סיכום השיחה האחרונה' },
           { command: 'search', description: 'חיפוש בהיסטוריה' },
+          { command: 'backup', description: 'גיבוי מסד נתונים' },
           { command: 'dashboard', description: 'פתח דאשבורד' },
           { command: 'export', description: 'ייצוא היסטוריית שיחה' },
           { command: 'help', description: 'מה אני יודע לעשות?' },

@@ -100,18 +100,32 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
+  // Detect [OPUS] tag for on-demand model upgrade
+  const useOpus = msg.text.startsWith('[OPUS] ');
+  if (useOpus) {
+    msg.text = msg.text.slice(7); // Strip the [OPUS] prefix
+    // Update the last message in history to strip prefix too
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.role === 'user') {
+      lastMsg.content = typeof lastMsg.content === 'string'
+        ? lastMsg.content.replace(/^\[OPUS\] /, '')
+        : lastMsg.content;
+    }
+  }
+
+  const modelId = useOpus ? 'claude-opus-4-20250514' : 'claude-sonnet-4-20250514';
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
-  let modelUsed = 'Claude Sonnet 4';
+  let modelUsed = useOpus ? 'Claude Opus 4' : 'Claude Sonnet 4';
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
 
   try {
     let response = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4096,
+      model: modelId,
+      max_tokens: useOpus ? 8192 : 4096,
       system: systemPrompt,
       tools: toolDefinitions,
       messages,
@@ -131,8 +145,12 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
       const toolResults: Anthropic.ToolResultBlockParam[] = [];
       for (const block of toolBlocks) {
         console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
+        const toolStart = Date.now();
         const result = await executeTool(block.name, block.input as Record<string, any>);
-        console.log(`[Tool] → ${result.slice(0, 100)}`);
+        const toolDuration = Date.now() - toolStart;
+        const toolSuccess = !result.startsWith('Error:') ? 1 : 0;
+        console.log(`[Tool] → ${result.slice(0, 100)} (${toolDuration}ms)`);
+        try { db.prepare('INSERT INTO tool_usage (tool_name, success, duration_ms) VALUES (?, ?, ?)').run(block.name, toolSuccess, toolDuration); } catch {}
         toolResults.push({
           type: 'tool_result' as const,
           tool_use_id: block.id,
@@ -144,8 +162,8 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
       messages.push({ role: 'user', content: toolResults });
 
       response = await client.messages.create({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        model: modelId,
+        max_tokens: useOpus ? 8192 : 4096,
         system: systemPrompt,
         tools: toolDefinitions,
         messages,
@@ -182,9 +200,11 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
     }
   }
 
-  // Track API usage
-  const costInput = (totalInputTokens / 1_000_000) * 3;   // $3/M input tokens
-  const costOutput = (totalOutputTokens / 1_000_000) * 15; // $15/M output tokens
+  // Track API usage (Opus: $15/$75, Sonnet: $3/$15 per M tokens)
+  const inputRate = useOpus ? 15 : 3;
+  const outputRate = useOpus ? 75 : 15;
+  const costInput = (totalInputTokens / 1_000_000) * inputRate;
+  const costOutput = (totalOutputTokens / 1_000_000) * outputRate;
   const totalCost = costInput + costOutput;
   try {
     db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(

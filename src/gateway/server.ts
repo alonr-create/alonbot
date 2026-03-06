@@ -133,11 +133,57 @@ app.get('/api/dashboard/workflows', dashAuth, (_req, res) => {
   res.json(rows.map((r: any) => ({ ...r, actions: JSON.parse(r.actions) })));
 });
 
+app.get('/api/dashboard/tools', dashAuth, (_req, res) => {
+  const rows = db.prepare(`
+    SELECT tool_name, COUNT(*) as calls,
+           SUM(CASE WHEN success = 1 THEN 1 ELSE 0 END) as successes,
+           SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) as failures,
+           ROUND(AVG(duration_ms)) as avg_ms,
+           MAX(created_at) as last_used
+    FROM tool_usage
+    GROUP BY tool_name ORDER BY calls DESC
+  `).all();
+  res.json(rows);
+});
+
+// Web Chat API — send message and get response
+app.post('/api/chat', dashAuth, async (req, res) => {
+  const { text } = req.body;
+  if (!text || typeof text !== 'string') {
+    res.status(400).json({ error: 'Missing text' });
+    return;
+  }
+
+  try {
+    const { handleMessage } = await import('../agent/agent.js');
+    const msg = {
+      id: `web-${Date.now()}`,
+      channel: 'telegram' as const,
+      senderId: config.allowedTelegram[0] || 'web',
+      senderName: 'Alon (Web)',
+      text: text.slice(0, 4000),
+      timestamp: Date.now(),
+      raw: null,
+    };
+    const reply = await handleMessage(msg);
+    res.json({ text: reply.text });
+  } catch (e: any) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Dashboard HTML
 app.get('/dashboard', dashAuth, (_req, res) => {
   const token = _req.query.token;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(getDashboardHTML(token as string));
+});
+
+// Web Chat HTML
+app.get('/chat', dashAuth, (_req, res) => {
+  const token = _req.query.token;
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(getChatHTML(token as string));
 });
 
 export function startServer() {
@@ -220,6 +266,7 @@ function getDashboardHTML(token: string): string {
     <div class="tab" data-tab="messages">Messages</div>
     <div class="tab" data-tab="costs">Costs</div>
     <div class="tab" data-tab="knowledge">Knowledge</div>
+    <div class="tab" data-tab="tools">Tools</div>
     <div class="tab" data-tab="workflows">Workflows</div>
   </div>
 
@@ -302,6 +349,13 @@ async function loadTab(tab) {
     el.innerHTML = '<h2>Knowledge Base (' + data.length + ' docs)</h2><table><tr><th>#</th><th>Title</th><th>Type</th><th>Chunks</th><th>Added</th></tr>' +
       data.map(d => '<tr><td>' + d.id + '</td><td>' + esc(d.title) + '</td><td>' + d.source_type + '</td><td>' + d.chunk_count + '</td><td>' + d.created_at + '</td></tr>').join('') + '</table>';
   }
+  else if (tab === 'tools') {
+    const data = await fetchJSON('tools');
+    if (!data.length) { el.innerHTML = '<h2>Tool Usage</h2><div class="empty">No tool usage yet</div>'; return; }
+    const totalCalls = data.reduce((s,t) => s + t.calls, 0);
+    el.innerHTML = '<h2>Tool Usage (' + totalCalls + ' total calls)</h2><table><tr><th>Tool</th><th>Calls</th><th>Success</th><th>Fail</th><th>Avg ms</th><th>Last Used</th></tr>' +
+      data.map(t => '<tr><td><b>' + t.tool_name + '</b></td><td>' + t.calls + '</td><td style="color:#0a3">' + t.successes + '</td><td style="color:#f44">' + t.failures + '</td><td>' + (t.avg_ms||0) + 'ms</td><td style="font-size:11px">' + (t.last_used||'-') + '</td></tr>').join('') + '</table>';
+  }
   else if (tab === 'workflows') {
     const data = await fetchJSON('workflows');
     if (!data.length) { el.innerHTML = '<h2>Workflows</h2><div class="empty">No workflows configured</div>'; return; }
@@ -318,6 +372,110 @@ document.getElementById('main-tabs').addEventListener('click', e => {
 
 loadAll();
 setInterval(loadAll, 30000); // refresh every 30s
+</script>
+</body>
+</html>`;
+}
+
+function getChatHTML(token: string): string {
+  return `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AlonBot Chat</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700&display=swap');
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family:'Heebo',sans-serif; background:#0f0c29; color:#e0e0ff; height:100vh; display:flex; flex-direction:column; }
+  .header { background:linear-gradient(135deg,#302b63,#24243e); padding:14px 20px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid #444; flex-shrink:0; }
+  .header h1 { font-size:20px; font-weight:700; background:linear-gradient(90deg,#00d2ff,#7b2ff7); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .header a { color:#888; text-decoration:none; font-size:13px; }
+  .header a:hover { color:#00d2ff; }
+  .messages { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:12px; }
+  .msg { max-width:80%; padding:12px 16px; border-radius:16px; line-height:1.6; font-size:14px; white-space:pre-wrap; word-wrap:break-word; }
+  .msg-user { align-self:flex-start; background:#7b2ff7; color:#fff; border-bottom-right-radius:4px; }
+  .msg-bot { align-self:flex-end; background:#1a1a3e; border:1px solid #333; border-bottom-left-radius:4px; }
+  .msg-bot .footer { font-size:11px; color:#666; margin-top:8px; border-top:1px solid #333; padding-top:6px; }
+  .typing { align-self:flex-end; color:#666; font-size:13px; padding:8px 16px; display:none; }
+  .typing.show { display:block; }
+  .input-area { display:flex; gap:8px; padding:12px 20px; background:#1a1a3e; border-top:1px solid #333; flex-shrink:0; }
+  .input-area textarea { flex:1; background:#252550; border:1px solid #444; border-radius:12px; padding:12px 16px; color:#e0e0ff; font-family:inherit; font-size:14px; resize:none; outline:none; min-height:44px; max-height:120px; }
+  .input-area textarea:focus { border-color:#7b2ff7; }
+  .input-area button { background:#7b2ff7; color:#fff; border:none; border-radius:12px; padding:0 20px; cursor:pointer; font-family:inherit; font-size:14px; font-weight:500; white-space:nowrap; }
+  .input-area button:hover { background:#9b4fff; }
+  .input-area button:disabled { opacity:0.5; cursor:not-allowed; }
+  @media(max-width:600px) { .msg { max-width:90%; } .input-area { padding:8px 12px; } }
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>AlonBot Chat</h1>
+  <a href="/dashboard?token=${token}">Dashboard</a>
+</div>
+<div class="messages" id="messages"></div>
+<div class="typing" id="typing">AlonBot חושב...</div>
+<div class="input-area">
+  <textarea id="input" placeholder="כתוב הודעה..." rows="1"></textarea>
+  <button id="send" onclick="send()">שלח</button>
+</div>
+<script>
+const TOKEN = '${token}';
+const msgEl = document.getElementById('messages');
+const inputEl = document.getElementById('input');
+const typingEl = document.getElementById('typing');
+const sendBtn = document.getElementById('send');
+
+function addMsg(text, role) {
+  const div = document.createElement('div');
+  div.className = 'msg msg-' + role;
+  if (role === 'bot') {
+    // Split footer from text
+    const parts = text.split(/\\n\\n_\\u200E/);
+    let main = parts[0];
+    let footer = parts.length > 1 ? parts[1].replace(/_$/, '') : '';
+    div.innerHTML = esc(main) + (footer ? '<div class="footer">' + esc(footer) + '</div>' : '');
+  } else {
+    div.textContent = text;
+  }
+  msgEl.appendChild(div);
+  msgEl.scrollTop = msgEl.scrollHeight;
+}
+
+function esc(s) { const d = document.createElement('span'); d.textContent = s; return d.innerHTML; }
+
+async function send() {
+  const text = inputEl.value.trim();
+  if (!text) return;
+  inputEl.value = '';
+  inputEl.style.height = 'auto';
+  addMsg(text, 'user');
+  sendBtn.disabled = true;
+  typingEl.classList.add('show');
+
+  try {
+    const res = await fetch('/api/chat?token=' + TOKEN, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    const data = await res.json();
+    addMsg(data.text || data.error || 'Error', 'bot');
+  } catch (e) {
+    addMsg('Connection error: ' + e.message, 'bot');
+  }
+
+  sendBtn.disabled = false;
+  typingEl.classList.remove('show');
+}
+
+inputEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
+});
+inputEl.addEventListener('input', () => {
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
+});
 </script>
 </body>
 </html>`;

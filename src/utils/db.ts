@@ -77,6 +77,29 @@ db.exec(`
     completed_at TEXT
   );
 
+  CREATE TABLE IF NOT EXISTS scheduled_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    label TEXT,
+    message TEXT NOT NULL,
+    send_at TEXT NOT NULL,
+    channel TEXT NOT NULL DEFAULT 'telegram',
+    target_id TEXT NOT NULL,
+    sent INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent, send_at);
+
+  CREATE TABLE IF NOT EXISTS tool_usage (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool_name TEXT NOT NULL,
+    success INTEGER NOT NULL DEFAULT 1,
+    duration_ms INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_tool_usage_date ON tool_usage(created_at);
+  CREATE INDEX IF NOT EXISTS idx_tool_usage_name ON tool_usage(tool_name);
   CREATE INDEX IF NOT EXISTS idx_messages_channel ON messages(channel, sender_id, created_at);
   CREATE INDEX IF NOT EXISTS idx_memories_type ON memories(type, category);
   CREATE INDEX IF NOT EXISTS idx_memories_importance ON memories(importance DESC);
