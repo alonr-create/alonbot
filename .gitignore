@@ -1,8 +1,12 @@
 node_modules/
 dist/
 .env
+.env.local
+.env.*.local
 data/*.db
 data/*.db-wal
 data/*.db-shm
 data/whatsapp-session/
 .DS_Store
+*.pdf
+alonbot-status.html
