@@ -16,7 +16,7 @@ app.use((_req, res, next) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', mode: config.mode, uptime: process.uptime(), localConnected: !!config.localApiUrl });
+  res.json({ status: 'ok', mode: config.mode, uptime: process.uptime(), localConnected: !!config.localApiUrl, version: 'v23-commands-fix' });
 });
 
 // Cloud mode: allow local Mac to register its tunnel URL

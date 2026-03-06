@@ -47,6 +47,7 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle /export command — export chat history as file
   bot.command('export', async (ctx) => {
+    console.log('[Telegram] /export command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     try {
@@ -161,6 +162,7 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle /menu command — show category buttons
   bot.command('menu', async (ctx) => {
+    console.log('[Telegram] /menu command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     const keyboard = new InlineKeyboard();
@@ -271,6 +273,7 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle /backup command — send DB backup file
   bot.command('backup', async (ctx) => {
+    console.log('[Telegram] /backup command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     try {
@@ -316,8 +319,11 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // === MESSAGE HANDLERS (after commands, so commands take priority) ===
 
-  // Handle text messages
+  // Handle text messages (commands should be caught above, this is for regular text)
   bot.on('message:text', async (ctx) => {
+    if (ctx.message.text.startsWith('/')) {
+      console.warn(`[Telegram] Command fell through to text handler: "${ctx.message.text}"`);
+    }
     const senderId = String(ctx.from.id);
 
     // Group chats: only respond if @mentioned or replied to
