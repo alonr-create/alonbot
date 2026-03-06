@@ -16,6 +16,7 @@ export const config = {
   allowedTelegram: (process.env.ALLOWED_TELEGRAM || '').split(',').filter(Boolean),
   localApiUrl: process.env.LOCAL_API_URL || '',
   localApiSecret: process.env.LOCAL_API_SECRET || 'alonbot-secret-2026',
+  googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
   dataDir: new URL('../../data/', import.meta.url).pathname,
   skillsDir: new URL('../../skills/', import.meta.url).pathname,
 };

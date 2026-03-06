@@ -401,8 +401,10 @@ export function createTelegramAdapter(): ChannelAdapter {
   bot.command('dashboard', async (ctx) => {
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
     const keyboard = new InlineKeyboard()
-      .url('פתח דאשבורד', `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}`);
-    await ctx.reply('לחץ לפתיחת הדאשבורד:', { reply_markup: keyboard });
+      .webApp('Dashboard', `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}`)
+      .row()
+      .webApp('Chat', `https://alonbot.onrender.com/chat?token=${config.localApiSecret}`);
+    await ctx.reply('פתח ממשק:', { reply_markup: keyboard });
   });
 
   // Handle inline button callbacks
@@ -595,6 +597,20 @@ export function createTelegramAdapter(): ChannelAdapter {
         ]);
       } catch (e: any) {
         console.warn('[Telegram] Failed to set commands:', e.message);
+      }
+
+      // Set menu button to open Web App (Mini App)
+      try {
+        await bot.api.setChatMenuButton({
+          menu_button: {
+            type: 'web_app',
+            text: 'Dashboard',
+            web_app: { url: `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}` },
+          },
+        });
+        console.log('[Telegram] Menu button set to Dashboard WebApp');
+      } catch (e: any) {
+        console.warn('[Telegram] Failed to set menu button:', e.message);
       }
 
       bot.start();

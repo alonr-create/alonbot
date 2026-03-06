@@ -5,8 +5,15 @@ import { createWhatsAppAdapter } from './channels/whatsapp.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
+import { executeWorkflowActions } from './agent/tools.js';
 import { db } from './utils/db.js';
 import cron from 'node-cron';
+
+// DND check — skip proactive messages during quiet hours (23:00-07:00 Israel)
+function isDND(): boolean {
+  const hour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }));
+  return hour >= 23 || hour < 7;
+}
 
 console.log('=== AlonBot ===');
 console.log(`Mode: ${config.mode}`);
@@ -64,7 +71,7 @@ embedUnembeddedMemories().catch(err =>
 // Proactive: overdue tasks check — 18:00 daily
 cron.schedule('0 18 * * *', async () => {
   const targetId = config.allowedTelegram[0];
-  if (!targetId) return;
+  if (!targetId || isDND()) return;
   try {
     const overdue = db.prepare(
       "SELECT id, title, due_date FROM tasks WHERE status = 'pending' AND due_date IS NOT NULL AND due_date < date('now') ORDER BY due_date"
@@ -90,7 +97,7 @@ cron.schedule('0 9 * * 0', async () => {
 // Cost alert — check at 21:00 if daily spend exceeded $0.50
 cron.schedule('0 21 * * *', async () => {
   const targetId = config.allowedTelegram[0];
-  if (!targetId) return;
+  if (!targetId || isDND()) return;
   try {
     const row = db.prepare(
       "SELECT COALESCE(SUM(cost_usd), 0) as cost, COUNT(*) as calls FROM api_usage WHERE date(created_at) = date('now')"
@@ -145,6 +152,57 @@ cron.schedule('0 2 * * *', async () => {
     console.error('[Cron] DB backup failed:', e.message);
   }
 }, { timezone: 'Asia/Jerusalem' });
+
+// Workflow Engine — check cron-triggered workflows every minute
+cron.schedule('* * * * *', async () => {
+  try {
+    const workflows = db.prepare(
+      "SELECT * FROM workflows WHERE enabled = 1 AND trigger_type = 'cron'"
+    ).all() as any[];
+    const now = new Date();
+    for (const wf of workflows) {
+      if (cron.validate(wf.trigger_value) && matchesCronNow(wf.trigger_value, now)) {
+        console.log(`[Workflow] Cron triggered: "${wf.name}"`);
+        const actions = JSON.parse(wf.actions);
+        const targetId = config.allowedTelegram[0] || '';
+        const results = await executeWorkflowActions(actions, { channel: 'telegram', targetId });
+        // Send workflow messages to user
+        for (const r of results) {
+          if (r.startsWith('Message: ')) {
+            await sendToChannel('telegram', targetId, r.slice(9));
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    console.error('[Workflow] Cron check failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Simple cron expression matcher for current minute
+function matchesCronNow(expr: string, now: Date): boolean {
+  const parts = expr.split(/\s+/);
+  if (parts.length !== 5) return false;
+  const minute = now.getMinutes();
+  const hour = now.getHours();
+  const dayOfMonth = now.getDate();
+  const month = now.getMonth() + 1;
+  const dayOfWeek = now.getDay();
+  const fields = [minute, hour, dayOfMonth, month, dayOfWeek];
+  return parts.every((part, i) => {
+    if (part === '*') return true;
+    if (part.includes('/')) {
+      const [, step] = part.split('/');
+      return fields[i] % parseInt(step) === 0;
+    }
+    if (part.includes(',')) return part.split(',').map(Number).includes(fields[i]);
+    if (part.includes('-')) {
+      const [min, max] = part.split('-').map(Number);
+      return fields[i] >= min && fields[i] <= max;
+    }
+    return parseInt(part) === fields[i];
+  });
+}
 
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {

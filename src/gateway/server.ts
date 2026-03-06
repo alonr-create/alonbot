@@ -146,6 +146,17 @@ app.get('/api/dashboard/tools', dashAuth, (_req, res) => {
   res.json(rows);
 });
 
+// Web Chat — message history
+app.get('/api/chat/history', dashAuth, (req, res) => {
+  const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+  const rows = db.prepare(
+    `SELECT role, content, created_at FROM messages
+     WHERE channel = 'telegram' AND sender_id = ?
+     ORDER BY id DESC LIMIT ?`
+  ).all(config.allowedTelegram[0] || '', limit) as any[];
+  res.json(rows.reverse());
+});
+
 // Web Chat API — send message and get response
 app.post('/api/chat', dashAuth, async (req, res) => {
   const { text } = req.body;
@@ -477,6 +488,18 @@ inputEl.addEventListener('input', () => {
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px';
 });
+
+// Load chat history on page open
+(async () => {
+  try {
+    const res = await fetch('/api/chat/history?token=' + TOKEN + '&limit=30');
+    const history = await res.json();
+    for (const msg of history) {
+      const role = msg.role === 'user' ? 'user' : 'bot';
+      addMsg(msg.content, role);
+    }
+  } catch (e) { console.error('Failed to load history:', e); }
+})();
 </script>
 </body>
 </html>`;

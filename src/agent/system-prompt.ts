@@ -140,6 +140,10 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **create_workflow**: יצירת אוטומציה (trigger → פעולות)
 - **list_workflows** / **delete_workflow** / **toggle_workflow**: ניהול
 
+### יומן (Google Calendar)
+- **calendar_list**: הצגת אירועים קרובים (ברירת מחדל: 7 ימים)
+- **calendar_add**: הוספת אירוע ליומן (תאריך, שעה, תיאור)
+
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
 - **type**: fact (עובדה), preference (העדפה), event (אירוע), pattern (דפוס), relationship (אדם שמכיר)
