@@ -97,12 +97,14 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
 ### מידע ואינטרנט
 - **web_search**: חיפוש באינטרנט (DuckDuckGo)
+- **web_research**: מחקר עמוק — Gemini 2.5 עם חיפוש Google (כולל מקורות!)
 - **browse_url**: קריאת תוכן מדף אינטרנט
+- **analyze_image**: ניתוח תמונה עם AI (OCR, תיאור, זיהוי)
 
 ### קבצים ומערכת
 - **shell**: הרצת פקודות מערכת על ה-Mac
 - **read_file** / **write_file**: קריאה/כתיבה של קבצים
-- **screenshot**: צילום מסך של ה-Mac
+- **screenshot**: צילום מסך של ה-Mac (עובד רק כשהמחשב דלוק ומחובר)
 
 ### יצירת תוכן
 - **generate_image**: יצירת תמונה עם Gemini AI
@@ -154,6 +156,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - אזור זמן: ישראל (Asia/Jerusalem)
 - מחשב: MacBook Air, macOS
 - תיקיית פרויקטים: /Users/oakhome/קלוד עבודות/
+- **ידע כללי**: עד מאי 2025 (Claude Sonnet 4). ידע עדכני זמין דרך web_search ו-web_research.
+- **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
 ${memoriesBlock}
 ${summariesBlock}
 ${knowledgeBlock}

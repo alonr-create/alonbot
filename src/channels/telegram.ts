@@ -54,8 +54,13 @@ export function createTelegramAdapter(): ChannelAdapter {
       const res = await fetch(fileUrl);
       const buf = Buffer.from(await res.arrayBuffer());
 
+      // Detect media type from file extension (Telegram compresses to JPEG)
+      const ext = file.file_path?.split('.').pop()?.toLowerCase();
+      const mediaType = ext === 'png' ? 'image/png' : ext === 'webp' ? 'image/webp' : 'image/jpeg';
+
       messageHandler(makeUnified(ctx, ctx.message.caption || 'מה יש בתמונה?', {
         image: buf.toString('base64'),
+        imageMediaType: mediaType,
       }));
     } catch (err: any) {
       console.error('[Telegram] Photo error:', err.message);

@@ -31,12 +31,12 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
     parts: [{ text: typeof m.content === 'string' ? m.content : (m.content as any[]).filter((b: any) => b.type === 'text' || b.type === 'tool_result').map((b: any) => b.text || b.content || '').join('\n') }],
   }));
 
-  // Try Gemini 2.5 Pro first (stronger), fall back to 2.0 Flash
+  // Try Gemini 2.5 Flash first (fast + capable), fall back to 2.0 Flash (higher rate limit)
   try {
-    const text = await callGemini('gemini-2.5-pro-preview-06-05', systemPrompt, contents);
-    if (text) return { text, model: 'Gemini 2.5 Pro' };
+    const text = await callGemini('gemini-2.5-flash', systemPrompt, contents);
+    if (text) return { text, model: 'Gemini 2.5 Flash' };
   } catch (e: any) {
-    console.warn(`[Agent] Gemini 2.5 Pro failed: ${e.message}, trying 2.0 Flash...`);
+    console.warn(`[Agent] Gemini 2.5 Flash failed: ${e.message}, trying 2.0 Flash...`);
   }
 
   const text = await callGemini('gemini-2.0-flash', systemPrompt, contents);
