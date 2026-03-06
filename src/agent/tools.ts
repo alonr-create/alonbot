@@ -76,185 +76,22 @@ function isEmailAllowed(to: string): boolean {
 const LOCAL_ONLY_TOOLS = ['shell', 'read_file', 'write_file', 'screenshot', 'manage_project'];
 
 const allToolDefinitions: Anthropic.Tool[] = [
-  {
-    name: 'shell',
-    description: 'Run a shell command on the local Mac. Whitelisted commands only. No pipes, semicolons, or chaining.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        command: { type: 'string', description: 'The shell command to run' },
-      },
-      required: ['command'],
-    },
-  },
-  {
-    name: 'read_file',
-    description: 'Read the contents of a file. Restricted to project directories.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: { type: 'string', description: 'Absolute file path' },
-      },
-      required: ['path'],
-    },
-  },
-  {
-    name: 'write_file',
-    description: 'Write content to a file. Restricted to project directories.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        path: { type: 'string', description: 'Absolute file path' },
-        content: { type: 'string', description: 'File content to write' },
-      },
-      required: ['path', 'content'],
-    },
-  },
-  {
-    name: 'web_search',
-    description: 'Search the web using DuckDuckGo. Returns top results with titles and snippets.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'Search query' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'web_research',
-    description: 'Deep web research using Gemini AI with Google Search grounding. Returns a comprehensive answer with sources. Use for complex questions, current events, prices, comparisons, Hebrew queries. Better than web_search for detailed answers.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'Research question (Hebrew or English)' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'browse_url',
-    description: 'Fetch and read the text content of a web page. Only public URLs allowed.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        url: { type: 'string', description: 'URL to fetch' },
-      },
-      required: ['url'],
-    },
-  },
-  {
-    name: 'analyze_image',
-    description: 'Analyze an image from a URL using Gemini AI vision. Can describe, extract text (OCR), identify objects, read documents, analyze charts/graphs. Supports Hebrew text in images.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        image_url: { type: 'string', description: 'URL of the image to analyze' },
-        question: { type: 'string', description: 'What to analyze or ask about the image (default: describe in detail)' },
-      },
-      required: ['image_url'],
-    },
-  },
-  {
-    name: 'generate_image',
-    description: 'Generate an image using Gemini AI. Returns the image and sends it in the chat.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        prompt: { type: 'string', description: 'Detailed image description in English' },
-      },
-      required: ['prompt'],
-    },
-  },
-  {
-    name: 'set_reminder',
-    description: 'Set a reminder that will be sent at a specific time.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        name: { type: 'string', description: 'Reminder name' },
-        cron_expr: { type: 'string', description: 'Cron expression (e.g. "0 18 * * *" for 18:00 daily)' },
-        message: { type: 'string', description: 'Message to send when reminder triggers' },
-      },
-      required: ['name', 'cron_expr', 'message'],
-    },
-  },
-  {
-    name: 'list_reminders',
-    description: 'List all active reminders/cron jobs.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
-  {
-    name: 'delete_reminder',
-    description: 'Delete a reminder by its ID.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        id: { type: 'number', description: 'Reminder ID to delete' },
-      },
-      required: ['id'],
-    },
-  },
-  {
-    name: 'remember',
-    description: 'Save a memory about the user. Use type to classify: fact (concrete info), preference (likes/dislikes), event (something that happened), pattern (recurring behavior), relationship (person the user knows).',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        content: { type: 'string', description: 'The memory content in natural language (e.g. "אלון אוהב פיצה", "פגישה עם רו"ח ביום ראשון")' },
-        type: { type: 'string', enum: ['fact', 'preference', 'event', 'pattern', 'relationship'], description: 'Memory type' },
-        category: { type: 'string', enum: ['personal', 'work_dekel', 'work_mazpen', 'work_alon_dev', 'work_aliza', 'health', 'finance'], description: 'Category (optional, auto-detected if omitted)' },
-        importance: { type: 'number', description: 'Importance 1-10 (default 5). Use 8+ for critical facts like birthday, family, key business info.' },
-      },
-      required: ['content', 'type'],
-    },
-  },
-  {
-    name: 'monday_api',
-    description: 'Query Monday.com API (GraphQL). Use for leads, meetings, tasks from דקל לפרישה boards.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        query: { type: 'string', description: 'GraphQL query string' },
-      },
-      required: ['query'],
-    },
-  },
-  {
-    name: 'send_voice',
-    description: 'Convert text to speech and send as a voice message. Supports Hebrew and English.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        text: { type: 'string', description: 'Text to convert to speech' },
-      },
-      required: ['text'],
-    },
-  },
-  {
-    name: 'send_email',
-    description: 'Send an email via Gmail. Recipients restricted to known addresses.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {
-        to: { type: 'string', description: 'Recipient email address' },
-        subject: { type: 'string', description: 'Email subject' },
-        body: { type: 'string', description: 'Email body (plain text or HTML)' },
-      },
-      required: ['to', 'subject', 'body'],
-    },
-  },
-  {
-    name: 'screenshot',
-    description: 'Take a screenshot of the Mac screen and send it.',
-    input_schema: {
-      type: 'object' as const,
-      properties: {},
-    },
-  },
+  { name: 'shell', description: 'Run whitelisted shell command on Mac', input_schema: { type: 'object' as const, properties: { command: { type: 'string' } }, required: ['command'] } },
+  { name: 'read_file', description: 'Read file from project dir', input_schema: { type: 'object' as const, properties: { path: { type: 'string' } }, required: ['path'] } },
+  { name: 'write_file', description: 'Write file to project dir', input_schema: { type: 'object' as const, properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } },
+  { name: 'web_search', description: 'DuckDuckGo search', input_schema: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'web_research', description: 'Deep research via Gemini+Google Search with sources. Best for complex/Hebrew queries.', input_schema: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'browse_url', description: 'Fetch web page text', input_schema: { type: 'object' as const, properties: { url: { type: 'string' } }, required: ['url'] } },
+  { name: 'analyze_image', description: 'Analyze image from URL (OCR, describe, Hebrew)', input_schema: { type: 'object' as const, properties: { image_url: { type: 'string' }, question: { type: 'string' } }, required: ['image_url'] } },
+  { name: 'generate_image', description: 'Generate image from prompt', input_schema: { type: 'object' as const, properties: { prompt: { type: 'string', description: 'English prompt' } }, required: ['prompt'] } },
+  { name: 'set_reminder', description: 'Set cron reminder', input_schema: { type: 'object' as const, properties: { name: { type: 'string' }, cron_expr: { type: 'string', description: 'e.g. "0 18 * * *"' }, message: { type: 'string' } }, required: ['name', 'cron_expr', 'message'] } },
+  { name: 'list_reminders', description: 'List reminders', input_schema: { type: 'object' as const, properties: {} } },
+  { name: 'delete_reminder', description: 'Delete reminder', input_schema: { type: 'object' as const, properties: { id: { type: 'number' } }, required: ['id'] } },
+  { name: 'remember', description: 'Save memory about user', input_schema: { type: 'object' as const, properties: { content: { type: 'string' }, type: { type: 'string', enum: ['fact', 'preference', 'event', 'pattern', 'relationship'] }, category: { type: 'string', enum: ['personal', 'work_dekel', 'work_mazpen', 'work_alon_dev', 'work_aliza', 'health', 'finance'] }, importance: { type: 'number', description: '1-10' } }, required: ['content', 'type'] } },
+  { name: 'monday_api', description: 'Monday.com GraphQL query', input_schema: { type: 'object' as const, properties: { query: { type: 'string' } }, required: ['query'] } },
+  { name: 'send_voice', description: 'TTS voice message (Hebrew/English)', input_schema: { type: 'object' as const, properties: { text: { type: 'string' } }, required: ['text'] } },
+  { name: 'send_email', description: 'Send Gmail to whitelisted address', input_schema: { type: 'object' as const, properties: { to: { type: 'string' }, subject: { type: 'string' }, body: { type: 'string' } }, required: ['to', 'subject', 'body'] } },
+  { name: 'screenshot', description: 'Screenshot Mac screen', input_schema: { type: 'object' as const, properties: {} } },
   {
     name: 'manage_project',
     description: 'Run git commands or check status of a project. Projects are in /Users/oakhome/קלוד עבודות/.',

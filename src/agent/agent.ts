@@ -7,6 +7,29 @@ import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
+// Gemini fallback for when Claude rate-limits (429)
+async function callGeminiFallback(systemPrompt: string, messages: Anthropic.MessageParam[]): Promise<string> {
+  // Convert Anthropic messages to Gemini format
+  const contents = messages.map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: typeof m.content === 'string' ? m.content : (m.content as any[]).filter((b: any) => b.type === 'text' || b.type === 'tool_result').map((b: any) => b.text || b.content || '').join('\n') }],
+  }));
+
+  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemPrompt }] },
+      contents,
+      generationConfig: { maxOutputTokens: 4096 },
+    }),
+  });
+
+  if (!res.ok) throw new Error(`Gemini fallback failed: ${res.status}`);
+  const data = await res.json() as any;
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'לא הצלחתי לעבד (fallback).';
+}
+
 // Rate limiting: max 10 messages per minute per user
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT = 10;
@@ -66,53 +89,69 @@ export async function handleMessage(msg: UnifiedMessage): Promise<UnifiedReply> 
 
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
-  // Agent loop — handle tool calls
-  let response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 4096,
-    system: systemPrompt,
-    tools: toolDefinitions,
-    messages,
-  });
-
-  // Process tool calls in a loop (max 15 iterations to prevent runaway)
-  const MAX_TOOL_ITERATIONS = 15;
-  let toolIteration = 0;
-  while (response.stop_reason === 'tool_use' && toolIteration < MAX_TOOL_ITERATIONS) {
-    toolIteration++;
-    const toolBlocks = response.content.filter(
-      (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
-    );
-
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
-    for (const block of toolBlocks) {
-      console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
-      const result = await executeTool(block.name, block.input as Record<string, any>);
-      console.log(`[Tool] → ${result.slice(0, 100)}`);
-      toolResults.push({
-        type: 'tool_result' as const,
-        tool_use_id: block.id,
-        content: result,
-      });
-    }
-
-    messages.push({ role: 'assistant', content: response.content });
-    messages.push({ role: 'user', content: toolResults });
-
-    response = await client.messages.create({
+  // Agent loop — handle tool calls, with Gemini fallback on rate limit
+  let replyText: string;
+  try {
+    let response = await client.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
       system: systemPrompt,
       tools: toolDefinitions,
       messages,
     });
-  }
 
-  // Extract text response
-  const textBlocks = response.content.filter(
-    (b): b is Anthropic.TextBlock => b.type === 'text'
-  );
-  const replyText = textBlocks.map(b => b.text).join('\n') || 'לא הצלחתי לעבד את ההודעה.';
+    // Process tool calls in a loop (max 15 iterations to prevent runaway)
+    const MAX_TOOL_ITERATIONS = 15;
+    let toolIteration = 0;
+    while (response.stop_reason === 'tool_use' && toolIteration < MAX_TOOL_ITERATIONS) {
+      toolIteration++;
+      const toolBlocks = response.content.filter(
+        (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use'
+      );
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of toolBlocks) {
+        console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
+        const result = await executeTool(block.name, block.input as Record<string, any>);
+        console.log(`[Tool] → ${result.slice(0, 100)}`);
+        toolResults.push({
+          type: 'tool_result' as const,
+          tool_use_id: block.id,
+          content: result,
+        });
+      }
+
+      messages.push({ role: 'assistant', content: response.content });
+      messages.push({ role: 'user', content: toolResults });
+
+      response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 4096,
+        system: systemPrompt,
+        tools: toolDefinitions,
+        messages,
+      });
+    }
+
+    // Extract text response
+    const textBlocks = response.content.filter(
+      (b): b is Anthropic.TextBlock => b.type === 'text'
+    );
+    replyText = textBlocks.map(b => b.text).join('\n') || 'לא הצלחתי לעבד את ההודעה.';
+  } catch (err: any) {
+    // Fallback to Gemini on rate limit (429) or overload (529)
+    if (err?.status === 429 || err?.status === 529) {
+      console.warn(`[Agent] Claude ${err.status} — falling back to Gemini 2.0 Flash`);
+      try {
+        replyText = await callGeminiFallback(systemPrompt, messages);
+      } catch (geminiErr: any) {
+        console.error('[Agent] Gemini fallback also failed:', geminiErr.message);
+        throw err; // re-throw original
+      }
+    } else {
+      throw err;
+    }
+  }
 
   // Save assistant response
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
