@@ -122,6 +122,17 @@ const allToolDefinitions: Anthropic.Tool[] = [
     },
   },
   {
+    name: 'web_research',
+    description: 'Deep web research using Gemini AI with Google Search grounding. Returns a comprehensive answer with sources. Use for complex questions, current events, prices, comparisons, Hebrew queries. Better than web_search for detailed answers.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        query: { type: 'string', description: 'Research question (Hebrew or English)' },
+      },
+      required: ['query'],
+    },
+  },
+  {
     name: 'browse_url',
     description: 'Fetch and read the text content of a web page. Only public URLs allowed.',
     input_schema: {
@@ -130,6 +141,18 @@ const allToolDefinitions: Anthropic.Tool[] = [
         url: { type: 'string', description: 'URL to fetch' },
       },
       required: ['url'],
+    },
+  },
+  {
+    name: 'analyze_image',
+    description: 'Analyze an image from a URL using Gemini AI vision. Can describe, extract text (OCR), identify objects, read documents, analyze charts/graphs. Supports Hebrew text in images.',
+    input_schema: {
+      type: 'object' as const,
+      properties: {
+        image_url: { type: 'string', description: 'URL of the image to analyze' },
+        question: { type: 'string', description: 'What to analyze or ask about the image (default: describe in detail)' },
+      },
+      required: ['image_url'],
     },
   },
   {
@@ -343,6 +366,43 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
       }
     }
 
+    case 'web_research': {
+      if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY not configured.';
+      try {
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: input.query }] }],
+              tools: [{ google_search: {} }],
+            }),
+          },
+        );
+        if (!res.ok) {
+          const errText = await res.text();
+          return `Error: Gemini Search returned ${res.status}: ${errText.slice(0, 200)}`;
+        }
+        const data = await res.json() as any;
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        let answer = parts.map((p: any) => p.text || '').join('\n').trim();
+        // Extract grounding sources if available
+        const grounding = data?.candidates?.[0]?.groundingMetadata;
+        if (grounding?.groundingChunks?.length) {
+          const sources = grounding.groundingChunks
+            .filter((c: any) => c.web?.uri)
+            .slice(0, 5)
+            .map((c: any, i: number) => `${i + 1}. ${c.web.title || ''} — ${c.web.uri}`)
+            .join('\n');
+          if (sources) answer += `\n\nSources:\n${sources}`;
+        }
+        return answer || 'No results found.';
+      } catch (e: any) {
+        return `Error: Web research failed.`;
+      }
+    }
+
     case 'browse_url': {
       if (!isUrlAllowed(input.url)) {
         return 'Error: URL not allowed. Only public http/https URLs permitted.';
@@ -363,6 +423,48 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         return text || 'Empty page.';
       } catch (e: any) {
         return `Error: Could not fetch URL.`;
+      }
+    }
+
+    case 'analyze_image': {
+      if (!config.geminiApiKey) return 'Error: GEMINI_API_KEY not configured.';
+      if (!isUrlAllowed(input.image_url)) return 'Error: URL not allowed.';
+      try {
+        // Download image
+        const imgRes = await fetch(input.image_url, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AlonBot/1.0)' },
+          signal: AbortSignal.timeout(15000),
+        });
+        if (!imgRes.ok) return `Error: Could not download image (${imgRes.status}).`;
+        const contentType = imgRes.headers.get('content-type') || 'image/jpeg';
+        const imgBuf = Buffer.from(await imgRes.arrayBuffer());
+        const base64 = imgBuf.toString('base64');
+        const question = input.question || 'Describe this image in detail. If there is text, extract it (OCR). Answer in Hebrew.';
+
+        const res = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{
+                parts: [
+                  { inline_data: { mime_type: contentType, data: base64 } },
+                  { text: question },
+                ],
+              }],
+            }),
+          },
+        );
+        if (!res.ok) {
+          const errText = await res.text();
+          return `Error: Gemini Vision returned ${res.status}: ${errText.slice(0, 200)}`;
+        }
+        const data = await res.json() as any;
+        const parts = data?.candidates?.[0]?.content?.parts || [];
+        return parts.map((p: any) => p.text || '').join('\n').trim() || 'Could not analyze image.';
+      } catch (e: any) {
+        return `Error: Image analysis failed.`;
       }
     }
 
