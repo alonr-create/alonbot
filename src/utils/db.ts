@@ -126,6 +126,19 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_doc ON knowledge_chunks(doc_id, chunk_index);
 
+  CREATE TABLE IF NOT EXISTS batch_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    batch_id TEXT NOT NULL UNIQUE,
+    job_type TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed')),
+    result TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_batch_jobs_status ON batch_jobs(status);
+
   CREATE TABLE IF NOT EXISTS workflows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

@@ -213,6 +213,19 @@ function matchesCronNow(expr: string, now: Date): boolean {
   });
 }
 
+// Batch API polling — check pending batches every 5 minutes
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const { pollBatches } = await import('./agent/batch.js');
+    const processed = await pollBatches();
+    if (processed > 0) {
+      console.log(`[Batch] Processed ${processed} completed batches`);
+    }
+  } catch (e: any) {
+    console.error('[Batch] Poll failed:', e.message);
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {
   console.log('[Cron] Memory maintenance');

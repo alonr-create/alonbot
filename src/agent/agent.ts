@@ -404,33 +404,17 @@ async function summarizeInBackground(channel: string, senderId: string) {
     .map(m => `${m.role}: ${m.content}`)
     .join('\n');
 
-  const response = await client.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 500,
-    system: 'אתה מסכם שיחות. תן סיכום קצר (3-5 משפטים) של השיחה, וציין נושאים עיקריים כ-JSON array.',
-    messages: [{
-      role: 'user',
-      content: `סכם את השיחה הבאה:\n\n${conversationText.slice(0, 8000)}\n\nהחזר בפורמט:\nסיכום: [הסיכום]\nנושאים: ["נושא1", "נושא2"]`,
-    }],
-  });
-
-  const text = response.content
-    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
-    .map(b => b.text)
-    .join('\n');
-
-  const summaryMatch = text.match(/סיכום:\s*(.+?)(?:\n|$)/);
-  const topicsMatch = text.match(/נושאים:\s*(\[.+?\])/);
-
-  const summary = summaryMatch?.[1]?.trim() || text.slice(0, 500);
-  let topics: string[] = [];
-  try {
-    topics = topicsMatch ? JSON.parse(topicsMatch[1]) : [];
-  } catch { /* ok */ }
-
   const fromDate = unsummarized[0].created_at;
   const toDate = unsummarized[unsummarized.length - 1].created_at;
 
-  saveSummary(channel, senderId, summary, topics, unsummarized.length, fromDate, toDate);
-  console.log(`[Summarize] Saved summary for ${channel}/${senderId}: ${unsummarized.length} messages → "${summary.slice(0, 80)}..."`);
+  // Use Batch API (50% cheaper, async processing)
+  const { submitSummarizeBatch } = await import('./batch.js');
+  const batchId = await submitSummarizeBatch(
+    channel, senderId, conversationText, fromDate, toDate, unsummarized.length
+  );
+  if (batchId) {
+    console.log(`[Summarize] Submitted batch ${batchId} for ${channel}/${senderId} (${unsummarized.length} messages)`);
+  } else {
+    console.error(`[Summarize] Batch submit failed for ${channel}/${senderId}`);
+  }
 }
