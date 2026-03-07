@@ -60,30 +60,30 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | - | Pending |
-| SEC-02 | - | Pending |
-| SEC-03 | - | Pending |
-| SEC-04 | - | Pending |
-| SEC-05 | - | Pending |
-| ARCH-01 | - | Pending |
-| ARCH-02 | - | Pending |
-| ARCH-03 | - | Pending |
-| ARCH-04 | - | Pending |
-| ARCH-05 | - | Pending |
-| ARCH-06 | - | Pending |
-| REL-01 | - | Pending |
-| REL-02 | - | Pending |
-| REL-03 | - | Pending |
-| REL-04 | - | Pending |
-| QAL-01 | - | Pending |
-| QAL-02 | - | Pending |
-| QAL-03 | - | Pending |
-| QAL-04 | - | Pending |
+| SEC-01 | 1 | Pending |
+| SEC-02 | 1 | Pending |
+| SEC-03 | 1 | Pending |
+| SEC-04 | 1 | Pending |
+| SEC-05 | 1 | Pending |
+| ARCH-01 | 2 | Pending |
+| ARCH-02 | 2 | Pending |
+| ARCH-03 | 2 | Pending |
+| ARCH-04 | 2 | Pending |
+| ARCH-05 | 2 | Pending |
+| ARCH-06 | 2 | Pending |
+| REL-01 | 3 | Pending |
+| REL-02 | 3 | Pending |
+| REL-03 | 3 | Pending |
+| REL-04 | 3 | Pending |
+| QAL-01 | 4 | Pending |
+| QAL-02 | 4 | Pending |
+| QAL-03 | 4 | Pending |
+| QAL-04 | 4 | Pending |
 
 **Coverage:**
 - v1 requirements: 19 total
-- Mapped to phases: 0
-- Unmapped: 19
+- Mapped to phases: 19
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-07*
