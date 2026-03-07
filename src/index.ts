@@ -4,10 +4,14 @@ import { createTelegramAdapter } from './channels/telegram.js';
 import { createWhatsAppAdapter } from './channels/whatsapp.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
+import { setupGitAuth } from './utils/git-auth.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
 import { executeWorkflowActions } from './agent/tools.js';
 import { db } from './utils/db.js';
 import cron from 'node-cron';
+
+// Setup git authentication via GIT_ASKPASS (before any tool execution)
+setupGitAuth();
 
 // DND check — skip proactive messages during quiet hours (23:00-07:00 Israel)
 function isDND(): boolean {
