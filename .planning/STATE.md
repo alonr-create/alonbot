@@ -24,7 +24,7 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Phase 2: Architecture Refactor**
 Status: In Progress
-Plans: 2/? done
+Plans: 3/? done
 
 ## Progress
 
@@ -49,6 +49,7 @@ Plans: 2/? done
 |------|-------|------|--------|--------------|
 | 1 | Infrastructure: Types, Media, Security, HTML Extraction | 1 | Done | ARCH-04, ARCH-05 |
 | 2 | Extract All Tool Handlers to Individual Files | 2 | Done | ARCH-01 |
+| 3 | Tool Registry, GitHub Helper, Thin tools.ts Wrapper | 3 | Done | ARCH-02, ARCH-03, ARCH-06 |
 
 ---
-*Last updated: 2026-03-07 after completing Phase 2 Plan 2 (27 handler files, switch statement eliminated)*
+*Last updated: 2026-03-07 after completing Phase 2 Plan 3 (auto-discovery registry, tools.ts 7 lines)*
