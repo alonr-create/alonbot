@@ -1,6 +1,7 @@
 import { db } from '../utils/db.js';
 import { getEmbedding } from '../utils/embeddings.js';
 import { config } from '../utils/config.js';
+import { stripHtml } from '../utils/html.js';
 
 interface KnowledgeDoc {
   id: number;
@@ -95,12 +96,7 @@ export async function ingestUrl(url: string, title?: string): Promise<{ docId: n
   } else {
     // HTML: strip tags
     const html = await res.text();
-    text = html
-      .replace(/<script[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    text = stripHtml(html);
   }
 
   const docTitle = title || url.split('/').pop()?.split('?')[0] || url;

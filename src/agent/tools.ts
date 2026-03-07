@@ -1,5 +1,5 @@
 import { execSync, spawn } from 'child_process';
-import { readFileSync, writeFileSync, realpathSync, unlinkSync, mkdirSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, existsSync } from 'fs';
 import { resolve } from 'path';
 import { createTransport } from 'nodemailer';
 import type Anthropic from '@anthropic-ai/sdk';
@@ -13,6 +13,10 @@ import { addWorkflow, listWorkflows, deleteWorkflow, toggleWorkflow, matchKeywor
 import { z } from 'zod';
 import { isShellCommandSafe } from '../utils/shell-blocklist.js';
 import { sanitizeWebContent } from '../utils/sanitize.js';
+import { setCurrentRequestId, addPendingMedia, collectMedia } from '../tools/media.js';
+import { isPathAllowed, isUrlAllowed, isEmailAllowed, LOCAL_ONLY_TOOLS } from '../utils/security.js';
+import { stripHtml } from '../utils/html.js';
+export { setCurrentRequestId, collectMedia };
 
 // --- Zod schemas for tool parameter validation ---
 const shellSchema = z.object({ command: z.string().min(1).max(10000) });
@@ -39,77 +43,6 @@ const TOOL_SCHEMAS: Record<string, z.ZodType<any>> = {
   cron_script: cronScriptSchema,
 };
 
-// --- Media side-channel: per-request to prevent cross-user leakage ---
-const pendingMediaMap = new Map<string, Array<{ type: 'image' | 'voice'; data: Buffer }>>();
-let currentRequestId = 'default';
-
-export function setCurrentRequestId(id: string) { currentRequestId = id; }
-
-function addPendingMedia(item: { type: 'image' | 'voice'; data: Buffer }) {
-  if (!pendingMediaMap.has(currentRequestId)) pendingMediaMap.set(currentRequestId, []);
-  pendingMediaMap.get(currentRequestId)!.push(item);
-}
-
-export function collectMedia(requestId?: string): Array<{ type: 'image' | 'voice'; data: Buffer }> {
-  const id = requestId || currentRequestId;
-  const media = pendingMediaMap.get(id) || [];
-  pendingMediaMap.delete(id);
-  return media;
-}
-
-// Shell: no restrictions — runs only on local Mac via LOCAL_ONLY_TOOLS
-
-// --- Security: file path restrictions ---
-const ALLOWED_FILE_DIRS = ['/Users/oakhome/קלוד עבודות/', '/tmp/alonbot-', '/app/workspace/', '/tmp/'];
-// Only block sensitive config files — git operations go through shell tool anyway
-const BLOCKED_FILE_PATTERNS = ['.env', '.ssh/', 'credentials', '.zshrc', '.bashrc'];
-
-function isPathAllowed(filePath: string): boolean {
-  const resolved = resolve(filePath);
-  if (BLOCKED_FILE_PATTERNS.some(p => resolved.includes(p))) return false;
-  // Use realpathSync to follow symlinks and prevent symlink escape
-  try {
-    const real = realpathSync(resolved);
-    return ALLOWED_FILE_DIRS.some(d => real.startsWith(d));
-  } catch {
-    // File doesn't exist yet (write_file) — check resolved path
-    return ALLOWED_FILE_DIRS.some(d => resolved.startsWith(d));
-  }
-}
-
-// --- Security: URL validation for SSRF prevention ---
-function isUrlAllowed(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    if (!['http:', 'https:'].includes(parsed.protocol)) return false;
-    const host = parsed.hostname.toLowerCase();
-    // Block internal/private IPs (IPv4 + IPv6)
-    if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') return false;
-    if (host === '::1' || host.startsWith('[')) return false; // IPv6 loopback/brackets
-    if (/^(10\.|192\.168\.|169\.254\.|0\.)/.test(host)) return false;
-    if (host.startsWith('172.') && parseInt(host.split('.')[1]) >= 16 && parseInt(host.split('.')[1]) <= 31) return false;
-    if (/^\d+$/.test(host)) return false; // Decimal IP encoding
-    if (host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80')) return false; // Private IPv6
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-// --- Security: email recipient whitelist ---
-const ALLOWED_EMAIL_DOMAINS = ['dprisha.co.il', 'gmail.com'];
-const ALLOWED_EMAIL_ADDRESSES = ['alon12@gmail.com', 'dekel@dprisha.co.il', 'alonr@dprisha.co.il', 'servicedprisha@gmail.com'];
-
-function isEmailAllowed(to: string): boolean {
-  const email = to.trim().toLowerCase();
-  if (ALLOWED_EMAIL_ADDRESSES.includes(email)) return true;
-  const domain = email.split('@')[1];
-  return ALLOWED_EMAIL_DOMAINS.includes(domain);
-}
-
-// --- Local-only tools (proxied to Mac in cloud mode) ---
-// shell, read_file, write_file work in both modes (cloud has /app/workspace/)
-const LOCAL_ONLY_TOOLS = ['screenshot', 'manage_project', 'send_file'];
 
 const allToolDefinitions: Anthropic.Tool[] = [
   { name: 'shell', description: 'Run any shell command on Mac (pipes, chaining, curl — all allowed)', input_schema: { type: 'object' as const, properties: { command: { type: 'string' } }, required: ['command'] } },
@@ -422,13 +355,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
           signal: AbortSignal.timeout(10000),
         });
         const html = await res.text();
-        const text = html
-          .replace(/<script[\s\S]*?<\/script>/gi, '')
-          .replace(/<style[\s\S]*?<\/style>/gi, '')
-          .replace(/<[^>]+>/g, ' ')
-          .replace(/\s+/g, ' ')
-          .trim()
-          .slice(0, 8000);
+        const text = stripHtml(html).slice(0, 8000);
         return sanitizeWebContent(text) || 'Empty page.';
       } catch (e: any) {
         return `Error: Could not fetch URL.`;
@@ -1092,13 +1019,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
             const html = await res.text();
 
             // Extract text
-            const text = html
-              .replace(/<script[\s\S]*?<\/script>/gi, '')
-              .replace(/<style[\s\S]*?<\/style>/gi, '')
-              .replace(/<[^>]+>/g, ' ')
-              .replace(/\s+/g, ' ')
-              .trim()
-              .slice(0, 3000);
+            const text = stripHtml(html).slice(0, 3000);
 
             results.push(`=== ${currentUrl} ===\n${text}`);
 
