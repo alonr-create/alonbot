@@ -5,6 +5,9 @@ import { join } from 'path';
 import { config } from '../utils/config.js';
 import { executeTool } from '../agent/tools.js';
 import { db } from '../utils/db.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('server');
 
 // Cache HTML at startup (no server-side variables needed)
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
@@ -41,7 +44,7 @@ if (config.mode === 'cloud') {
     }
     // Update config in memory (no restart needed)
     (config as any).localApiUrl = url;
-    console.log(`[Server] Local Mac registered: ${url}`);
+    log.info({ url }, 'local Mac registered');
     res.json({ ok: true, registered: url });
   });
 }
@@ -304,11 +307,11 @@ app.get('/chat', dashAuth, (_req, res) => {
 
 export function startServer() {
   app.listen(config.port, () => {
-    console.log(`[Server] Health check: http://localhost:${config.port}/health`);
-    console.log(`[Server] Chat: http://localhost:${config.port}/chat?token=${config.dashboardSecret}`);
-    console.log(`[Server] Dashboard: http://localhost:${config.port}/dashboard?token=${config.dashboardSecret}`);
+    log.info({ port: config.port }, 'health check server started');
+    log.info({ url: `http://localhost:${config.port}/chat?token=${config.dashboardSecret}` }, 'chat URL');
+    log.info({ url: `http://localhost:${config.port}/dashboard?token=${config.dashboardSecret}` }, 'dashboard URL');
     if (config.mode === 'local') {
-      console.log(`[Server] Tool API: http://localhost:${config.port}/api/tool`);
+      log.info({ url: `http://localhost:${config.port}/api/tool` }, 'tool API URL');
     }
   });
 }

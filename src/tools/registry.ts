@@ -6,6 +6,9 @@ import { join } from 'path';
 import { z } from 'zod';
 import { config } from '../utils/config.js';
 import { addPendingMedia } from './media.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('registry');
 
 const handlers = new Map<string, ToolHandler>();
 
@@ -20,14 +23,14 @@ export async function loadTools(): Promise<void> {
     const tools: ToolHandler[] = Array.isArray(exported) ? exported : [exported];
     for (const tool of tools) {
       if (!tool.name || !tool.definition || !tool.execute) {
-        console.warn(`[Registry] Skipping invalid tool in ${file}`);
+        log.warn({ file }, 'skipping invalid tool');
         continue;
       }
       handlers.set(tool.name, tool);
     }
   }
 
-  console.log(`[Registry] Loaded ${handlers.size} tools from ${files.length} files`);
+  log.info({ toolCount: handlers.size, fileCount: files.length }, 'tools loaded');
 }
 
 /** Get all tool definitions for Claude API */

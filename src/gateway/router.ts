@@ -2,6 +2,9 @@ import type { ChannelAdapter, UnifiedMessage } from '../channels/types.js';
 import { handleMessage, type StreamCallback } from '../agent/agent.js';
 import { matchKeywordWorkflows } from '../agent/workflows.js';
 import { executeWorkflowActions } from '../agent/tools.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('router');
 
 const adapters = new Map<string, ChannelAdapter>();
 
@@ -43,18 +46,18 @@ export function registerAdapter(adapter: ChannelAdapter) {
   adapters.set(adapter.name, adapter);
 
   adapter.onMessage(async (msg: UnifiedMessage) => {
-    console.log(`[${msg.channel}] ${msg.senderName}: ${msg.text.slice(0, 80)}`);
+    log.info({ channel: msg.channel, sender: msg.senderName, text: msg.text.slice(0, 80) }, 'incoming message');
 
     // Check for keyword workflows (fire-and-forget, don't block response)
     try {
       const matched = matchKeywordWorkflows(msg.text);
       for (const wf of matched) {
-        console.log(`[Workflow] Triggered: "${wf.name}"`);
+        log.info({ workflow: wf.name }, 'workflow triggered');
         executeWorkflowActions(wf.actions, { channel: msg.channel, targetId: msg.senderId }).catch(err =>
-          console.error(`[Workflow] ${wf.name} error:`, err.message)
+          log.error({ workflow: wf.name, err: err.message }, 'workflow error')
         );
       }
-    } catch {}
+    } catch (e: any) { log.debug({ err: e.message }, 'workflow match failed'); }
 
     // Set up streaming if adapter supports it
     let streamCallback: StreamCallback | undefined;
@@ -114,17 +117,17 @@ export function registerAdapter(adapter: ChannelAdapter) {
       } else {
         await adapter.sendReply(msg, reply);
       }
-      console.log(`[${msg.channel}] Reply sent (${reply.text.length} chars${streamCallback ? ', streamed' : ''})`);
+      log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback }, 'reply sent');
     } catch (error: any) {
       if (typingInterval) clearInterval(typingInterval);
-      console.error(`[${msg.channel}] Error:`, error.message, error.stack?.slice(0, 500));
+      log.error({ channel: msg.channel, err: error.message, stack: error.stack?.slice(0, 500) }, 'message handling error');
       try {
         if (streamMessageId && adapter.editStreamMessage) {
           await adapter.editStreamMessage(msg, streamMessageId, 'סליחה, קרתה שגיאה. נסה שוב בעוד כמה רגעים.');
         } else {
           await adapter.sendReply(msg, { text: 'סליחה, קרתה שגיאה. נסה שוב בעוד כמה רגעים.' });
         }
-      } catch {}
+      } catch (e: any) { log.debug({ err: e.message }, 'error recovery failed'); }
     }
   });
 }
@@ -153,14 +156,14 @@ export async function sendAgentMessage(channel: string, targetId: string, text: 
     // For cron messages, we need to send directly via bot API since raw is null
     await sendToChannel(channel, targetId, reply.text);
   } catch (error: any) {
-    console.error(`[Router] Agent message error:`, error.message);
+    log.error({ err: error.message }, 'agent message error');
   }
 }
 
 export async function sendToChannel(channel: string, targetId: string, text: string) {
   const adapter = adapters.get(channel);
   if (!adapter) {
-    console.warn(`[Router] No adapter for channel: ${channel}`);
+    log.warn({ channel }, 'no adapter for channel');
     return;
   }
 

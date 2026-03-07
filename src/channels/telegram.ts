@@ -1,6 +1,10 @@
 import { Bot, InputFile, InlineKeyboard } from 'grammy';
 import { config } from '../utils/config.js';
+import { withRetry } from '../utils/retry.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('telegram');
 
 export function createTelegramAdapter(): ChannelAdapter {
   const bot = new Bot(config.telegramBotToken);
@@ -47,7 +51,7 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle /export command — export chat history as file
   bot.command('export', async (ctx) => {
-    console.log('[Telegram] /export command triggered');
+    log.info('/export command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     try {
@@ -73,7 +77,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         caption: `היסטוריית שיחה — ${rows.length} הודעות`,
       });
     } catch (err: any) {
-      console.error('[Telegram] Export error:', err.message);
+      log.error({ err: err.message }, 'export error');
       await ctx.reply('שגיאה בייצוא.');
     }
   });
@@ -162,7 +166,7 @@ export function createTelegramAdapter(): ChannelAdapter {
 
   // Handle /menu command — show category buttons
   bot.command('menu', async (ctx) => {
-    console.log('[Telegram] /menu command triggered');
+    log.info('/menu command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     const keyboard = new InlineKeyboard();
@@ -266,14 +270,14 @@ export function createTelegramAdapter(): ChannelAdapter {
 
       await ctx.reply(`חיפוש: "${query}" — ${rows.length} תוצאות:\n\n${results}`);
     } catch (err: any) {
-      console.error('[Telegram] Search error:', err.message);
+      log.error({ err: err.message }, 'search error');
       await ctx.reply('שגיאה בחיפוש.');
     }
   });
 
   // Handle /backup command — send DB backup file
   bot.command('backup', async (ctx) => {
-    console.log('[Telegram] /backup command triggered');
+    log.info('/backup command triggered');
     if (!ctx.from || !isAllowed(String(ctx.from.id))) return;
 
     try {
@@ -290,7 +294,7 @@ export function createTelegramAdapter(): ChannelAdapter {
       );
       unlinkSync(backupPath);
     } catch (err: any) {
-      console.error('[Telegram] Backup error:', err.message);
+      log.error({ err: err.message }, 'backup error');
       await ctx.reply(`שגיאה בגיבוי: ${err.message}`);
     }
   });
@@ -322,7 +326,7 @@ export function createTelegramAdapter(): ChannelAdapter {
   // Handle text messages (commands should be caught above, this is for regular text)
   bot.on('message:text', async (ctx) => {
     if (ctx.message.text.startsWith('/')) {
-      console.warn(`[Telegram] Command fell through to text handler: "${ctx.message.text}"`);
+      log.warn({ command: ctx.message.text }, 'command fell through to text handler');
     }
     const senderId = String(ctx.from.id);
 
@@ -375,7 +379,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         imageMediaType: mediaType,
       }));
     } catch (err: any) {
-      console.error('[Telegram] Photo error:', err.message);
+      log.error({ err: err.message }, 'photo error');
     }
   });
 
@@ -413,7 +417,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         messageHandler(makeUnified(ctx, `${ctx.message.caption || 'נתח את הקובץ'}\n\n--- ${fileName} ---\n${truncated}`));
       }
     } catch (err: any) {
-      console.error('[Telegram] Document error:', err.message);
+      log.error({ err: err.message }, 'document error');
     }
   });
 
@@ -512,11 +516,11 @@ export function createTelegramAdapter(): ChannelAdapter {
       formData.append('model', 'whisper-large-v3');
       formData.append('language', 'he');
 
-      const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      const sttRes = await withRetry(() => fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${config.groqApiKey}` },
         body: formData,
-      });
+      }));
 
       if (!sttRes.ok) {
         messageHandler(makeUnified(ctx, `[קובץ אודיו: ${audio.file_name || 'audio'} (${audio.duration}s) — לא הצלחתי לתמלל]`));
@@ -526,11 +530,11 @@ export function createTelegramAdapter(): ChannelAdapter {
       const sttData = await sttRes.json() as { text: string };
       const caption = ctx.message.caption || '';
       const transcription = sttData.text;
-      console.log(`[Telegram] Audio transcribed: ${transcription.slice(0, 80)}`);
+      log.info({ text: transcription.slice(0, 80) }, 'audio transcribed');
 
       messageHandler(makeUnified(ctx, `${caption ? caption + '\n\n' : ''}[תמלול אודיו "${audio.file_name || 'audio'}":]:\n${transcription}`));
     } catch (err: any) {
-      console.error('[Telegram] Audio error:', err.message);
+      log.error({ err: err.message }, 'audio error');
     }
   });
 
@@ -551,11 +555,11 @@ export function createTelegramAdapter(): ChannelAdapter {
       formData.append('model', 'whisper-large-v3');
       formData.append('language', 'he');
 
-      const sttRes = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      const sttRes = await withRetry(() => fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${config.groqApiKey}` },
         body: formData,
-      });
+      }));
 
       if (!sttRes.ok) {
         // Fallback: tell Claude we got a voice message we can't transcribe
@@ -566,10 +570,10 @@ export function createTelegramAdapter(): ChannelAdapter {
       const sttData = await sttRes.json() as { text: string };
       const transcription = sttData.text;
 
-      console.log(`[Telegram] Voice transcribed: ${transcription.slice(0, 80)}`);
+      log.info({ text: transcription.slice(0, 80) }, 'voice transcribed');
       messageHandler(makeUnified(ctx, transcription, { isVoice: true }));
     } catch (err: any) {
-      console.error('[Telegram] Voice error:', err.message);
+      log.error({ err: err.message }, 'voice error');
     }
   });
 
@@ -578,18 +582,18 @@ export function createTelegramAdapter(): ChannelAdapter {
 
     async start() {
       if (!config.telegramBotToken) {
-        console.log('[Telegram] No bot token — skipping');
+        log.info('no bot token — skipping');
         return;
       }
-      console.log('[Telegram] Starting bot...');
+      log.info('starting bot');
 
       // Get bot username for @mention detection in groups
       try {
         const me = await bot.api.getMe();
         botUsername = me.username || '';
-        console.log(`[Telegram] Bot username: @${botUsername}`);
+        log.info({ username: botUsername }, 'bot username retrieved');
       } catch (e: any) {
-        console.warn('[Telegram] Could not get bot username:', e.message);
+        log.warn({ err: e.message }, 'could not get bot username');
       }
 
       // Set bot commands (shows in Telegram's "/" menu)
@@ -606,7 +610,7 @@ export function createTelegramAdapter(): ChannelAdapter {
           { command: 'help', description: 'מה אני יודע לעשות?' },
         ]);
       } catch (e: any) {
-        console.warn('[Telegram] Failed to set commands:', e.message);
+        log.warn({ err: e.message }, 'failed to set commands');
       }
 
       // Set menu button to open Web App (Mini App)
@@ -618,13 +622,13 @@ export function createTelegramAdapter(): ChannelAdapter {
             web_app: { url: `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}` },
           },
         });
-        console.log('[Telegram] Menu button set to Dashboard WebApp');
+        log.info('menu button set to Dashboard WebApp');
       } catch (e: any) {
-        console.warn('[Telegram] Failed to set menu button:', e.message);
+        log.warn({ err: e.message }, 'failed to set menu button');
       }
 
       bot.start();
-      console.log('[Telegram] Bot running');
+      log.info('bot running');
     },
 
     async stop() {
@@ -658,7 +662,7 @@ export function createTelegramAdapter(): ChannelAdapter {
       } catch (err: any) {
         // Ignore "message not modified" errors (same content)
         if (!err.message?.includes('message is not modified')) {
-          console.error('[Telegram] Edit stream error:', err.message);
+          log.error({ err: err.message }, 'edit stream error');
         }
       }
     },
@@ -687,7 +691,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         try {
           await ctx.replyWithVoice(new InputFile(reply.voice, 'voice.ogg'));
         } catch (err: any) {
-          console.error('[Telegram] Voice send error:', err.message);
+          log.error({ err: err.message }, 'voice send error');
         }
       }
 
@@ -695,7 +699,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         try {
           await ctx.replyWithPhoto(new InputFile(reply.image, 'image.png'));
         } catch (err: any) {
-          console.error('[Telegram] Image send error:', err.message);
+          log.error({ err: err.message }, 'image send error');
         }
       }
 

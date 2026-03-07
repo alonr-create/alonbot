@@ -1,7 +1,10 @@
 import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { config } from './config.js';
+import { createLogger } from './logger.js';
 import { mkdirSync } from 'fs';
+
+const log = createLogger('db');
 
 mkdirSync(config.dataDir, { recursive: true });
 
@@ -181,10 +184,10 @@ try {
         }
       });
       migrate();
-      console.log(`[DB] Migrated ${oldFacts.length} facts to memories table`);
+      log.info({ count: oldFacts.length }, 'migrated facts to memories');
     }
     db.exec('DROP TABLE facts');
-    console.log('[DB] Dropped old facts table');
+    log.info('dropped old facts table');
   }
 } catch {
   // facts table doesn't exist or already migrated — ok

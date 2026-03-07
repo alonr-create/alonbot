@@ -1,4 +1,4 @@
-import { execSync } from 'child_process';
+import { execAsync } from '../../utils/shell.js';
 import type { ToolHandler } from '../types.js';
 
 const handler: ToolHandler = {
@@ -31,7 +31,8 @@ const handler: ToolHandler = {
     const cmd = actions[input.action];
     if (!cmd) return `Unknown action: ${input.action}`;
     try {
-      return execSync(cmd, { cwd: projectDir, timeout: 15000, encoding: 'utf-8', maxBuffer: 50000 }).trim() || 'Clean — no changes.';
+      const output = await execAsync(cmd, { cwd: projectDir, timeout: 15000, maxBuffer: 50000 });
+      return output || 'Clean — no changes.';
     } catch (e: any) {
       return `Error: Git command failed.`;
     }

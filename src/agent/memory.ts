@@ -1,5 +1,8 @@
 import { db } from '../utils/db.js';
 import { getEmbedding } from '../utils/embeddings.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('memory');
 
 const CONTEXT_LIMIT = 20; // reduced from 50 — summaries fill the gap
 
@@ -141,7 +144,7 @@ export function saveMemory(type: string, category: string | null, content: strin
 
   // Embed asynchronously (don't block the response)
   embedMemory(id, content).catch(err =>
-    console.error(`[Embed] Failed to embed memory #${id}:`, err.message)
+    log.error({ memoryId: id, err: err.message }, 'failed to embed memory')
   );
 
   return id;
@@ -150,13 +153,13 @@ export function saveMemory(type: string, category: string | null, content: strin
 async function embedMemory(memoryId: number, content: string) {
   const embedding = await getEmbedding(content);
   stmtInsertVector.run(BigInt(memoryId), Buffer.from(embedding.buffer));
-  console.log(`[Embed] Memory #${memoryId} embedded (${embedding.length} dims)`);
+  log.info({ memoryId, dims: embedding.length }, 'memory embedded');
 }
 
 export async function embedUnembeddedMemories() {
   const memories = stmtUnembeddedMemories.all() as Memory[];
   if (memories.length === 0) return;
-  console.log(`[Embed] Found ${memories.length} unembedded memories, processing...`);
+  log.info({ count: memories.length }, 'found unembedded memories, processing');
   for (const m of memories) {
     await embedMemory(m.id, m.content);
   }
@@ -216,7 +219,7 @@ export async function getRelevantMemories(userMessage: string): Promise<Memory[]
       // Only include results with reasonable similarity (cosine distance < 1.2)
       addUnique(vectorResults.filter(r => r.distance < 1.2));
     } catch (err: any) {
-      console.error('[Vector] Search failed:', err.message);
+      log.error({ err: err.message }, 'vector search failed');
       // Fall back to keyword-only — don't block on embedding errors
     }
   }
@@ -298,7 +301,7 @@ export function runMemoryMaintenance(): { decayed: number; consolidated: number;
   // 1. Decay: reduce importance of untouched memories (60+ days)
   const decayResult = stmtDecayMemories.run();
   const decayed = decayResult.changes;
-  if (decayed > 0) console.log(`[Memory] Decayed ${decayed} old memories`);
+  if (decayed > 0) log.info({ decayed }, 'decayed old memories');
 
   // 2. Delete old low-importance events (30+ days, importance < 3)
   const oldEvents = stmtOldEpisodicMemories.all() as Memory[];
@@ -310,7 +313,7 @@ export function runMemoryMaintenance(): { decayed: number; consolidated: number;
       deleted++;
     }
   }
-  if (deleted > 0) console.log(`[Memory] Deleted ${deleted} stale events`);
+  if (deleted > 0) log.info({ deleted }, 'deleted stale events');
 
   // 3. Consolidate: merge near-duplicate memories (keep highest importance)
   let consolidated = 0;
@@ -330,7 +333,7 @@ export function runMemoryMaintenance(): { decayed: number; consolidated: number;
       }
     }
   }
-  if (consolidated > 0) console.log(`[Memory] Consolidated ${consolidated} duplicate memories`);
+  if (consolidated > 0) log.info({ consolidated }, 'consolidated duplicate memories');
 
   return { decayed, consolidated, deleted };
 }

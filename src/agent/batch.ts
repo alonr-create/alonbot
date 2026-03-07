@@ -1,7 +1,9 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { db } from '../utils/db.js';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('batch');
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
 interface BatchJobRow {
@@ -49,10 +51,10 @@ export async function submitBatch(
     });
 
     stmtInsert.run(batch.id, jobType, JSON.stringify(payload || {}));
-    console.log(`[Batch] Submitted: ${batch.id} (${jobType}, ${requests.length} requests)`);
+    log.info({ batchId: batch.id, jobType, requestCount: requests.length }, 'batch submitted');
     return batch.id;
   } catch (err: any) {
-    console.error(`[Batch] Submit failed:`, err.message);
+    log.error({ err: err.message }, 'batch submit failed');
     return null;
   }
 }
@@ -88,18 +90,18 @@ export async function pollBatches(): Promise<number> {
         await processResults(job.job_type, JSON.parse(job.payload), results);
         stmtComplete.run(JSON.stringify(results.map(r => r.custom_id)), job.batch_id);
         processed++;
-        console.log(`[Batch] Completed: ${job.batch_id} (${results.length} results)`);
+        log.info({ batchId: job.batch_id, resultCount: results.length }, 'batch completed');
 
         // Log savings (batch = 50% off)
         const counts = batch.request_counts;
-        console.log(`[Batch] Stats: ${counts.succeeded} succeeded, ${counts.errored} errored, ${counts.expired} expired`);
+        log.info({ succeeded: counts.succeeded, errored: counts.errored, expired: counts.expired }, 'batch stats');
       } else if (batch.processing_status === 'canceling') {
         stmtFail.run('Cancelled', job.batch_id);
         processed++;
       }
       // 'in_progress' → do nothing, check again later
     } catch (err: any) {
-      console.error(`[Batch] Poll error for ${job.batch_id}:`, err.message);
+      log.error({ batchId: job.batch_id, err: err.message }, 'batch poll error');
       // If batch not found, mark as failed
       if (err.status === 404) {
         stmtFail.run('Batch not found', job.batch_id);
@@ -127,19 +129,19 @@ async function processResults(
         const topicsMatch = r.text.match(/נושאים:\s*(\[.+?\])/);
         const summary = summaryMatch?.[1]?.trim() || r.text.slice(0, 500);
         let topics: string[] = [];
-        try { topics = topicsMatch ? JSON.parse(topicsMatch[1]) : []; } catch {}
+        try { topics = topicsMatch ? JSON.parse(topicsMatch[1]) : []; } catch { /* malformed JSON topics */ }
         saveSummary(
           payload.channel, payload.senderId,
           summary, topics,
           payload.messageCount,
           payload.fromDate, payload.toDate
         );
-        console.log(`[Batch] Saved summary for ${payload.channel}/${payload.senderId}`);
+        log.info({ channel: payload.channel, senderId: payload.senderId }, 'saved summary');
       }
       break;
     }
     default:
-      console.log(`[Batch] Unknown job type: ${jobType}, results stored`);
+      log.info({ jobType }, 'unknown job type, results stored');
   }
 }
 

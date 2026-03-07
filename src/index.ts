@@ -10,6 +10,9 @@ import { executeWorkflowActions } from './agent/tools.js';
 import { loadTools } from './tools/registry.js';
 import { db } from './utils/db.js';
 import cron from 'node-cron';
+import { createLogger } from './utils/logger.js';
+
+const log = createLogger('main');
 
 // Setup git authentication via GIT_ASKPASS (before any tool execution)
 setupGitAuth();
@@ -23,9 +26,7 @@ function isDND(): boolean {
   return hour >= 23 || hour < 7;
 }
 
-console.log('=== AlonBot ===');
-console.log(`Mode: ${config.mode}`);
-console.log(`Starting at ${new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}`);
+log.info({ mode: config.mode, startedAt: new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }) }, 'AlonBot starting');
 
 // Start health check server (both modes)
 startServer();
@@ -41,7 +42,7 @@ if (config.mode === 'cloud') {
   await telegram.start();
 } else {
   // Local mode: send-only (no polling — avoids token conflict with cloud)
-  console.log('[AlonBot] Local mode — Telegram send-only');
+  log.info('local mode — Telegram send-only');
 }
 
 // --- WhatsApp (optional, local mode only) ---
@@ -50,9 +51,9 @@ if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
     const whatsapp = createWhatsAppAdapter();
     registerAdapter(whatsapp);
     await whatsapp.start();
-    console.log('[AlonBot] WhatsApp adapter started');
+    log.info('WhatsApp adapter started');
   } catch (err: any) {
-    console.warn('[AlonBot] WhatsApp failed to start:', err.message);
+    log.warn({ err: err.message }, 'WhatsApp failed to start');
   }
 }
 
@@ -63,7 +64,7 @@ startAllCronJobs(sendToChannel);
 cron.schedule('0 8 * * *', async () => {
   const targetId = config.allowedTelegram[0];
   if (!targetId) return;
-  console.log('[Cron] Daily brief firing');
+  log.info('daily brief firing');
   const briefMsg = `סיכום בוקר יומי:
 1. מה התאריך היום (עברי ולועזי)?
 2. מה מזג האוויר בתל אביב?
@@ -75,7 +76,7 @@ cron.schedule('0 8 * * *', async () => {
 
 // Embed any memories that don't have vectors yet (background)
 embedUnembeddedMemories().catch(err =>
-  console.error('[Embed] Startup embed failed:', err.message)
+  log.error({ err: err.message }, 'startup embed failed')
 );
 
 // Proactive: overdue tasks check — 18:00 daily
@@ -91,7 +92,7 @@ cron.schedule('0 18 * * *', async () => {
       await sendToChannel('telegram', targetId, `⚠️ יש לך ${overdue.length} משימות שעבר הזמן שלהן:\n${list}`);
     }
   } catch (e: any) {
-    console.error('[Proactive] Overdue tasks check failed:', e.message);
+    log.error({ err: e.message }, 'overdue tasks check failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
@@ -118,7 +119,7 @@ cron.schedule('0 21 * * *', async () => {
       );
     }
   } catch (e: any) {
-    console.error('[Proactive] Cost alert failed:', e.message);
+    log.error({ err: e.message }, 'cost alert failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
@@ -135,10 +136,10 @@ cron.schedule('* * * * *', async () => {
       const prefix = msg.label ? `⏰ ${msg.label}:\n` : '⏰ תזכורת:\n';
       await sendToChannel(msg.channel, msg.target_id, prefix + msg.message);
       db.prepare('UPDATE scheduled_messages SET sent = 1 WHERE id = ?').run(msg.id);
-      console.log(`[Cron] Scheduled message #${msg.id} sent`);
+      log.info({ messageId: msg.id }, 'scheduled message sent');
     }
   } catch (e: any) {
-    console.error('[Cron] Scheduled messages check failed:', e.message);
+    log.error({ err: e.message }, 'scheduled messages check failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
@@ -158,9 +159,9 @@ cron.schedule('0 2 * * *', async () => {
       { caption: `גיבוי אוטומטי — ${(buf.length / 1024).toFixed(0)} KB` }
     );
     unlinkSync(backupPath);
-    console.log('[Cron] DB backup sent to Telegram');
+    log.info('DB backup sent to Telegram');
   } catch (e: any) {
-    console.error('[Cron] DB backup failed:', e.message);
+    log.error({ err: e.message }, 'DB backup failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
@@ -173,7 +174,7 @@ cron.schedule('* * * * *', async () => {
     const now = new Date();
     for (const wf of workflows) {
       if (cron.validate(wf.trigger_value) && matchesCronNow(wf.trigger_value, now)) {
-        console.log(`[Workflow] Cron triggered: "${wf.name}"`);
+        log.info({ name: wf.name }, 'workflow cron triggered');
         const actions = JSON.parse(wf.actions);
         const targetId = config.allowedTelegram[0] || '';
         const results = await executeWorkflowActions(actions, { channel: 'telegram', targetId });
@@ -186,7 +187,7 @@ cron.schedule('* * * * *', async () => {
       }
     }
   } catch (e: any) {
-    console.error('[Workflow] Cron check failed:', e.message);
+    log.error({ err: e.message }, 'workflow cron check failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
@@ -227,26 +228,26 @@ cron.schedule('*/5 * * * *', async () => {
     const { pollBatches } = await import('./agent/batch.js');
     const processed = await pollBatches();
     if (processed > 0) {
-      console.log(`[Batch] Processed ${processed} completed batches`);
+      log.info({ processed }, 'processed completed batches');
     }
   } catch (e: any) {
-    console.error('[Batch] Poll failed:', e.message);
+    log.error({ err: e.message }, 'batch poll failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {
-  console.log('[Cron] Memory maintenance');
+  log.info('memory maintenance starting');
   const stats = runMemoryMaintenance();
-  console.log(`[Memory] Maintenance done: ${stats.decayed} decayed, ${stats.consolidated} consolidated, ${stats.deleted} deleted`);
+  log.info({ decayed: stats.decayed, consolidated: stats.consolidated, deleted: stats.deleted }, 'memory maintenance done');
 }, { timezone: 'Asia/Jerusalem' });
 
-console.log('[AlonBot] Ready!');
+log.info('ready');
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
-  console.log('\n[AlonBot] Shutting down...');
+  log.info('shutting down');
   if (telegram && config.mode === 'cloud') await telegram.stop();
-  try { db.close(); } catch {}
+  try { db.close(); } catch { /* graceful shutdown */ }
   process.exit(0);
 });

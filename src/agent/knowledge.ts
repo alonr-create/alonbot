@@ -2,6 +2,10 @@ import { db } from '../utils/db.js';
 import { getEmbedding } from '../utils/embeddings.js';
 import { config } from '../utils/config.js';
 import { stripHtml } from '../utils/html.js';
+import { withRetry } from '../utils/retry.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('knowledge');
 
 interface KnowledgeDoc {
   id: number;
@@ -107,7 +111,7 @@ async function extractPdfText(pdfBuffer: Buffer): Promise<string> {
   if (!config.geminiApiKey) throw new Error('Gemini API key required for PDF extraction');
 
   const base64 = pdfBuffer.toString('base64');
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`, {
+  const res = await withRetry(() => fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${config.geminiApiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -120,7 +124,7 @@ async function extractPdfText(pdfBuffer: Buffer): Promise<string> {
       generationConfig: { maxOutputTokens: 8192 },
     }),
     signal: AbortSignal.timeout(30000),
-  });
+  }));
   if (!res.ok) throw new Error(`Gemini PDF extraction failed: ${res.status}`);
   const data = await res.json() as any;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -141,11 +145,11 @@ export async function ingestText(text: string, title: string, sourceType: string
       const embedding = await getEmbedding(chunks[i]);
       stmtInsertVector.run(BigInt(chunkId), Buffer.from(embedding.buffer));
     } catch (err: any) {
-      console.error(`[Knowledge] Failed to embed chunk ${i}:`, err.message);
+      log.error({ chunkIndex: i, err: err.message }, 'failed to embed chunk');
     }
   }
 
-  console.log(`[Knowledge] Ingested "${title}": ${chunks.length} chunks`);
+  log.info({ title, chunkCount: chunks.length }, 'ingested document');
   return { docId, chunks: chunks.length };
 }
 
@@ -163,7 +167,7 @@ export async function searchKnowledge(query: string, topK: number = 5): Promise<
       .filter(r => r.distance < 1.3)
       .map(r => ({ content: r.content, title: r.title, distance: r.distance }));
   } catch (err: any) {
-    console.error('[Knowledge] Search failed:', err.message);
+    log.error({ err: err.message }, 'search failed');
     return [];
   }
 }

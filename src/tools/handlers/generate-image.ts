@@ -1,4 +1,5 @@
 import type { ToolHandler } from '../types.js';
+import { withRetry } from '../../utils/retry.js';
 
 const handler: ToolHandler = {
   name: 'generate_image',
@@ -16,7 +17,7 @@ const handler: ToolHandler = {
   async execute(input, ctx) {
     if (!ctx.config.geminiApiKey) return 'Error: GEMINI_API_KEY not configured.';
     try {
-      const res = await fetch(
+      const res = await withRetry(() => fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-image-preview:generateContent?key=${ctx.config.geminiApiKey}`,
         {
           method: 'POST',
@@ -26,7 +27,7 @@ const handler: ToolHandler = {
             generationConfig: { responseModalities: ['IMAGE', 'TEXT'] },
           }),
         },
-      );
+      ));
       if (!res.ok) {
         const errText = await res.text();
         return `Error: Gemini API returned ${res.status}: ${errText.slice(0, 200)}`;

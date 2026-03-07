@@ -1,4 +1,5 @@
 import type { ToolHandler } from '../types.js';
+import { withRetry } from '../../utils/retry.js';
 
 const handlers: ToolHandler[] = [
   {
@@ -17,9 +18,9 @@ const handlers: ToolHandler[] = [
       if (!ctx.config.googleCalendarScriptUrl) return 'Error: Google Calendar not configured. Set GOOGLE_CALENDAR_SCRIPT_URL env var.';
       try {
         const days = input.days || 7;
-        const res = await fetch(`${ctx.config.googleCalendarScriptUrl}?action=list&days=${days}`, {
+        const res = await withRetry(() => fetch(`${ctx.config.googleCalendarScriptUrl}?action=list&days=${days}`, {
           signal: AbortSignal.timeout(10000),
-        });
+        }));
         if (!res.ok) return `Error: Calendar API returned ${res.status}`;
         const data = await res.json() as any;
         if (!data.events || data.events.length === 0) return `אין אירועים בקלנדר ב-${days} הימים הקרובים.`;
@@ -51,7 +52,7 @@ const handlers: ToolHandler[] = [
     async execute(input, ctx) {
       if (!ctx.config.googleCalendarScriptUrl) return 'Error: Google Calendar not configured. Set GOOGLE_CALENDAR_SCRIPT_URL env var.';
       try {
-        const res = await fetch(ctx.config.googleCalendarScriptUrl, {
+        const res = await withRetry(() => fetch(ctx.config.googleCalendarScriptUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -63,7 +64,7 @@ const handlers: ToolHandler[] = [
             description: input.description || '',
           }),
           signal: AbortSignal.timeout(10000),
-        });
+        }));
         if (!res.ok) return `Error: Calendar API returned ${res.status}`;
         const data = await res.json() as any;
         return data.success ? `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}` : `Error: ${data.error || 'Unknown'}`;

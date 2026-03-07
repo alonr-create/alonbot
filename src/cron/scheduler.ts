@@ -1,7 +1,10 @@
 import cron from 'node-cron';
-import { execSync } from 'child_process';
 import { db } from '../utils/db.js';
 import { isShellCommandSafe } from '../utils/shell-blocklist.js';
+import { execAsync } from '../utils/shell.js';
+import { createLogger } from '../utils/logger.js';
+
+const log = createLogger('cron');
 
 interface CronJob {
   id: number;
@@ -32,14 +35,14 @@ export function addCronJob(name: string, cronExpr: string, channel: string, targ
   if (currentSendFn && cron.validate(cronExpr)) {
     const task = cron.schedule(cronExpr, () => fireCronJob(name, channel, targetId, message), { timezone: 'Asia/Jerusalem' });
     activeTasks.set(id, task);
-    console.log(`[Cron] Live-registered: "${name}" — ${cronExpr}`);
+    log.info({ name, cronExpr }, 'live-registered cron job');
   }
 
   return id;
 }
 
 async function fireCronJob(name: string, channel: string, targetId: string, message: string) {
-  console.log(`[Cron] Firing: ${name}`);
+  log.info({ name }, 'firing');
   if (!currentSendFn) return;
 
   // Check if this is a script-type cron job
@@ -49,21 +52,20 @@ async function fireCronJob(name: string, channel: string, targetId: string, mess
       // Security: check script against blocklist before execution
       const scriptCheck = isShellCommandSafe(parsed.script);
       if (!scriptCheck.safe) {
-        console.error(`[Cron] Blocked dangerous script in "${name}": ${scriptCheck.reason}`);
+        log.error({ name, reason: scriptCheck.reason }, 'blocked dangerous script');
         if (parsed.notify !== false) {
           await currentSendFn(channel, targetId, `Cron script "${name}" blocked: ${scriptCheck.reason}`);
         }
         return;
       }
-      console.log(`[Cron] Running script: ${parsed.script}`);
+      log.info({ script: parsed.script }, 'running script');
       try {
-        const output = execSync(parsed.script, {
+        const output = await execAsync(parsed.script, {
           shell: '/bin/bash',
           timeout: 60000,
-          encoding: 'utf-8',
           maxBuffer: 1_000_000,
           cwd: '/app/workspace',
-        }).trim();
+        });
         if (parsed.notify !== false && output) {
           await currentSendFn(channel, targetId, `📋 *${name}*\n\`\`\`\n${output.slice(0, 3000)}\n\`\`\``);
         }
@@ -85,18 +87,18 @@ async function fireCronJob(name: string, channel: string, targetId: string, mess
 export function startAllCronJobs(sendFn: SendFn) {
   currentSendFn = sendFn;
   const jobs = stmtAll.all() as CronJob[];
-  console.log(`[Cron] Loading ${jobs.length} jobs`);
+  log.info({ count: jobs.length }, 'loading cron jobs');
 
   for (const job of jobs) {
     if (!cron.validate(job.cron_expr)) {
-      console.warn(`[Cron] Invalid expression for "${job.name}": ${job.cron_expr}`);
+      log.warn({ name: job.name, cronExpr: job.cron_expr }, 'invalid cron expression');
       continue;
     }
 
     const task = cron.schedule(job.cron_expr, () => fireCronJob(job.name, job.channel, job.target_id, job.message), { timezone: 'Asia/Jerusalem' });
 
     activeTasks.set(job.id, task);
-    console.log(`[Cron] Scheduled: "${job.name}" — ${job.cron_expr}`);
+    log.info({ name: job.name, cronExpr: job.cron_expr }, 'scheduled cron job');
   }
 }
 

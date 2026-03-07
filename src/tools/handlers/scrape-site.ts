@@ -54,7 +54,7 @@ const handler: ToolHandler = {
               if (href.hostname === baseUrl.hostname && !visited.has(href.toString()) && !href.hash) {
                 queue.push(href.toString());
               }
-            } catch {}
+            } catch { /* invalid URL */ }
           }
         } catch {
           // Skip failed pages

@@ -1,4 +1,5 @@
 import type { ToolHandler } from '../types.js';
+import { withRetry } from '../../utils/retry.js';
 
 const handler: ToolHandler = {
   name: 'web_search',
@@ -14,9 +15,9 @@ const handler: ToolHandler = {
   async execute(input) {
     try {
       const url = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(input.query)}`;
-      const res = await fetch(url, {
+      const res = await withRetry(() => fetch(url, {
         headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)' },
-      });
+      }));
       const html = await res.text();
       const results: string[] = [];
       const regex = /<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>(.+?)<\/a>[\s\S]*?<a class="result__snippet"[^>]*>(.+?)<\/a>/g;

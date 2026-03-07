@@ -1,5 +1,4 @@
-import { execSync } from 'child_process';
-import { writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 import { redactSecrets } from '../../utils/git-auth.js';
 import { ensureGitHubRepo, gitPushToRepo } from '../../utils/github.js';
 import type { ToolHandler } from '../types.js';
@@ -27,7 +26,7 @@ const handler: ToolHandler = {
 
     try {
       // Create project directory
-      execSync(`mkdir -p "${siteDir}"`, { shell: '/bin/bash' });
+      mkdirSync(siteDir, { recursive: true });
 
       // Write HTML
       writeFileSync(`${siteDir}/index.html`, input.html);
@@ -36,7 +35,7 @@ const handler: ToolHandler = {
 
       // Create/push to GitHub using shared helper
       const { cloneUrl } = await ensureGitHubRepo(siteName, { description: input.description });
-      gitPushToRepo(siteDir, cloneUrl, `Build website: ${input.description.slice(0, 50)}`);
+      await gitPushToRepo(siteDir, cloneUrl, `Build website: ${input.description.slice(0, 50)}`);
 
       return `Website built and pushed!\n\nGitHub: https://github.com/alonr-create/${siteName}\n\nTo deploy:\n• Vercel: https://vercel.com/new → import ${siteName}\n• Or connect at vercel.com for auto-deploy\n\nExpected URL: https://${siteName}.vercel.app`;
     } catch (e: any) {

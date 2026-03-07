@@ -1,5 +1,6 @@
 import { isUrlAllowed } from '../../utils/security.js';
 import type { ToolHandler } from '../types.js';
+import { withRetry } from '../../utils/retry.js';
 
 const handler: ToolHandler = {
   name: 'analyze_image',
@@ -30,7 +31,7 @@ const handler: ToolHandler = {
       const base64 = imgBuf.toString('base64');
       const question = input.question || 'Describe this image in detail. If there is text, extract it (OCR). Answer in Hebrew.';
 
-      const res = await fetch(
+      const res = await withRetry(() => fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ctx.config.geminiApiKey}`,
         {
           method: 'POST',
@@ -44,7 +45,7 @@ const handler: ToolHandler = {
             }],
           }),
         },
-      );
+      ));
       if (!res.ok) {
         const errText = await res.text();
         return `Error: Gemini Vision returned ${res.status}: ${errText.slice(0, 200)}`;

@@ -1,8 +1,11 @@
 import makeWASocket, { useMultiFileAuthState, DisconnectReason } from '@whiskeysockets/baileys';
 import { Boom } from '@hapi/boom';
 import { config } from '../utils/config.js';
+import { createLogger } from '../utils/logger.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
 import { mkdirSync, existsSync } from 'fs';
+
+const log = createLogger('whatsapp');
 
 const SESSION_DIR = `${config.dataDir}/whatsapp-session`;
 const MAX_RETRIES = 3;
@@ -36,11 +39,9 @@ export function createWhatsAppAdapter(): ChannelAdapter {
       setTimeout(async () => {
         try {
           const code = await sock!.requestPairingCode(PHONE_NUMBER);
-          console.log(`\n[WhatsApp] ===== PAIRING CODE: ${code} =====`);
-          console.log(`[WhatsApp] Open WhatsApp > Linked Devices > Link with phone number`);
-          console.log(`[WhatsApp] Enter this code: ${code}\n`);
+          log.info({ code }, 'pairing code — open WhatsApp > Linked Devices > Link with phone number');
         } catch (err: any) {
-          console.warn('[WhatsApp] Pairing code request failed:', err.message);
+          log.warn({ err: err.message }, 'pairing code request failed');
         }
       }, 3000);
     }
@@ -51,25 +52,25 @@ export function createWhatsAppAdapter(): ChannelAdapter {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
-        console.log('[WhatsApp] QR code received (use pairing code instead — see above)');
+        log.info('QR code received (use pairing code instead)');
       }
 
       if (connection === 'close') {
         const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
         if (reason === DisconnectReason.loggedOut) {
-          console.log('[WhatsApp] Logged out. Delete session and restart.');
+          log.warn('logged out — delete session and restart');
         } else if (retryCount < MAX_RETRIES) {
           retryCount++;
-          console.log(`[WhatsApp] Reconnecting... (${retryCount}/${MAX_RETRIES})`);
+          log.info({ retryCount, maxRetries: MAX_RETRIES }, 'reconnecting');
           setTimeout(connect, 5000);
         } else {
-          console.log('[WhatsApp] Max retries reached. WhatsApp disabled.');
+          log.error('max retries reached — WhatsApp disabled');
         }
       }
 
       if (connection === 'open') {
         retryCount = 0;
-        console.log('[WhatsApp] Connected!');
+        log.info('connected');
       }
     });
 
@@ -113,7 +114,7 @@ export function createWhatsAppAdapter(): ChannelAdapter {
     name: 'whatsapp',
 
     async start() {
-      console.log('[WhatsApp] Starting...');
+      log.info('starting');
       await connect();
     },
 

@@ -1,8 +1,11 @@
 import { z } from 'zod';
 import { spawn } from 'child_process';
-import { execSync } from 'child_process';
 import { existsSync, mkdirSync } from 'fs';
+import { execAsync } from '../../utils/shell.js';
 import type { ToolHandler } from '../types.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('code-agent');
 
 const codeAgentSchema = z.object({
   task: z.string().min(1).max(10000),
@@ -48,7 +51,7 @@ const handler: ToolHandler = {
         '--no-session-persistence',
       ];
 
-      console.log(`[CodeAgent] Starting in ${workDir}: ${task.slice(0, 80)}`);
+      log.info({ workDir, task: task.slice(0, 80) }, 'starting');
 
       const child = spawn('claude', args, {
         cwd: workDir,
@@ -77,7 +80,7 @@ const handler: ToolHandler = {
                                    block.name === 'Bash' ? `Run: ${((block.input as any)?.command || '').slice(0, 60)}` :
                                    block.name;
                   toolActions.push(toolInfo);
-                  console.log(`[CodeAgent] ${toolInfo}`);
+                  log.info({ action: toolInfo }, 'tool action');
                 }
                 if (block.type === 'text') {
                   lastResult = block.text;
@@ -100,16 +103,16 @@ const handler: ToolHandler = {
         output += chunk.toString();
       });
 
-      child.on('close', (code) => {
-        console.log(`[CodeAgent] Finished (exit ${code}), ${toolActions.length} tool calls, $${totalCost.toFixed(2)}`);
+      child.on('close', async (code) => {
+        log.info({ exitCode: code, toolCalls: toolActions.length, costUsd: totalCost.toFixed(2) }, 'finished');
 
         // List files created
         let fileList = '';
         try {
-          fileList = execSync(`find . -type f -not -path './.git/*' | head -30`, {
-            cwd: workDir, encoding: 'utf-8', timeout: 5000,
-          }).trim();
-        } catch {}
+          fileList = await execAsync(`find . -type f -not -path './.git/*' | head -30`, {
+            cwd: workDir, timeout: 5000,
+          });
+        } catch { /* directory listing is optional */ }
 
         const summary = [
           `Claude Code finished (${model}, $${totalCost.toFixed(2)})`,
@@ -126,7 +129,7 @@ const handler: ToolHandler = {
       });
 
       child.on('error', (err) => {
-        console.error(`[CodeAgent] Error:`, err.message);
+        log.error({ err: err.message }, 'error');
         resolveResult(`Error: Claude Code failed to start — ${err.message}\nMake sure @anthropic-ai/claude-code is installed globally.`);
       });
 

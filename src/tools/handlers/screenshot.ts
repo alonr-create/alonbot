@@ -1,5 +1,5 @@
-import { execSync } from 'child_process';
 import { readFileSync, unlinkSync } from 'fs';
+import { execAsync } from '../../utils/shell.js';
 import type { ToolHandler } from '../types.js';
 
 const handler: ToolHandler = {
@@ -13,9 +13,9 @@ const handler: ToolHandler = {
   async execute(input, ctx) {
     try {
       const tmpPath = `/tmp/alonbot-screenshot-${Date.now()}.png`;
-      execSync(`screencapture -x ${tmpPath}`, { timeout: 5000 });
+      await execAsync(`screencapture -x ${tmpPath}`, { timeout: 5000 });
       const buf = readFileSync(tmpPath);
-      try { unlinkSync(tmpPath); } catch {}
+      try { unlinkSync(tmpPath); } catch { /* temp file cleanup */ }
       ctx.addPendingMedia({ type: 'image', data: buf });
       return 'Screenshot taken and sent.';
     } catch (e: any) {

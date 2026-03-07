@@ -1,4 +1,7 @@
 import { writeFileSync, chmodSync } from 'fs';
+import { createLogger } from './logger.js';
+
+const log = createLogger('git-auth');
 
 const ASKPASS_PATH = '/tmp/alonbot-git-askpass.sh';
 
@@ -9,12 +12,12 @@ const ASKPASS_PATH = '/tmp/alonbot-git-askpass.sh';
 export function setupGitAuth(): void {
   const token = process.env.GITHUB_TOKEN;
   if (!token) {
-    console.warn('[git-auth] GITHUB_TOKEN not set — GIT_ASKPASS not configured');
+    log.warn('GITHUB_TOKEN not set — GIT_ASKPASS not configured');
     return;
   }
   writeFileSync(ASKPASS_PATH, `#!/bin/sh\necho "${token}"\n`);
   chmodSync(ASKPASS_PATH, 0o700);
-  console.log('[git-auth] GIT_ASKPASS configured');
+  log.info('GIT_ASKPASS configured');
 }
 
 /**

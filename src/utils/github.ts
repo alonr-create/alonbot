@@ -1,5 +1,6 @@
-import { execSync } from 'child_process';
 import { gitEnv, redactSecrets } from './git-auth.js';
+import { withRetry } from './retry.js';
+import { execAsync } from './shell.js';
 
 /**
  * Ensure a GitHub repo exists under alonr-create.
@@ -13,9 +14,9 @@ export async function ensureGitHubRepo(
   if (!token) throw new Error('GITHUB_TOKEN not configured.');
 
   // Check if repo exists
-  const checkRes = await fetch(`https://api.github.com/repos/alonr-create/${repoName}`, {
+  const checkRes = await withRetry(() => fetch(`https://api.github.com/repos/alonr-create/${repoName}`, {
     headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/vnd.github+json', 'User-Agent': 'AlonBot' },
-  });
+  }));
 
   if (checkRes.ok) {
     const data = await checkRes.json() as any;
@@ -23,7 +24,7 @@ export async function ensureGitHubRepo(
   }
 
   // Create repo
-  const createRes = await fetch('https://api.github.com/user/repos', {
+  const createRes = await withRetry(() => fetch('https://api.github.com/user/repos', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -36,7 +37,7 @@ export async function ensureGitHubRepo(
       private: options?.private ?? false,
       description: options?.description || '',
     }),
-  });
+  }));
 
   if (!createRes.ok) {
     const err = await createRes.text();
@@ -51,13 +52,13 @@ export async function ensureGitHubRepo(
  * Push a local directory to a GitHub repo (force push).
  * Handles git init, add, commit, push.
  */
-export function gitPushToRepo(
+export async function gitPushToRepo(
   localDir: string,
   cloneUrl: string,
   commitMessage: string
-): string {
+): Promise<string> {
   const env = gitEnv();
   const cmd = `cd "${localDir}" && git init && git add -A && git commit -m "${commitMessage}" --allow-empty && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${cloneUrl}" && git push -f origin main`;
-  const output = execSync(cmd, { shell: '/bin/zsh', timeout: 60000, encoding: 'utf-8', env });
+  const output = await execAsync(cmd, { shell: '/bin/zsh', timeout: 60000, env });
   return redactSecrets(output);
 }

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { execSync } from 'child_process';
+import { execAsync } from '../../utils/shell.js';
 import { isShellCommandSafe } from '../../utils/shell-blocklist.js';
 import { redactSecrets } from '../../utils/git-auth.js';
 import type { ToolHandler } from '../types.js';
@@ -26,7 +26,7 @@ const handler: ToolHandler = {
       return `Error: Command blocked — ${shellCheck.reason}`;
     }
     try {
-      const output = execSync(input.command, { shell: '/bin/zsh', timeout: 30000, encoding: 'utf-8', maxBuffer: 1_000_000 }).trim();
+      const output = await execAsync(input.command, { shell: '/bin/zsh', timeout: 30000, maxBuffer: 1_000_000 });
       return redactSecrets(output);
     } catch (e: any) {
       return `Error: ${redactSecrets((e.stderr || e.message || '').slice(0, 1000))}`;

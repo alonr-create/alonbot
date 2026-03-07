@@ -1,8 +1,8 @@
 import { z } from 'zod';
-import { execSync } from 'child_process';
 import { readFileSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import { gitEnv, redactSecrets } from '../../utils/git-auth.js';
+import { execAsync } from '../../utils/shell.js';
 import type { ToolHandler } from '../types.js';
 
 const autoImproveSchema = z.object({
@@ -51,9 +51,9 @@ const handler: ToolHandler = {
     switch (input.action) {
       case 'list': {
         try {
-          const output = execSync(`find src -name "*.ts" | sort`, {
-            cwd: projectRoot, encoding: 'utf-8', timeout: 5000,
-          }).trim();
+          const output = await execAsync(`find src -name "*.ts" | sort`, {
+            cwd: projectRoot, timeout: 5000,
+          });
           return output || 'No source files found.';
         } catch (e: any) {
           return `Error: ${e.message}`;
@@ -85,8 +85,8 @@ const handler: ToolHandler = {
           // Auto-commit and push if in cloud with git
           if (ctx.config.mode === 'cloud' && process.env.GITHUB_TOKEN) {
             try {
-              execSync(`cd "${projectRoot}" && git add "${input.file}" && git commit -m "Auto-improve: ${input.file}" && git push https://github.com/alonr-create/alonbot.git main`, {
-                shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+              await execAsync(`cd "${projectRoot}" && git add "${input.file}" && git commit -m "Auto-improve: ${input.file}" && git push https://github.com/alonr-create/alonbot.git main`, {
+                shell: '/bin/bash', timeout: 30000,
                 env: gitEnv(),
               });
               return `File edited and pushed to GitHub. Will auto-deploy shortly.\nChanged in ${input.file}: "${input.search.slice(0, 50)}..." → "${input.replace.slice(0, 50)}..."`;

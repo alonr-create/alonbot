@@ -6,13 +6,16 @@ import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } fr
 import { searchKnowledge } from './knowledge.js';
 import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
+import { withRetry } from '../utils/retry.js';
+import { createLogger } from '../utils/logger.js';
 
+const log = createLogger('agent');
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
 // Gemini fallback for when Claude rate-limits (429)
 // Tries Gemini 2.5 Pro first (stronger), then 2.0 Flash (faster, higher rate limit)
 async function callGemini(model: string, systemPrompt: string, contents: any[]): Promise<string> {
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`, {
+  const res = await withRetry(() => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -20,7 +23,7 @@ async function callGemini(model: string, systemPrompt: string, contents: any[]):
       contents,
       generationConfig: { maxOutputTokens: 4096 },
     }),
-  });
+  }));
   if (!res.ok) throw new Error(`Gemini ${model} failed: ${res.status}`);
   const data = await res.json() as any;
   return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -37,7 +40,7 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
     const text = await callGemini('gemini-2.5-flash', systemPrompt, contents);
     if (text) return { text, model: 'Gemini 2.5 Flash' };
   } catch (e: any) {
-    console.warn(`[Agent] Gemini 2.5 Flash failed: ${e.message}, trying 2.0 Flash...`);
+    log.warn({ err: e.message }, 'Gemini 2.5 Flash failed, trying 2.0 Flash');
   }
 
   const text = await callGemini('gemini-2.0-flash', systemPrompt, contents);
@@ -122,7 +125,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   if (useOpus) {
     const cleanText = msg.text.slice(7);
     // Update saved message to strip prefix (already saved above with prefix)
-    try { db.prepare("UPDATE messages SET content = ? WHERE channel = ? AND sender_id = ? ORDER BY id DESC LIMIT 1").run(cleanText, msg.channel, msg.senderId); } catch {}
+    try { db.prepare("UPDATE messages SET content = ? WHERE channel = ? AND sender_id = ? ORDER BY id DESC LIMIT 1").run(cleanText, msg.channel, msg.senderId); } catch (e: any) { log.debug({ err: e.message }, 'failed to strip OPUS prefix from DB'); }
     msg.text = cleanText;
     // Update the last message in history to strip prefix too
     const lastMsg = messages[messages.length - 1];
@@ -180,7 +183,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
             lastMsg.content = [...docBlocks, ...(userContent as any[])];
           }
         }
-      } catch {}
+      } catch (e: any) { log.debug({ err: e.message }, 'knowledge search failed'); }
     }
 
     const createParams: any = {
@@ -206,15 +209,15 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         messages,
       });
       const contextLimit = useOpus ? 200000 : 200000;
-      console.log(`[Tokens] Input: ${tokenCount.input_tokens.toLocaleString()} / ${contextLimit.toLocaleString()}`);
+      log.info({ inputTokens: tokenCount.input_tokens, contextLimit }, 'token count');
       if (tokenCount.input_tokens > contextLimit * 0.85) {
         // Trim oldest messages to stay within budget
         const trimCount = Math.min(Math.ceil(messages.length / 3), messages.length - 2);
         messages.splice(0, trimCount);
-        console.log(`[Tokens] Trimmed ${trimCount} old messages to fit context`);
+        log.info({ trimCount }, 'trimmed old messages to fit context');
       }
     } catch (e: any) {
-      console.warn(`[Tokens] countTokens failed: ${e.message}`);
+      log.warn({ err: e.message }, 'countTokens failed');
     }
 
     // Helper: call Claude with optional streaming
@@ -234,10 +237,10 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     // Log cache metrics
     const usage = response.usage as any;
     if (usage?.cache_read_input_tokens) {
-      console.log(`[Cache] Hit: ${usage.cache_read_input_tokens} tokens read from cache`);
+      log.info({ cacheReadTokens: usage.cache_read_input_tokens }, 'cache hit');
     }
     if (usage?.cache_creation_input_tokens) {
-      console.log(`[Cache] Created: ${usage.cache_creation_input_tokens} tokens cached`);
+      log.info({ cacheCreatedTokens: usage.cache_creation_input_tokens }, 'cache created');
     }
 
     // Process tool calls in a loop (max 15 iterations to prevent runaway)
@@ -258,13 +261,13 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
 
       // Execute tools in parallel (Claude already decides which tools are independent)
       const toolPromises = toolBlocks.map(async (block) => {
-        console.log(`[Tool] ${block.name}(${JSON.stringify(block.input).slice(0, 100)})`);
+        log.info({ tool: block.name, input: JSON.stringify(block.input).slice(0, 100) }, 'tool call');
         const toolStart = Date.now();
         const result = await executeTool(block.name, block.input as Record<string, any>);
         const toolDuration = Date.now() - toolStart;
         const toolSuccess = !result.startsWith('Error:') ? 1 : 0;
-        console.log(`[Tool] → ${result.slice(0, 100)} (${toolDuration}ms)`);
-        try { db.prepare('INSERT INTO tool_usage (tool_name, success, duration_ms) VALUES (?, ?, ?)').run(block.name, toolSuccess, toolDuration); } catch {}
+        log.info({ tool: block.name, result: result.slice(0, 100), durationMs: toolDuration }, 'tool result');
+        try { db.prepare('INSERT INTO tool_usage (tool_name, success, duration_ms) VALUES (?, ?, ?)').run(block.name, toolSuccess, toolDuration); } catch (e: any) { log.debug({ err: e.message }, 'tool usage tracking failed'); }
         return {
           type: 'tool_result' as const,
           tool_use_id: block.id,
@@ -324,7 +327,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     // Fallback to Gemini on rate limit (429), overload (529), or billing/auth errors (400/401)
     const fallbackStatuses = [400, 401, 429, 529];
     if (fallbackStatuses.includes(err?.status)) {
-      console.warn(`[Agent] Claude ${err.status} — falling back to Gemini`);
+      log.warn({ status: err.status }, 'Claude error, falling back to Gemini');
       try {
         // Flatten system prompt for Gemini (it only accepts string)
         const flatPrompt = Array.isArray(systemPrompt) ? systemPrompt.map((b: any) => b.text).join('\n') : systemPrompt;
@@ -332,7 +335,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         replyText = fallback.text;
         modelUsed = `${fallback.model} (fallback)`;
       } catch (geminiErr: any) {
-        console.error('[Agent] Gemini fallback also failed:', geminiErr.message);
+        log.error({ err: geminiErr.message }, 'Gemini fallback also failed');
         throw err;
       }
     } else {
@@ -350,7 +353,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
       modelUsed, totalInputTokens, totalOutputTokens, totalCost
     );
-  } catch { /* ok */ }
+  } catch (e: any) { log.debug({ err: e.message }, 'api usage tracking failed'); }
 
   // Save assistant response WITHOUT footer (keeps history clean for Claude)
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
@@ -363,7 +366,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Auto-summarize old messages if threshold reached
   if (shouldSummarize(msg.channel, msg.senderId)) {
     summarizeInBackground(msg.channel, msg.senderId).catch(err =>
-      console.error('[Summarize] Error:', err.message)
+      log.error({ err: err.message }, 'summarize error')
     );
   }
 
@@ -384,18 +387,18 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       if (ttsText.length > 0 && ttsText.length < 3000) {
         const isHebrew = /[\u0590-\u05FF]/.test(ttsText);
         const voiceId = isHebrew ? config.elevenlabsVoiceId : 'nPczCjzI2devNBz1zQrb';
-        const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        const ttsRes = await withRetry(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'xi-api-key': config.elevenlabsApiKey },
           body: JSON.stringify({ text: ttsText, model_id: 'eleven_v3', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } }),
-        });
+        }));
         if (ttsRes.ok) {
           reply.voice = Buffer.from(await ttsRes.arrayBuffer());
-          console.log(`[Agent] Voice-to-voice: generated ${reply.voice.length} bytes TTS`);
+          log.info({ bytes: reply.voice.length }, 'voice-to-voice TTS generated');
         }
       }
     } catch (e: any) {
-      console.error('[Agent] Voice-to-voice TTS failed:', e.message);
+      log.error({ err: e.message }, 'voice-to-voice TTS failed');
     }
   }
 
@@ -419,8 +422,8 @@ async function summarizeInBackground(channel: string, senderId: string) {
     channel, senderId, conversationText, fromDate, toDate, unsummarized.length
   );
   if (batchId) {
-    console.log(`[Summarize] Submitted batch ${batchId} for ${channel}/${senderId} (${unsummarized.length} messages)`);
+    log.info({ batchId, channel, senderId, messageCount: unsummarized.length }, 'submitted summarize batch');
   } else {
-    console.error(`[Summarize] Batch submit failed for ${channel}/${senderId}`);
+    log.error({ channel, senderId }, 'batch submit failed');
   }
 }
