@@ -10,6 +10,34 @@ import { db } from '../utils/db.js';
 import { addCronJob } from '../cron/scheduler.js';
 import { ingestUrl, ingestText, searchKnowledge, listDocs, deleteDoc } from './knowledge.js';
 import { addWorkflow, listWorkflows, deleteWorkflow, toggleWorkflow, matchKeywordWorkflows, type WorkflowAction } from './workflows.js';
+import { z } from 'zod';
+import { isShellCommandSafe } from '../utils/shell-blocklist.js';
+import { sanitizeWebContent } from '../utils/sanitize.js';
+
+// --- Zod schemas for tool parameter validation ---
+const shellSchema = z.object({ command: z.string().min(1).max(10000) });
+const writeFileSchema = z.object({ path: z.string().min(1).max(500), content: z.string().max(500_000) });
+const sendEmailSchema = z.object({ to: z.string().email(), subject: z.string().min(1).max(500), body: z.string().min(1).max(50000) });
+const deployAppSchema = z.object({ project_dir: z.string().min(1), project_name: z.string().regex(/^[a-zA-Z0-9-]+$/).max(100).optional(), platform: z.enum(['vercel', 'railway']) });
+const autoImproveSchema = z.object({ action: z.enum(['list', 'read', 'edit']), file: z.string().max(500).optional(), search: z.string().max(10000).optional(), replace: z.string().max(50000).optional() });
+const setReminderSchema = z.object({ name: z.string().min(1).max(200), cron_expr: z.string().regex(/^[\d*,\/-\s]+$/).max(100), message: z.string().min(1).max(5000) });
+const browseUrlSchema = z.object({ url: z.string().url().max(2000) });
+const mondayApiSchema = z.object({ query: z.string().min(1).max(10000) });
+const codeAgentSchema = z.object({ task: z.string().min(1).max(10000), max_budget: z.number().min(0.1).max(10).optional(), model: z.string().max(50).optional(), working_dir: z.string().max(200).optional() });
+const cronScriptSchema = z.object({ name: z.string().min(1).max(200), cron_expr: z.string().regex(/^[\d*,\/-\s]+$/).max(100), script: z.string().min(1).max(10000), notify: z.boolean().optional() });
+
+const TOOL_SCHEMAS: Record<string, z.ZodType<any>> = {
+  shell: shellSchema,
+  write_file: writeFileSchema,
+  send_email: sendEmailSchema,
+  deploy_app: deployAppSchema,
+  auto_improve: autoImproveSchema,
+  set_reminder: setReminderSchema,
+  browse_url: browseUrlSchema,
+  monday_api: mondayApiSchema,
+  code_agent: codeAgentSchema,
+  cron_script: cronScriptSchema,
+};
 
 // --- Media side-channel: per-request to prevent cross-user leakage ---
 const pendingMediaMap = new Map<string, Array<{ type: 'image' | 'voice'; data: Buffer }>>();
@@ -262,6 +290,17 @@ async function proxyToLocal(name: string, input: Record<string, any>): Promise<{
 
 // --- Tool execution ---
 export async function executeTool(name: string, input: Record<string, any>): Promise<string> {
+  // Validate tool parameters with Zod schemas
+  const schema = TOOL_SCHEMAS[name];
+  if (schema) {
+    const result = schema.safeParse(input);
+    if (!result.success) {
+      const errors = result.error.issues.map((i: z.ZodIssue) => `${i.path.join('.')}: ${i.message}`).join('; ');
+      return `Validation error: ${errors}`;
+    }
+    input = result.data;
+  }
+
   // In cloud mode, proxy local-only tools to Mac
   if (config.mode === 'cloud' && LOCAL_ONLY_TOOLS.includes(name)) {
     const proxy = await proxyToLocal(name, input);
@@ -277,6 +316,10 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
 
   switch (name) {
     case 'shell': {
+      const shellCheck = isShellCommandSafe(input.command);
+      if (!shellCheck.safe) {
+        return `Error: Command blocked — ${shellCheck.reason}`;
+      }
       try {
         const output = execSync(input.command, { shell: '/bin/zsh', timeout: 30000, encoding: 'utf-8', maxBuffer: 1_000_000 }).trim();
         return redactSecrets(output);
@@ -386,7 +429,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
           .replace(/\s+/g, ' ')
           .trim()
           .slice(0, 8000);
-        return text || 'Empty page.';
+        return sanitizeWebContent(text) || 'Empty page.';
       } catch (e: any) {
         return `Error: Could not fetch URL.`;
       }
@@ -908,6 +951,21 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
 
     // --- Auto-improve ---
     case 'auto_improve': {
+      const AUTO_IMPROVE_ALLOWED_PATHS = [
+        /^src\/agent\/system-prompt\.ts$/,
+        /^skills\//,
+      ];
+      const AUTO_IMPROVE_BLOCKED_PATHS = [
+        /^src\/agent\/tools\.ts$/,
+        /^src\/gateway\/server\.ts$/,
+        /^\.env/,
+        /^package\.json$/,
+        /security/i,
+      ];
+      const isAutoImprovePathAllowed = (file: string): boolean => {
+        if (AUTO_IMPROVE_BLOCKED_PATHS.some(p => p.test(file))) return false;
+        return AUTO_IMPROVE_ALLOWED_PATHS.some(p => p.test(file));
+      };
       const projectRoot = config.mode === 'cloud' ? '/app' : process.cwd();
       switch (input.action) {
         case 'list': {
@@ -922,6 +980,9 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         }
         case 'read': {
           if (!input.file) return 'Error: file parameter required.';
+          if (!isAutoImprovePathAllowed(input.file)) {
+            return `Error: auto_improve cannot read "${input.file}". Only system-prompt.ts and skills/ are allowed.`;
+          }
           try {
             const filePath = resolve(projectRoot, input.file);
             return readFileSync(filePath, 'utf-8').slice(0, 15000);
@@ -931,6 +992,9 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         }
         case 'edit': {
           if (!input.file || !input.search || !input.replace) return 'Error: file, search, and replace parameters required.';
+          if (!isAutoImprovePathAllowed(input.file)) {
+            return `Error: auto_improve cannot modify "${input.file}". Only system-prompt.ts and skills/ are allowed.`;
+          }
           try {
             const filePath = resolve(projectRoot, input.file);
             const content = readFileSync(filePath, 'utf-8');
@@ -1055,7 +1119,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         }
 
         if (results.length === 0) return 'Error: Could not fetch any pages.';
-        return `Scraped ${results.length} pages from ${baseUrl.hostname}:\n\n${results.join('\n\n').slice(0, 15000)}`;
+        return sanitizeWebContent(`Scraped ${results.length} pages from ${baseUrl.hostname}:\n\n${results.join('\n\n').slice(0, 15000)}`);
       } catch (e: any) {
         return `Error: ${e.message}`;
       }

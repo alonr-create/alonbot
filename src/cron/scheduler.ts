@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { execSync } from 'child_process';
 import { db } from '../utils/db.js';
+import { isShellCommandSafe } from '../utils/shell-blocklist.js';
 
 interface CronJob {
   id: number;
@@ -45,6 +46,15 @@ async function fireCronJob(name: string, channel: string, targetId: string, mess
   try {
     const parsed = JSON.parse(message);
     if (parsed.type === 'script') {
+      // Security: check script against blocklist before execution
+      const scriptCheck = isShellCommandSafe(parsed.script);
+      if (!scriptCheck.safe) {
+        console.error(`[Cron] Blocked dangerous script in "${name}": ${scriptCheck.reason}`);
+        if (parsed.notify !== false) {
+          await currentSendFn(channel, targetId, `Cron script "${name}" blocked: ${scriptCheck.reason}`);
+        }
+        return;
+      }
       console.log(`[Cron] Running script: ${parsed.script}`);
       try {
         const output = execSync(parsed.script, {
