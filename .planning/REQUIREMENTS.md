@@ -15,12 +15,12 @@
 
 ### Architecture
 
-- [ ] **ARCH-01**: Each tool lives in its own module under `src/tools/` with a common `ToolHandler` interface
-- [ ] **ARCH-02**: Tool registry auto-discovers and loads tools from `src/tools/` directory
-- [ ] **ARCH-03**: `tools.ts` god file is eliminated — only re-exports the registry
-- [ ] **ARCH-04**: Dashboard and chat HTML are served from static `.html` files, not inline template literals
-- [ ] **ARCH-05**: HTML stripping logic is extracted to a shared `src/utils/html.ts` utility
-- [ ] **ARCH-06**: Deploy logic (Vercel/Railway) is deduplicated into a shared deploy helper
+- [x] **ARCH-01**: Each tool lives in its own module under `src/tools/` with a common `ToolHandler` interface
+- [x] **ARCH-02**: Tool registry auto-discovers and loads tools from `src/tools/` directory
+- [x] **ARCH-03**: `tools.ts` god file is eliminated — only re-exports the registry
+- [x] **ARCH-04**: Dashboard and chat HTML are served from static `.html` files, not inline template literals
+- [x] **ARCH-05**: HTML stripping logic is extracted to a shared `src/utils/html.ts` utility
+- [x] **ARCH-06**: Deploy logic (Vercel/Railway) is deduplicated into a shared deploy helper
 
 ### Reliability
 
@@ -65,12 +65,12 @@
 | SEC-03 | 1 | Complete |
 | SEC-04 | 1 | Complete |
 | SEC-05 | 1 | Complete |
-| ARCH-01 | 2 | Pending |
-| ARCH-02 | 2 | Pending |
-| ARCH-03 | 2 | Pending |
-| ARCH-04 | 2 | Pending |
-| ARCH-05 | 2 | Pending |
-| ARCH-06 | 2 | Pending |
+| ARCH-01 | 2 | Complete |
+| ARCH-02 | 2 | Complete |
+| ARCH-03 | 2 | Complete |
+| ARCH-04 | 2 | Complete |
+| ARCH-05 | 2 | Complete |
+| ARCH-06 | 2 | Complete |
 | REL-01 | 3 | Pending |
 | REL-02 | 3 | Pending |
 | REL-03 | 3 | Pending |
