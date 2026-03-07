@@ -860,18 +860,18 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         // If push_dir specified, init and push
         if (input.push_dir) {
           const dir = input.push_dir;
-          const pushUrl = cloneUrl.replace('https://', `https://${token}@`);
-          execSync(`cd "${dir}" && git init && git add -A && git commit -m "Initial commit" && git branch -M main && git remote add origin "${pushUrl}" && git push -u origin main`, {
+          execSync(`cd "${dir}" && git init && git add -A && git commit -m "Initial commit" && git branch -M main && git remote add origin "${cloneUrl}" && git push -u origin main`, {
             shell: '/bin/bash',
             timeout: 30000,
             encoding: 'utf-8',
+            env: gitEnv(),
           });
           return `Repo created and code pushed!\n${repoUrl}`;
         }
 
         return `Repo created: ${repoUrl}`;
       } catch (e: any) {
-        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+        return redactSecrets(`Error: ${(e.stderr || e.message || '').slice(0, 500)}`);
       }
     }
 
