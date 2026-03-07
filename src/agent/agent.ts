@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
-import { toolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
+import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
 import { searchKnowledge } from './knowledge.js';
 import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
@@ -187,7 +187,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       model: modelId,
       max_tokens: useOpus ? 16000 : 8192,
       system: systemPrompt,
-      tools: toolDefinitions,
+      tools: getToolDefinitions(),
       messages,
     };
     if (useThinking) {
@@ -202,7 +202,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       const tokenCount = await client.messages.countTokens({
         model: modelId,
         system: systemPrompt,
-        tools: toolDefinitions as any,
+        tools: getToolDefinitions() as any,
         messages,
       });
       const contextLimit = useOpus ? 200000 : 200000;
@@ -285,7 +285,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         model: modelId,
         max_tokens: useOpus ? 16000 : 8192,
         system: systemPrompt,
-        tools: toolDefinitions,
+        tools: getToolDefinitions(),
         messages,
       };
       if (useThinking) {
