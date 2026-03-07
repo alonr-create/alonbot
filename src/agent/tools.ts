@@ -4,6 +4,7 @@ import { resolve } from 'path';
 import { createTransport } from 'nodemailer';
 import type Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
+import { gitEnv, redactSecrets } from '../utils/git-auth.js';
 import { saveMemory } from './memory.js';
 import { db } from '../utils/db.js';
 import { addCronJob } from '../cron/scheduler.js';
@@ -277,9 +278,10 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
   switch (name) {
     case 'shell': {
       try {
-        return execSync(input.command, { shell: '/bin/zsh', timeout: 30000, encoding: 'utf-8', maxBuffer: 1_000_000 }).trim();
+        const output = execSync(input.command, { shell: '/bin/zsh', timeout: 30000, encoding: 'utf-8', maxBuffer: 1_000_000 }).trim();
+        return redactSecrets(output);
       } catch (e: any) {
-        return `Error: ${(e.stderr || e.message || '').slice(0, 1000)}`;
+        return `Error: ${redactSecrets((e.stderr || e.message || '').slice(0, 1000))}`;
       }
     }
 
@@ -854,9 +856,10 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
             });
           }
 
-          const pushUrl = `https://${token}@github.com/alonr-create/${projectName}.git`;
+          const pushUrl = `https://github.com/alonr-create/${projectName}.git`;
           execSync(`cd "${dir}" && git init && git add -A && git commit -m "Deploy" --allow-empty && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
             shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+            env: gitEnv(),
           });
           return `Code pushed to github.com/alonr-create/${projectName}\nConnect this repo to Vercel at https://vercel.com/new to deploy.\nIf already connected, deploy will start automatically.`;
 
@@ -874,9 +877,10 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
             });
           }
 
-          const pushUrl = `https://${token}@github.com/alonr-create/${projectName}.git`;
+          const pushUrl = `https://github.com/alonr-create/${projectName}.git`;
           execSync(`cd "${dir}" && git init && git add -A && git commit -m "Deploy" --allow-empty && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
             shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+            env: gitEnv(),
           });
           return `Code pushed to github.com/alonr-create/${projectName}\nConnect this repo to Railway at https://railway.com/new to deploy.\nIf already connected, deploy will start automatically.`;
 
@@ -884,7 +888,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
           return `Error: Unknown platform "${input.platform}". Use "vercel" or "railway".`;
         }
       } catch (e: any) {
-        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+        return `Error: ${redactSecrets((e.stderr || e.message || '').slice(0, 500))}`;
       }
     }
 
@@ -937,12 +941,13 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
             if (config.mode === 'cloud' && process.env.GITHUB_TOKEN) {
               try {
                 const token = process.env.GITHUB_TOKEN;
-                execSync(`cd "${projectRoot}" && git add "${input.file}" && git commit -m "Auto-improve: ${input.file}" && git push https://${token}@github.com/alonr-create/alonbot.git main`, {
+                execSync(`cd "${projectRoot}" && git add "${input.file}" && git commit -m "Auto-improve: ${input.file}" && git push https://github.com/alonr-create/alonbot.git main`, {
                   shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+                  env: gitEnv(),
                 });
                 return `File edited and pushed to GitHub. Will auto-deploy shortly.\nChanged in ${input.file}: "${input.search.slice(0, 50)}..." → "${input.replace.slice(0, 50)}..."`;
               } catch (gitErr: any) {
-                return `File edited locally but git push failed: ${(gitErr.stderr || gitErr.message || '').slice(0, 200)}\nChange saved in: ${input.file}`;
+                return `File edited locally but git push failed: ${redactSecrets((gitErr.stderr || gitErr.message || '').slice(0, 200))}\nChange saved in: ${input.file}`;
               }
             }
             return `File edited: ${input.file}\nChanged: "${input.search.slice(0, 50)}..." → "${input.replace.slice(0, 50)}..."`;
@@ -972,7 +977,7 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
         if (input.js) writeFileSync(`${siteDir}/script.js`, input.js);
 
         // Create/push to GitHub
-        const pushUrl = `https://${token}@github.com/alonr-create/${siteName}.git`;
+        const pushUrl = `https://github.com/alonr-create/${siteName}.git`;
 
         // Check if repo exists
         const checkRes = await fetch(`https://api.github.com/repos/alonr-create/${siteName}`, {
@@ -989,11 +994,12 @@ export async function executeTool(name: string, input: Record<string, any>): Pro
 
         execSync(`cd "${siteDir}" && git init && git add -A && git commit -m "Build website: ${input.description.slice(0, 50)}" && git branch -M main && git remote remove origin 2>/dev/null; git remote add origin "${pushUrl}" && git push -u origin main --force`, {
           shell: '/bin/bash', timeout: 30000, encoding: 'utf-8',
+          env: gitEnv(),
         });
 
         return `Website built and pushed!\n\nGitHub: https://github.com/alonr-create/${siteName}\n\nTo deploy:\n• Vercel: https://vercel.com/new → import ${siteName}\n• Or connect at vercel.com for auto-deploy\n\nExpected URL: https://${siteName}.vercel.app`;
       } catch (e: any) {
-        return `Error: ${(e.stderr || e.message || '').slice(0, 500)}`;
+        return `Error: ${redactSecrets((e.stderr || e.message || '').slice(0, 500))}`;
       }
     }
 
