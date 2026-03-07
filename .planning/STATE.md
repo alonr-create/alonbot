@@ -24,14 +24,14 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 
 **Phase 2: Architecture Refactor**
 Status: In Progress
-Plans: 1/? done
+Plans: 2/? done
 
 ## Progress
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
 | 1 | Done | 3/3 | 100% |
-| 2 | In Progress | 1/? | ~20% |
+| 2 | In Progress | 2/? | ~50% |
 | 3 | Not Started | 0/0 | 0% |
 | 4 | Not Started | 0/0 | 0% |
 
@@ -48,6 +48,7 @@ Plans: 1/? done
 | Plan | Title | Wave | Status | Requirements |
 |------|-------|------|--------|--------------|
 | 1 | Infrastructure: Types, Media, Security, HTML Extraction | 1 | Done | ARCH-04, ARCH-05 |
+| 2 | Extract All Tool Handlers to Individual Files | 2 | Done | ARCH-01 |
 
 ---
-*Last updated: 2026-03-07 after completing Phase 2 Plan 1 (types, media, security, HTML extraction)*
+*Last updated: 2026-03-07 after completing Phase 2 Plan 2 (27 handler files, switch statement eliminated)*
