@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import { config } from '../utils/config.js';
 import { executeTool } from '../agent/tools.js';
 import { db } from '../utils/db.js';
@@ -66,14 +67,105 @@ if (config.mode === 'local') {
   });
 }
 
-// === Dashboard API (protected by secret) ===
+// === Session & Rate Limiting Infrastructure ===
+const sessions = new Map<string, { createdAt: number }>();
+const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
+const SESSION_COOKIE = 'alonbot_session';
+
+const authFailures = new Map<string, { count: number; firstAttempt: number }>();
+const MAX_AUTH_FAILURES = 5;
+const AUTH_WINDOW_MS = 60_000; // 1 minute
+
+function getClientIp(req: any): string {
+  const forwarded = req.headers['x-forwarded-for'];
+  if (forwarded) {
+    return (typeof forwarded === 'string' ? forwarded : forwarded[0]).split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '0.0.0.0';
+}
+
+function isRateLimited(ip: string): boolean {
+  const entry = authFailures.get(ip);
+  if (!entry) return false;
+  if (Date.now() - entry.firstAttempt > AUTH_WINDOW_MS) {
+    authFailures.delete(ip);
+    return false;
+  }
+  return entry.count >= MAX_AUTH_FAILURES;
+}
+
+function recordAuthFailure(ip: string): void {
+  const entry = authFailures.get(ip);
+  if (!entry || Date.now() - entry.firstAttempt > AUTH_WINDOW_MS) {
+    authFailures.set(ip, { count: 1, firstAttempt: Date.now() });
+  } else {
+    entry.count++;
+  }
+}
+
+function parseCookies(req: any): Record<string, string> {
+  const header = req.headers['cookie'];
+  if (!header) return {};
+  const cookies: Record<string, string> = {};
+  for (const pair of header.split(';')) {
+    const [name, ...rest] = pair.trim().split('=');
+    if (name) cookies[name.trim()] = rest.join('=').trim();
+  }
+  return cookies;
+}
+
+// === Dashboard API (protected by cookie-based sessions) ===
 function dashAuth(req: any, res: any, next: any) {
-  const token = req.query.token || req.headers['x-dashboard-token'];
-  if (token !== config.localApiSecret) {
-    res.status(401).json({ error: 'Unauthorized — add ?token=YOUR_SECRET' });
+  const ip = getClientIp(req);
+
+  // 1. Check rate limit
+  if (isRateLimited(ip)) {
+    res.status(429).json({ error: 'Too many failed attempts. Try again later.' });
     return;
   }
-  next();
+
+  // 2. Check session cookie
+  const cookies = parseCookies(req);
+  const sessionId = cookies[SESSION_COOKIE];
+  if (sessionId) {
+    const session = sessions.get(sessionId);
+    if (session && Date.now() - session.createdAt < SESSION_TTL) {
+      next();
+      return;
+    }
+    // Expired or invalid — clean up
+    if (session) sessions.delete(sessionId);
+  }
+
+  // 3. Check query token
+  if (req.query.token === config.dashboardSecret) {
+    const newSession = crypto.randomBytes(32).toString('hex');
+    sessions.set(newSession, { createdAt: Date.now() });
+
+    const isSecure = req.headers['x-forwarded-proto'] === 'https' || req.secure;
+    const cookieFlags = `${SESSION_COOKIE}=${newSession}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${isSecure ? '; Secure' : ''}`;
+    res.setHeader('Set-Cookie', cookieFlags);
+
+    // For HTML page requests, redirect to strip token from URL
+    const path = req.path;
+    if (path === '/dashboard' || path === '/chat') {
+      res.redirect(302, path);
+      return;
+    }
+
+    next();
+    return;
+  }
+
+  // 4. Check header token (programmatic API access)
+  if (req.headers['x-dashboard-token'] === config.dashboardSecret) {
+    next();
+    return;
+  }
+
+  // 5. Auth failed
+  recordAuthFailure(ip);
+  res.status(401).json({ error: 'Unauthorized — add ?token=YOUR_SECRET' });
 }
 
 app.get('/api/dashboard/stats', dashAuth, (_req, res) => {
@@ -194,35 +286,28 @@ app.post('/api/chat', dashAuth, async (req, res) => {
 
 // Dashboard HTML
 app.get('/dashboard', dashAuth, (_req, res) => {
-  const token = _req.query.token;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(getDashboardHTML(token as string));
+  res.send(getDashboardHTML());
 });
 
 // Web Chat HTML
 app.get('/chat', dashAuth, (_req, res) => {
-  const token = _req.query.token;
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(getChatHTML(token as string));
+  res.send(getChatHTML());
 });
 
 export function startServer() {
   app.listen(config.port, () => {
     console.log(`[Server] Health check: http://localhost:${config.port}/health`);
-    console.log(`[Server] Chat: http://localhost:${config.port}/chat?token=${config.localApiSecret}`);
-    console.log(`[Server] Dashboard: http://localhost:${config.port}/dashboard?token=${config.localApiSecret}`);
+    console.log(`[Server] Chat: http://localhost:${config.port}/chat?token=${config.dashboardSecret}`);
+    console.log(`[Server] Dashboard: http://localhost:${config.port}/dashboard?token=${config.dashboardSecret}`);
     if (config.mode === 'local') {
       console.log(`[Server] Tool API: http://localhost:${config.port}/api/tool`);
     }
   });
 }
 
-function escapeJsString(s: string): string {
-  return s.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/</g, '\\x3c').replace(/>/g, '\\x3e');
-}
-
-function getDashboardHTML(token: string): string {
-  const safeToken = escapeJsString(token);
+function getDashboardHTML(): string {
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -300,8 +385,7 @@ function getDashboardHTML(token: string): string {
 </div>
 
 <script>
-const TOKEN = '${safeToken}';
-const API = (path) => '/api/dashboard/' + path + '?token=' + TOKEN;
+const API = (path) => '/api/dashboard/' + path;
 let currentTab = 'memories';
 
 async function fetchJSON(path) {
@@ -403,8 +487,7 @@ setInterval(loadAll, 30000); // refresh every 30s
 </html>`;
 }
 
-function getChatHTML(token: string): string {
-  const safeToken = escapeJsString(token);
+function getChatHTML(): string {
   return `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -438,7 +521,7 @@ function getChatHTML(token: string): string {
 <body>
 <div class="header">
   <h1>AlonBot Chat</h1>
-  <a href="/dashboard?token=${safeToken}">Dashboard</a>
+  <a href="/dashboard">Dashboard</a>
 </div>
 <div class="messages" id="messages"></div>
 <div class="typing" id="typing">AlonBot חושב...</div>
@@ -447,7 +530,6 @@ function getChatHTML(token: string): string {
   <button id="send" onclick="send()">שלח</button>
 </div>
 <script>
-const TOKEN = '${safeToken}';
 const msgEl = document.getElementById('messages');
 const inputEl = document.getElementById('input');
 const typingEl = document.getElementById('typing');
@@ -481,7 +563,7 @@ async function send() {
   typingEl.classList.add('show');
 
   try {
-    const res = await fetch('/api/chat?token=' + TOKEN, {
+    const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
@@ -507,7 +589,7 @@ inputEl.addEventListener('input', () => {
 // Load chat history on page open
 (async () => {
   try {
-    const res = await fetch('/api/chat/history?token=' + TOKEN + '&limit=30');
+    const res = await fetch('/api/chat/history?limit=30');
     const history = await res.json();
     for (const msg of history) {
       const role = msg.role === 'user' ? 'user' : 'bot';
