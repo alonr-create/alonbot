@@ -7,11 +7,11 @@
 
 ### Security
 
-- [ ] **SEC-01**: Shell tool executes commands in a sandboxed environment with blocked destructive patterns (rm -rf /, curl | sh, etc.)
-- [ ] **SEC-02**: GITHUB_TOKEN is never embedded in git remote URLs or visible in tool output sent to Telegram
-- [ ] **SEC-03**: Dashboard auth uses HttpOnly cookie instead of query parameter token
-- [ ] **SEC-04**: Tool parameters are validated (types, ranges, required fields) before execution
-- [ ] **SEC-05**: Auth token for dashboard and cloud-local bridge are separate secrets
+- [x] **SEC-01**: Shell tool executes commands in a sandboxed environment with blocked destructive patterns (rm -rf /, curl | sh, etc.)
+- [x] **SEC-02**: GITHUB_TOKEN is never embedded in git remote URLs or visible in tool output sent to Telegram
+- [x] **SEC-03**: Dashboard auth uses HttpOnly cookie instead of query parameter token
+- [x] **SEC-04**: Tool parameters are validated (types, ranges, required fields) before execution
+- [x] **SEC-05**: Auth token for dashboard and cloud-local bridge are separate secrets
 
 ### Architecture
 
@@ -60,11 +60,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SEC-01 | 1 | Pending |
-| SEC-02 | 1 | Pending |
-| SEC-03 | 1 | Pending |
-| SEC-04 | 1 | Pending |
-| SEC-05 | 1 | Pending |
+| SEC-01 | 1 | Complete |
+| SEC-02 | 1 | Complete |
+| SEC-03 | 1 | Complete |
+| SEC-04 | 1 | Complete |
+| SEC-05 | 1 | Complete |
 | ARCH-01 | 2 | Pending |
 | ARCH-02 | 2 | Pending |
 | ARCH-03 | 2 | Pending |
