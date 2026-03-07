@@ -24,17 +24,17 @@
 
 ### Reliability
 
-- [ ] **REL-01**: Shell and code_agent use async `spawn` instead of `execSync` (non-blocking)
-- [ ] **REL-02**: All empty `catch {}` blocks are replaced with proper error logging
-- [ ] **REL-03**: External API calls (Claude, Telegram, Gemini, ElevenLabs) have retry with exponential backoff
-- [ ] **REL-04**: pino is wired as the logger with structured JSON output and `[module]` context
+- [x] **REL-01**: Shell and code_agent use async `spawn` instead of `execSync` (non-blocking)
+- [x] **REL-02**: All empty `catch {}` blocks are replaced with proper error logging
+- [x] **REL-03**: External API calls (Claude, Telegram, Gemini, ElevenLabs) have retry with exponential backoff
+- [x] **REL-04**: pino is wired as the logger with structured JSON output and `[module]` context
 
 ### Quality
 
-- [ ] **QAL-01**: Vitest is configured with at least one test file per `src/` module category
-- [ ] **QAL-02**: Pure utility functions (date formatting, URL validation, HTML stripping) have unit tests
-- [ ] **QAL-03**: Health endpoint checks DB connectivity, memory usage, and uptime details
-- [ ] **QAL-04**: Database schema has a versioned migration system (migration files + version table)
+- [x] **QAL-01**: Vitest is configured with at least one test file per `src/` module category
+- [x] **QAL-02**: Pure utility functions (date formatting, URL validation, HTML stripping) have unit tests
+- [x] **QAL-03**: Health endpoint checks DB connectivity, memory usage, and uptime details
+- [x] **QAL-04**: Database schema has a versioned migration system (migration files + version table)
 
 ## v2 Requirements
 
@@ -71,14 +71,14 @@
 | ARCH-04 | 2 | Complete |
 | ARCH-05 | 2 | Complete |
 | ARCH-06 | 2 | Complete |
-| REL-01 | 3 | Pending |
-| REL-02 | 3 | Pending |
-| REL-03 | 3 | Pending |
-| REL-04 | 3 | Pending |
-| QAL-01 | 4 | Pending |
-| QAL-02 | 4 | Pending |
-| QAL-03 | 4 | Pending |
-| QAL-04 | 4 | Pending |
+| REL-01 | 3 | Complete |
+| REL-02 | 3 | Complete |
+| REL-03 | 3 | Complete |
+| REL-04 | 3 | Complete |
+| QAL-01 | 4 | Complete |
+| QAL-02 | 4 | Complete |
+| QAL-03 | 4 | Complete |
+| QAL-04 | 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 19 total

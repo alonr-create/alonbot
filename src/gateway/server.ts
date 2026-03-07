@@ -26,8 +26,46 @@ app.use((_req, res, next) => {
 });
 
 app.get('/health', (_req, res) => {
-  res.json({ status: 'ok', mode: config.mode, uptime: process.uptime(), localConnected: !!config.localApiUrl, version: 'v24-code-agent' });
+  // Deep health check: DB connectivity, memory, uptime
+  let dbStatus = 'ok';
+  let dbTables = 0;
+  try {
+    const row = db.prepare("SELECT COUNT(*) as count FROM sqlite_master WHERE type='table'").get() as any;
+    dbTables = row.count;
+  } catch (e: any) {
+    dbStatus = `error: ${e.message}`;
+  }
+
+  const mem = process.memoryUsage();
+
+  res.json({
+    status: dbStatus === 'ok' ? 'ok' : 'degraded',
+    mode: config.mode,
+    version: 'v25-reliability',
+    uptime: {
+      seconds: Math.floor(process.uptime()),
+      human: formatUptime(process.uptime()),
+    },
+    db: {
+      status: dbStatus,
+      tables: dbTables,
+    },
+    memory: {
+      rss: Math.round(mem.rss / 1024 / 1024),
+      heapUsed: Math.round(mem.heapUsed / 1024 / 1024),
+      heapTotal: Math.round(mem.heapTotal / 1024 / 1024),
+      external: Math.round(mem.external / 1024 / 1024),
+    },
+    localConnected: !!config.localApiUrl,
+  });
 });
+
+function formatUptime(seconds: number): string {
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
 
 // Cloud mode: allow local Mac to register its tunnel URL
 if (config.mode === 'cloud') {

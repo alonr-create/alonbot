@@ -9,6 +9,7 @@ import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js
 import { executeWorkflowActions } from './agent/tools.js';
 import { loadTools } from './tools/registry.js';
 import { db } from './utils/db.js';
+import { runMigrations } from './utils/migrate.js';
 import cron from 'node-cron';
 import { createLogger } from './utils/logger.js';
 
@@ -16,6 +17,9 @@ const log = createLogger('main');
 
 // Setup git authentication via GIT_ASKPASS (before any tool execution)
 setupGitAuth();
+
+// Run database migrations (before anything uses DB)
+await runMigrations(db);
 
 // Load all tool handlers from registry (must happen before server starts)
 await loadTools();
