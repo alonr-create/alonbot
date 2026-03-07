@@ -28,7 +28,9 @@ AI personal assistant bot for Telegram. TypeScript + Node.js + SQLite + Claude A
 SQLite at `data/alonbot.db`. Tables: messages, memories, memory_vectors, conversation_summaries, cron_jobs, api_usage, tasks.
 
 ## Adding Tools
-1. Define in `allToolDefinitions` array in `src/agent/tools.ts`
-2. Add `case` in `executeTool()` switch
-3. If Mac-only, add to `LOCAL_ONLY_TOOLS`
-4. Document in system prompt (`src/agent/system-prompt.ts`)
+1. Create a new file in `src/tools/handlers/` implementing the `ToolHandler` interface
+2. Export default a `ToolHandler` (or array for grouped tools)
+3. Include the `definition` (Claude API schema), optional `schema` (Zod), and `execute` function
+4. Set `localOnly: true` if the tool needs the local Mac
+5. No other files need editing — the registry auto-discovers handlers at startup
+6. Document in system prompt (`src/agent/system-prompt.ts`)
