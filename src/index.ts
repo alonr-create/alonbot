@@ -7,11 +7,15 @@ import { config } from './utils/config.js';
 import { setupGitAuth } from './utils/git-auth.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
 import { executeWorkflowActions } from './agent/tools.js';
+import { loadTools } from './tools/registry.js';
 import { db } from './utils/db.js';
 import cron from 'node-cron';
 
 // Setup git authentication via GIT_ASKPASS (before any tool execution)
 setupGitAuth();
+
+// Load all tool handlers from registry (must happen before server starts)
+await loadTools();
 
 // DND check — skip proactive messages during quiet hours (23:00-07:00 Israel)
 function isDND(): boolean {
