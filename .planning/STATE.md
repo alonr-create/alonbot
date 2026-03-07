@@ -10,14 +10,14 @@ See: .planning/PROJECT.md (updated 2026-03-07)
 ## Current Phase
 
 **Phase 1: Security Hardening**
-Status: Planned
-Plans: 0/3
+Status: In Progress
+Plans: 2/3
 
 ## Progress
 
 | Phase | Status | Plans | Progress |
 |-------|--------|-------|----------|
-| 1 | Planned | 0/3 | 0% |
+| 1 | In Progress | 2/3 | 67% |
 | 2 | Not Started | 0/0 | 0% |
 | 3 | Not Started | 0/0 | 0% |
 | 4 | Not Started | 0/0 | 0% |
@@ -26,9 +26,9 @@ Plans: 0/3
 
 | Plan | Title | Wave | Status | Requirements |
 |------|-------|------|--------|--------------|
-| 1 | Shell Command Blocklist & Input Validation | 1 | Pending | SEC-01, SEC-04 |
+| 1 | Shell Command Blocklist & Input Validation | 1 | Done | SEC-01, SEC-04 |
 | 2 | Git Token Removal & Output Redaction | 1 | Done | SEC-02 |
 | 3 | Cookie-Based Dashboard Auth & Separate Secrets | 2 | Pending | SEC-03, SEC-05 |
 
 ---
-*Last updated: 2026-03-07 after planning Phase 1*
+*Last updated: 2026-03-07 after completing Plan 1 (shell blocklist, input validation, sanitization)*
