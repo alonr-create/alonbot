@@ -36,6 +36,7 @@ const TOOL_LABELS: Record<string, string> = {
   api_costs: '💰 מחשב עלויות...',
   manage_project: '📂 בודק פרויקט...',
   send_file: '📎 שולח קובץ...',
+  code_agent: '🤖 Claude Code עובד על הפרויקט...',
 };
 
 export function registerAdapter(adapter: ChannelAdapter) {

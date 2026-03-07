@@ -14,6 +14,9 @@ COPY skills/ skills/
 
 RUN npx tsc
 
+# Install Claude Code CLI globally (for code_agent tool)
+RUN npm install -g @anthropic-ai/claude-code
+
 # Remove dev dependencies
 RUN npm prune --production
 
