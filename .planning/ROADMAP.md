@@ -32,9 +32,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans:** 3/3 plans complete
 
 Plans:
-- [ ] 01-01-PLAN.md — Project init, config, SQLite database, pino logging, utilities
-- [ ] 01-02-PLAN.md — WhatsApp connection (Baileys), rate limiter, typing simulation, message handler, notifications
-- [ ] 01-03-PLAN.md — HTTP server (health + QR web page), entry point wiring, Dockerfile for Railway
+- [x] 01-01-PLAN.md — Project init, config, SQLite database, pino logging, utilities
+- [x] 01-02-PLAN.md — WhatsApp connection (Baileys), rate limiter, typing simulation, message handler, notifications
+- [x] 01-03-PLAN.md — HTTP server (health + QR web page), entry point wiring, Dockerfile for Railway
 
 ### Phase 2: Sales Conversation
 **Goal**: New leads from Monday.com automatically receive a personalized Hebrew WhatsApp conversation powered by Claude that knows all Alon.dev services
@@ -46,11 +46,11 @@ Plans:
   3. When a lead sends multiple messages in quick succession, bot waits for a pause then responds to the full batch as one coherent reply
   4. Lead status in Monday.com updates automatically as the conversation progresses (contacted, in-conversation, quote-sent)
   5. Conversation history persists in SQLite -- bot picks up context correctly after a restart
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
+- [ ] 02-01-PLAN.md — Monday.com webhook, GraphQL API, schema migration, config extension
+- [ ] 02-02-PLAN.md — Claude AI conversation engine, message batcher, message handler rewrite
 
 ### Phase 3: Closing Power
 **Goal**: Bot can book discovery meetings on Google Calendar and escalate to Alon when it cannot close
@@ -88,7 +88,7 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 3/3 | Complete   | 2026-03-09 |
-| 2. Sales Conversation | 0/? | Not started | - |
+| 1. Foundation | 3/3 | Complete    | 2026-03-09 |
+| 2. Sales Conversation | 0/2 | Planning complete | - |
 | 3. Closing Power | 0/? | Not started | - |
 | 4. Follow-up | 0/? | Not started | - |
