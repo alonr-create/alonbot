@@ -11,6 +11,8 @@ import {
   resetEscalationCount,
   incrementEscalationCount,
 } from '../escalation/handler.js';
+import { scheduleFollowUp, cancelFollowUps } from '../follow-up/follow-up-db.js';
+import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
 
@@ -92,6 +94,7 @@ export async function handleConversation(
       lead?.monday_item_id ?? undefined,
       lead?.monday_board_id ?? undefined,
     );
+    cancelFollowUps(phone); // No follow-ups for escalated leads
     return;
   }
 
@@ -153,6 +156,7 @@ export async function handleConversation(
     if (result.success) {
       await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. אלון יתקשר אליך`);
       newStatus = 'meeting-scheduled';
+      cancelFollowUps(phone); // No follow-ups for booked leads
     } else {
       await sendWithTyping(
         sock,
@@ -214,6 +218,7 @@ export async function handleConversation(
       lead?.monday_board_id ?? undefined,
     );
 
+    cancelFollowUps(phone); // No follow-ups for escalated leads
     log.info({ phone }, 'escalation triggered from Claude marker');
     return;
   }
@@ -269,6 +274,14 @@ export async function handleConversation(
         );
       }
     }
+  }
+
+  // Schedule follow-up #1 for 24 hours later (FU-01)
+  // Cancel any existing follow-ups first (resets the timer on each exchange)
+  if (phone !== config.alonPhone) {
+    cancelFollowUps(phone);
+    const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    scheduleFollowUp(phone, 1, followUpTime);
   }
 
   log.info(
@@ -331,6 +344,12 @@ export async function sendFirstMessage(
     ).catch((err) => {
       log.error({ err, phone }, 'Monday.com status sync failed on first message');
     });
+  }
+
+  // Schedule first follow-up for new leads (24 hours)
+  if (phone !== config.alonPhone) {
+    const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+    scheduleFollowUp(phone, 1, followUpTime);
   }
 
   log.info({ phone, name, interest }, 'first message sent');

@@ -5,6 +5,7 @@ import { sendWithTyping } from './rate-limiter.js';
 import { addMessageToBatch } from './message-batcher.js';
 import { handleConversation, sendFirstMessage } from '../ai/conversation.js';
 import { setOnNewLeadCallback } from '../monday/webhook-handler.js';
+import { cancelFollowUps } from '../follow-up/follow-up-db.js';
 
 const log = createLogger('message-handler');
 
@@ -39,6 +40,12 @@ export function setupMessageHandler(sock: WASocket): void {
 
       // Extract phone number from JID
       const phone = remoteJid.replace(/@s\.whatsapp\.net$/, '');
+
+      // Cancel any pending follow-ups when lead replies (FU-02)
+      const cancelled = cancelFollowUps(phone);
+      if (cancelled > 0) {
+        log.info({ phone, cancelled }, 'follow-ups cancelled on reply');
+      }
 
       // Check for media messages
       const hasMedia =
