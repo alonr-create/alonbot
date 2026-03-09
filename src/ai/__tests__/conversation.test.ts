@@ -10,12 +10,17 @@ function setupTestDb() {
 
 describe('conversation orchestrator', () => {
   let db: Database.Database;
-  const mockSendWithTyping = vi.fn().mockResolvedValue(undefined);
-  const mockGenerateResponse = vi.fn().mockResolvedValue('תשובה מהבוט');
-  const mockUpdateMondayStatus = vi.fn().mockResolvedValue(undefined);
+  let mockSendWithTyping: ReturnType<typeof vi.fn>;
+  let mockGenerateResponse: ReturnType<typeof vi.fn>;
+  let mockUpdateMondayStatus: ReturnType<typeof vi.fn>;
 
-  beforeEach(async () => {
+  beforeEach(() => {
+    vi.resetModules();
     db = setupTestDb();
+
+    mockSendWithTyping = vi.fn().mockResolvedValue(undefined);
+    mockGenerateResponse = vi.fn().mockResolvedValue('תשובה מהבוט');
+    mockUpdateMondayStatus = vi.fn().mockResolvedValue(undefined);
 
     vi.doMock('../../db/index.js', () => ({
       getDb: () => db,
@@ -42,7 +47,6 @@ describe('conversation orchestrator', () => {
   });
 
   it('sends Claude response via sendWithTyping', async () => {
-    // Insert a lead
     db.prepare(
       "INSERT INTO leads (phone, name, interest, status) VALUES ('972501234567', 'Test', 'website', 'new')",
     ).run();
