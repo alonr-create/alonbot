@@ -1,8 +1,23 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll } from 'vitest';
+
+// Mock calendar modules before importing system-prompt
+vi.mock('../../calendar/business-hours.js', () => ({
+  isBusinessHours: () => false,
+  formatIsraelTime: () => 'יום ראשון 10:00',
+}));
+
+vi.mock('../../calendar/api.js', () => ({
+  getAvailableSlots: async () => [],
+}));
+
 import { buildSystemPrompt } from '../system-prompt.js';
 
 describe('buildSystemPrompt', () => {
-  const prompt = buildSystemPrompt('דוד', 'אתר לעסק');
+  let prompt: string;
+
+  beforeAll(async () => {
+    prompt = await buildSystemPrompt('דוד', 'אתר לעסק');
+  });
 
   it('includes all service categories', () => {
     expect(prompt).toContain('Landing');
@@ -35,7 +50,6 @@ describe('buildSystemPrompt', () => {
   });
 
   it('includes price guardrail instructions', () => {
-    // Hebrew guardrail text about never going below minimum
     expect(prompt).toMatch(/מינימום|מתחת/);
     expect(prompt).toMatch(/מקסימום|מעל/);
   });
@@ -49,13 +63,23 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toMatch(/AI/);
   });
 
-  it('handles empty name gracefully', () => {
-    const p = buildSystemPrompt('', 'website');
+  it('handles empty name gracefully', async () => {
+    const p = await buildSystemPrompt('', 'website');
     expect(p).toBeDefined();
     expect(p.length).toBeGreaterThan(100);
   });
 
   it('handles media message instructions', () => {
     expect(prompt).toMatch(/מדיה|תמונ|קול|media/i);
+  });
+
+  it('includes business hours context', () => {
+    expect(prompt).toContain('שעות פעילות');
+    expect(prompt).toContain('יום ראשון 10:00');
+  });
+
+  it('includes escalation marker instructions', () => {
+    expect(prompt).toContain('[ESCALATE]');
+    expect(prompt).toContain('[BOOK:');
   });
 });

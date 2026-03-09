@@ -4,6 +4,13 @@ import { generateResponse } from './claude-client.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { updateMondayStatus } from '../monday/api.js';
+import { bookMeeting } from '../calendar/api.js';
+import {
+  shouldEscalate,
+  triggerEscalation,
+  resetEscalationCount,
+  incrementEscalationCount,
+} from '../escalation/handler.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
 
@@ -27,7 +34,8 @@ interface MessageRow {
 /**
  * Handle a batch of incoming messages for a phone number.
  * Builds conversation history from DB, calls Claude, sends response,
- * stores all messages, and updates lead status + Monday.com.
+ * stores all messages, updates lead status + Monday.com.
+ * Detects [BOOK:...] and [ESCALATE] markers in Claude responses.
  */
 export async function handleConversation(
   phone: string,
@@ -44,8 +52,60 @@ export async function handleConversation(
   const leadName = lead?.name || 'לקוח';
   const leadInterest = lead?.interest || '';
 
-  // Build system prompt
-  const systemPrompt = buildSystemPrompt(leadName, leadInterest);
+  // Combine batched messages for escalation check
+  const batchedText = batchedMessages.join('\n');
+
+  // Check escalation BEFORE calling Claude
+  const escalationCheck = shouldEscalate(phone, batchedText);
+  if (escalationCheck.escalate) {
+    // Fetch history for escalation summary
+    const historyRows = db
+      .prepare(
+        'SELECT direction, content FROM messages WHERE phone = ? ORDER BY created_at DESC LIMIT 20',
+      )
+      .all(phone) as MessageRow[];
+    historyRows.reverse();
+    const messages = historyRows.map((row) => ({
+      role: row.direction === 'in' ? ('user' as const) : ('assistant' as const),
+      content: row.content,
+    }));
+    messages.push({ role: 'user', content: batchedText });
+
+    // Store incoming messages before escalation
+    const insertMsg = db.prepare(
+      'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+    );
+    const leadId = lead?.id || null;
+    for (const text of batchedMessages) {
+      insertMsg.run(phone, leadId, 'in', text);
+    }
+
+    log.info(
+      { phone, reason: escalationCheck.reason },
+      'escalation triggered before Claude call',
+    );
+    await triggerEscalation(
+      phone,
+      leadName,
+      messages,
+      sock,
+      lead?.monday_item_id ?? undefined,
+      lead?.monday_board_id ?? undefined,
+    );
+    return;
+  }
+
+  // Escalation count management: short messages from in-conversation leads
+  if (lead && lead.status === 'in-conversation') {
+    if (batchedText.length < 5) {
+      incrementEscalationCount(phone);
+    } else {
+      resetEscalationCount(phone);
+    }
+  }
+
+  // Build system prompt (async — fetches calendar slots)
+  const systemPrompt = await buildSystemPrompt(leadName, leadInterest);
 
   // Fetch last 20 messages for context
   const historyRows = db
@@ -65,21 +125,103 @@ export async function handleConversation(
     }));
 
   // Add batched messages as final user message
-  const batchedText = batchedMessages.join('\n');
   messages.push({ role: 'user', content: batchedText });
 
   // Call Claude
   const response = await generateResponse(messages, systemPrompt);
 
-  // Send response via WhatsApp
   const jid = phone + '@s.whatsapp.net';
-  await sendWithTyping(sock, jid, response);
-
-  // Store incoming messages individually
   const insertMsg = db.prepare(
     'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
   );
   const leadId = lead?.id || null;
+
+  // Track status change
+  let newStatus: LeadStatus | null = null;
+
+  // Parse [BOOK:...] marker from Claude response
+  const bookMatch = response.match(/\[BOOK:(\d{4}-\d{2}-\d{2}):(\d{2}:\d{2})\]/);
+  if (bookMatch) {
+    const [, date, time] = bookMatch;
+    const cleanResponse = response.replace(/\[BOOK:[^\]]+\]/, '').trim();
+
+    // Send the clean response first
+    await sendWithTyping(sock, jid, cleanResponse);
+
+    // Book the meeting
+    const result = await bookMeeting(date, time, leadName, phone, leadInterest, 'Discovery call');
+    if (result.success) {
+      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. אלון יתקשר אליך`);
+      newStatus = 'meeting-scheduled';
+    } else {
+      await sendWithTyping(
+        sock,
+        jid,
+        'סליחה, הייתה בעיה עם קביעת הפגישה. אלון יחזור אליך עם זמנים מעודכנים.',
+      );
+    }
+
+    // Store incoming messages
+    for (const text of batchedMessages) {
+      insertMsg.run(phone, leadId, 'in', text);
+    }
+    // Store outgoing response (clean version)
+    insertMsg.run(phone, leadId, 'out', cleanResponse);
+
+    // Update lead
+    if (lead) {
+      db.prepare("UPDATE leads SET updated_at = datetime('now') WHERE phone = ?").run(phone);
+      if (newStatus) {
+        db.prepare('UPDATE leads SET status = ? WHERE phone = ?').run(newStatus, phone);
+        if (lead.monday_item_id && lead.monday_board_id) {
+          updateMondayStatus(lead.monday_item_id, lead.monday_board_id, newStatus).catch((err) => {
+            log.error({ err, phone }, 'Monday.com status sync failed');
+          });
+        }
+      }
+    }
+
+    log.info(
+      { phone, date, time, success: result.success },
+      'booking flow completed',
+    );
+    return;
+  }
+
+  // Parse [ESCALATE] marker from Claude response
+  if (response.includes('[ESCALATE]')) {
+    const cleanResponse = response.replace('[ESCALATE]', '').trim();
+    await sendWithTyping(sock, jid, cleanResponse);
+
+    // Store incoming messages
+    for (const text of batchedMessages) {
+      insertMsg.run(phone, leadId, 'in', text);
+    }
+    // Store outgoing response (clean version)
+    insertMsg.run(phone, leadId, 'out', cleanResponse);
+
+    // Update lead timestamp
+    if (lead) {
+      db.prepare("UPDATE leads SET updated_at = datetime('now') WHERE phone = ?").run(phone);
+    }
+
+    await triggerEscalation(
+      phone,
+      leadName,
+      messages,
+      sock,
+      lead?.monday_item_id ?? undefined,
+      lead?.monday_board_id ?? undefined,
+    );
+
+    log.info({ phone }, 'escalation triggered from Claude marker');
+    return;
+  }
+
+  // Normal flow: send response via WhatsApp
+  await sendWithTyping(sock, jid, response);
+
+  // Store incoming messages individually
   for (const text of batchedMessages) {
     insertMsg.run(phone, leadId, 'in', text);
   }
@@ -96,8 +238,6 @@ export async function handleConversation(
 
   // Status progression
   if (lead) {
-    let newStatus: LeadStatus | null = null;
-
     if (lead.status === 'new') {
       newStatus = 'contacted';
     } else if (lead.status === 'contacted') {
@@ -149,7 +289,7 @@ export async function sendFirstMessage(
 ): Promise<void> {
   const db = getDb();
 
-  const systemPrompt = buildSystemPrompt(name, interest);
+  const systemPrompt = await buildSystemPrompt(name, interest);
 
   // Generate personalized intro
   const introPrompt = interest

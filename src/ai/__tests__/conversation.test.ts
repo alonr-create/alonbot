@@ -38,6 +38,23 @@ describe('conversation orchestrator', () => {
     vi.doMock('../../monday/api.js', () => ({
       updateMondayStatus: mockUpdateMondayStatus,
     }));
+
+    vi.doMock('../../calendar/business-hours.js', () => ({
+      isBusinessHours: () => false,
+      formatIsraelTime: () => 'יום ראשון 10:00',
+    }));
+
+    vi.doMock('../../calendar/api.js', () => ({
+      getAvailableSlots: vi.fn().mockResolvedValue([]),
+      bookMeeting: vi.fn().mockResolvedValue({ success: true, eventId: 'test-123' }),
+    }));
+
+    vi.doMock('../../escalation/handler.js', () => ({
+      shouldEscalate: vi.fn().mockReturnValue({ escalate: false, reason: null }),
+      triggerEscalation: vi.fn().mockResolvedValue(undefined),
+      resetEscalationCount: vi.fn(),
+      incrementEscalationCount: vi.fn(),
+    }));
   });
 
   afterEach(() => {
