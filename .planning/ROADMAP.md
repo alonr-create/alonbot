@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - WhatsApp connection via Baileys with session persistence, SQLite database, Docker deployment to Railway (completed 2026-03-09)
 - [x] **Phase 2: Sales Conversation** - Monday.com webhook triggers AI-powered Hebrew sales dialogue via Claude, with status sync back to Monday.com (completed 2026-03-09)
-- [ ] **Phase 3: Closing Power** - Google Calendar meeting booking, dynamic price quotes with guardrails, and escalation to Alon when needed
+- [x] **Phase 3: Closing Power** - Google Calendar meeting booking, dynamic price quotes with guardrails, and escalation to Alon when needed (completed 2026-03-09)
 - [ ] **Phase 4: Follow-up** - Automated 3-message follow-up series for unresponsive leads with business hours enforcement
 
 ## Phase Details
@@ -62,11 +62,11 @@ Plans:
   3. Bot responds differently during business hours vs. after hours (Israel timezone)
   4. After 3 failed conversation attempts or when lead asks for a human, bot escalates and Alon receives a Telegram notification with a 3-line conversation summary
   5. Monday.com status updates to "meeting-scheduled" or "escalated" accordingly
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Calendar module (Apps Script proxy + business hours) and escalation module (trigger detection + summary + Telegram notification)
-- [ ] 03-02-PLAN.md — Wire calendar booking and escalation into conversation orchestrator and system prompt
+- [x] 03-02-PLAN.md — Wire calendar booking and escalation into conversation orchestrator and system prompt
 
 ### Phase 4: Follow-up
 **Goal**: Unresponsive leads automatically receive a 3-message follow-up series that respects business hours and stops when the lead re-engages
@@ -76,10 +76,11 @@ Plans:
   1. A lead who does not reply receives follow-up messages on day 1, day 3, and day 7 -- each with distinct, non-repetitive content
   2. Follow-up stops immediately when the lead sends any reply
   3. Follow-up messages are only sent during business hours (Israel timezone) -- never at night or on Shabbat
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 04-01: TBD
+- [ ] 04-01-PLAN.md — Follow-up module: DB schema, DB operations, AI message generation, 15-minute scheduler
+- [ ] 04-02-PLAN.md — Wire follow-up into message handler, conversation engine, and boot sequence
 
 ## Progress
 
@@ -90,5 +91,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
-| 3. Closing Power | 1/2 | In Progress | - |
-| 4. Follow-up | 0/? | Not started | - |
+| 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
+| 4. Follow-up | 0/2 | Not started | - |
