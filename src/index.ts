@@ -4,6 +4,7 @@ import { createLogger } from './utils/logger.js';
 import { initDb, getDb } from './db/index.js';
 import { connectWhatsApp } from './whatsapp/connection.js';
 import { createServer } from './http/server.js';
+import { startFollowUpScheduler } from './follow-up/scheduler.js';
 
 const log = createLogger('main');
 
@@ -25,7 +26,11 @@ async function main() {
   const sock = await connectWhatsApp();
   log.info('WhatsApp connection initiated');
 
-  log.info({ port: config.port }, 'Bot ready');
+  // 4. Start follow-up scheduler (checks every 15 minutes)
+  startFollowUpScheduler(sock);
+  log.info('follow-up scheduler started');
+
+  log.info({ port: config.port }, 'Bot ready (with follow-up scheduler)');
 
   // Graceful shutdown
   const shutdown = () => {
