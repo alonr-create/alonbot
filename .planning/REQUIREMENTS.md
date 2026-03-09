@@ -7,11 +7,11 @@
 
 ### WhatsApp Connection
 
-- [ ] **WA-01**: Bot connects to WhatsApp via Baileys with multi-device auth
-- [ ] **WA-02**: WhatsApp session persists across restarts (file/DB storage)
-- [ ] **WA-03**: Bot auto-reconnects on disconnect without manual intervention
-- [ ] **WA-04**: Rate limiting enforces minimum 3-5 second delay between outbound messages
-- [ ] **WA-05**: Typing indicator simulation (1-3 seconds scaled by message length) before each response
+- [x] **WA-01**: Bot connects to WhatsApp via Baileys with multi-device auth
+- [x] **WA-02**: WhatsApp session persists across restarts (file/DB storage)
+- [x] **WA-03**: Bot auto-reconnects on disconnect without manual intervention
+- [x] **WA-04**: Rate limiting enforces minimum 3-5 second delay between outbound messages
+- [x] **WA-05**: Typing indicator simulation (1-3 seconds scaled by message length) before each response
 
 ### Monday.com Integration
 
@@ -89,11 +89,11 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WA-01 | Phase 1 | Pending |
-| WA-02 | Phase 1 | Pending |
-| WA-03 | Phase 1 | Pending |
-| WA-04 | Phase 1 | Pending |
-| WA-05 | Phase 1 | Pending |
+| WA-01 | Phase 1 | Complete |
+| WA-02 | Phase 1 | Complete |
+| WA-03 | Phase 1 | Complete |
+| WA-04 | Phase 1 | Complete |
+| WA-05 | Phase 1 | Complete |
 | MON-01 | Phase 2 | Pending |
 | MON-02 | Phase 2 | Pending |
 | MON-03 | Phase 2 | Pending |
