@@ -15,9 +15,9 @@
 
 ### Monday.com Integration
 
-- [ ] **MON-01**: Webhook endpoint receives new lead notifications from Monday.com
-- [ ] **MON-02**: Bot extracts lead name, phone number, and service interest from webhook payload
-- [ ] **MON-03**: Bot updates lead status column in Monday.com (contacted, in-conversation, quote-sent, meeting-scheduled, escalated)
+- [x] **MON-01**: Webhook endpoint receives new lead notifications from Monday.com
+- [x] **MON-02**: Bot extracts lead name, phone number, and service interest from webhook payload
+- [x] **MON-03**: Bot updates lead status column in Monday.com (contacted, in-conversation, quote-sent, meeting-scheduled, escalated)
 
 ### AI Conversation
 
@@ -94,9 +94,9 @@
 | WA-03 | Phase 1 | Complete |
 | WA-04 | Phase 1 | Complete |
 | WA-05 | Phase 1 | Complete |
-| MON-01 | Phase 2 | Pending |
-| MON-02 | Phase 2 | Pending |
-| MON-03 | Phase 2 | Pending |
+| MON-01 | Phase 2 | Complete |
+| MON-02 | Phase 2 | Complete |
+| MON-03 | Phase 2 | Complete |
 | AI-01 | Phase 2 | Pending |
 | AI-02 | Phase 2 | Pending |
 | AI-03 | Phase 2 | Pending |

@@ -49,7 +49,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Monday.com webhook, GraphQL API, schema migration, config extension
+- [x] 02-01-PLAN.md — Monday.com webhook, GraphQL API, schema migration, config extension
 - [ ] 02-02-PLAN.md — Claude AI conversation engine, message batcher, message handler rewrite
 
 ### Phase 3: Closing Power
@@ -89,6 +89,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
-| 2. Sales Conversation | 0/2 | Planning complete | - |
+| 2. Sales Conversation | 1/2 | Executing | - |
 | 3. Closing Power | 0/? | Not started | - |
 | 4. Follow-up | 0/? | Not started | - |
