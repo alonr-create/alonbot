@@ -13,6 +13,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.78.0",
     "@hapi/boom": "^10.0.1",
     "@whiskeysockets/baileys": "^6.7.21",
     "better-sqlite3": "^12.6.2",
