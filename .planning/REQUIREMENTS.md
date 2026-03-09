@@ -47,10 +47,10 @@
 
 ### Infrastructure
 
-- [ ] **INF-01**: SQLite database for leads, conversations, follow-up schedule
+- [x] **INF-01**: SQLite database for leads, conversations, follow-up schedule
 - [ ] **INF-02**: Docker deployment to Railway with persistent volume for session + DB
 - [ ] **INF-03**: Health endpoint with connection status, DB health, uptime
-- [ ] **INF-04**: Structured logging (pino) for all operations
+- [x] **INF-04**: Structured logging (pino) for all operations
 
 ## v2 Requirements
 
@@ -111,10 +111,10 @@
 | ESC-01 | Phase 3 | Pending |
 | ESC-02 | Phase 3 | Pending |
 | ESC-03 | Phase 3 | Pending |
-| INF-01 | Phase 1 | Pending |
+| INF-01 | Phase 1 | Complete |
 | INF-02 | Phase 1 | Pending |
 | INF-03 | Phase 1 | Pending |
-| INF-04 | Phase 1 | Pending |
+| INF-04 | Phase 1 | Complete |
 
 **Coverage:**
 - v1 requirements: 26 total
