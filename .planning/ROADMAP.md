@@ -79,7 +79,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Follow-up module: DB schema, DB operations, AI message generation, 15-minute scheduler
+- [x] 04-01-PLAN.md — Follow-up module: DB schema, DB operations, AI message generation, 15-minute scheduler
 - [ ] 04-02-PLAN.md — Wire follow-up into message handler, conversation engine, and boot sequence
 
 ## Progress
@@ -92,4 +92,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
-| 4. Follow-up | 0/2 | Not started | - |
+| 4. Follow-up | 1/2 | In progress | - |
