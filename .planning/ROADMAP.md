@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - WhatsApp connection via Baileys with session persistence, SQLite database, Docker deployment to Railway (completed 2026-03-09)
 - [x] **Phase 2: Sales Conversation** - Monday.com webhook triggers AI-powered Hebrew sales dialogue via Claude, with status sync back to Monday.com (completed 2026-03-09)
 - [x] **Phase 3: Closing Power** - Google Calendar meeting booking, dynamic price quotes with guardrails, and escalation to Alon when needed (completed 2026-03-09)
-- [ ] **Phase 4: Follow-up** - Automated 3-message follow-up series for unresponsive leads with business hours enforcement
+- [x] **Phase 4: Follow-up** - Automated 3-message follow-up series for unresponsive leads with business hours enforcement (completed 2026-03-09)
 
 ## Phase Details
 
@@ -76,7 +76,7 @@ Plans:
   1. A lead who does not reply receives follow-up messages on day 1, day 3, and day 7 -- each with distinct, non-repetitive content
   2. Follow-up stops immediately when the lead sends any reply
   3. Follow-up messages are only sent during business hours (Israel timezone) -- never at night or on Shabbat
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 04-01-PLAN.md — Follow-up module: DB schema, DB operations, AI message generation, 15-minute scheduler
@@ -92,4 +92,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
-| 4. Follow-up | 1/2 | In progress | - |
+| 4. Follow-up | 2/2 | Complete   | 2026-03-09 |

@@ -36,7 +36,7 @@
 ### Follow-up
 
 - [x] **FU-01**: Automatic follow-up series for unresponsive leads: day 1, day 3, day 7
-- [ ] **FU-02**: Follow-up stops immediately when lead replies
+- [x] **FU-02**: Follow-up stops immediately when lead replies
 - [x] **FU-03**: Follow-ups only sent during business hours
 
 ### Escalation
@@ -106,7 +106,7 @@
 | CAL-02 | Phase 3 | Complete |
 | CAL-03 | Phase 3 | Complete |
 | FU-01 | Phase 4 | Complete |
-| FU-02 | Phase 4 | Pending |
+| FU-02 | Phase 4 | Complete |
 | FU-03 | Phase 4 | Complete |
 | ESC-01 | Phase 3 | Complete |
 | ESC-02 | Phase 3 | Complete |
