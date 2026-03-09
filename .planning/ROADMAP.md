@@ -13,7 +13,7 @@ From zero to a fully autonomous WhatsApp sales bot in 4 phases. Phase 1 establis
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - WhatsApp connection via Baileys with session persistence, SQLite database, Docker deployment to Railway (completed 2026-03-09)
-- [ ] **Phase 2: Sales Conversation** - Monday.com webhook triggers AI-powered Hebrew sales dialogue via Claude, with status sync back to Monday.com
+- [x] **Phase 2: Sales Conversation** - Monday.com webhook triggers AI-powered Hebrew sales dialogue via Claude, with status sync back to Monday.com (completed 2026-03-09)
 - [ ] **Phase 3: Closing Power** - Google Calendar meeting booking, dynamic price quotes with guardrails, and escalation to Alon when needed
 - [ ] **Phase 4: Follow-up** - Automated 3-message follow-up series for unresponsive leads with business hours enforcement
 
@@ -46,11 +46,11 @@ Plans:
   3. When a lead sends multiple messages in quick succession, bot waits for a pause then responds to the full batch as one coherent reply
   4. Lead status in Monday.com updates automatically as the conversation progresses (contacted, in-conversation, quote-sent)
   5. Conversation history persists in SQLite -- bot picks up context correctly after a restart
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — Monday.com webhook, GraphQL API, schema migration, config extension
-- [ ] 02-02-PLAN.md — Claude AI conversation engine, message batcher, message handler rewrite
+- [x] 02-02-PLAN.md — Claude AI conversation engine, message batcher, message handler rewrite
 
 ### Phase 3: Closing Power
 **Goal**: Bot can book discovery meetings on Google Calendar and escalate to Alon when it cannot close
@@ -89,6 +89,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
-| 2. Sales Conversation | 1/2 | Executing | - |
+| 2. Sales Conversation | 2/2 | Complete | 2026-03-09 |
 | 3. Closing Power | 0/? | Not started | - |
 | 4. Follow-up | 0/? | Not started | - |

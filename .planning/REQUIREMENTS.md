@@ -21,11 +21,11 @@
 
 ### AI Conversation
 
-- [ ] **AI-01**: Claude API powers Hebrew-first sales conversations
-- [ ] **AI-02**: System prompt contains full Alon.dev service catalog (websites, apps, games, automation, CRM)
-- [ ] **AI-03**: Conversation context persists in SQLite — bot remembers prior messages
-- [ ] **AI-04**: Multi-message batching: wait 5-10 seconds after last message, respond to batch
-- [ ] **AI-05**: Bot generates dynamic price quotes based on conversation context with guardrails (min/max per service)
+- [x] **AI-01**: Claude API powers Hebrew-first sales conversations
+- [x] **AI-02**: System prompt contains full Alon.dev service catalog (websites, apps, games, automation, CRM)
+- [x] **AI-03**: Conversation context persists in SQLite — bot remembers prior messages
+- [x] **AI-04**: Multi-message batching: wait 5-10 seconds after last message, respond to batch
+- [x] **AI-05**: Bot generates dynamic price quotes based on conversation context with guardrails (min/max per service)
 
 ### Scheduling
 
@@ -97,11 +97,11 @@
 | MON-01 | Phase 2 | Complete |
 | MON-02 | Phase 2 | Complete |
 | MON-03 | Phase 2 | Complete |
-| AI-01 | Phase 2 | Pending |
-| AI-02 | Phase 2 | Pending |
-| AI-03 | Phase 2 | Pending |
-| AI-04 | Phase 2 | Pending |
-| AI-05 | Phase 2 | Pending |
+| AI-01 | Phase 2 | Complete |
+| AI-02 | Phase 2 | Complete |
+| AI-03 | Phase 2 | Complete |
+| AI-04 | Phase 2 | Complete |
+| AI-05 | Phase 2 | Complete |
 | CAL-01 | Phase 3 | Pending |
 | CAL-02 | Phase 3 | Pending |
 | CAL-03 | Phase 3 | Pending |
