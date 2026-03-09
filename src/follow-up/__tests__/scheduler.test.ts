@@ -40,12 +40,24 @@ vi.mock('../../calendar/business-hours.js', () => ({
   getNextBusinessDay: vi.fn().mockReturnValue(new Date('2026-03-10T06:00:00Z')),
 }));
 
+// Import after mocks are set up
+import { processFollowUps } from '../scheduler.js';
+import { sendWithTyping } from '../../whatsapp/rate-limiter.js';
+import { isBusinessHours, getNextBusinessDay } from '../../calendar/business-hours.js';
+import { generateFollowUpMessage } from '../follow-up-ai.js';
+
 describe('follow-up scheduler', () => {
   let db: Database.Database;
 
   beforeEach(async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-09T10:00:00Z'));
+
+    // Re-set mock return values (cleared between tests)
+    vi.mocked(isBusinessHours).mockReturnValue(true);
+    vi.mocked(getNextBusinessDay).mockReturnValue(new Date('2026-03-10T06:00:00Z'));
+    vi.mocked(sendWithTyping).mockResolvedValue(undefined);
+    vi.mocked(generateFollowUpMessage).mockResolvedValue('Follow-up test message');
 
     db = new Database(':memory:');
     db.pragma('journal_mode = WAL');
@@ -63,16 +75,13 @@ describe('follow-up scheduler', () => {
   afterEach(() => {
     db.close();
     vi.useRealTimers();
-    vi.restoreAllMocks();
+    vi.clearAllMocks();
   });
 
   it('sends due follow-up and marks as sent', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-    const { sendWithTyping } = await import('../../whatsapp/rate-limiter.js');
-
     // Schedule a follow-up in the past
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)').run(
-      '972501234567', 1, '2026-03-09T08:00:00.000Z',
+      '972501234567', 1, '2020-01-01T08:00:00.000Z',
     );
 
     const mockSock = {} as any;
@@ -90,14 +99,10 @@ describe('follow-up scheduler', () => {
   });
 
   it('defers follow-up to next business day when outside business hours', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-    const { isBusinessHours } = await import('../../calendar/business-hours.js');
-    const { sendWithTyping } = await import('../../whatsapp/rate-limiter.js');
-
-    (isBusinessHours as any).mockReturnValue(false);
+    vi.mocked(isBusinessHours).mockReturnValue(false);
 
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)').run(
-      '972501234567', 1, '2026-03-09T08:00:00.000Z',
+      '972501234567', 1, '2020-01-01T08:00:00.000Z',
     );
 
     const mockSock = {} as any;
@@ -108,14 +113,12 @@ describe('follow-up scheduler', () => {
 
     // Should have deferred scheduled_at
     const row = db.prepare('SELECT scheduled_at FROM follow_ups WHERE phone = ?').get('972501234567') as any;
-    expect(row.scheduled_at).not.toBe('2026-03-09T08:00:00.000Z');
+    expect(row.scheduled_at).not.toBe('2020-01-01T08:00:00.000Z');
   });
 
   it('schedules follow-up #2 after sending #1', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)').run(
-      '972501234567', 1, '2026-03-09T08:00:00.000Z',
+      '972501234567', 1, '2020-01-01T08:00:00.000Z',
     );
 
     const mockSock = {} as any;
@@ -130,10 +133,8 @@ describe('follow-up scheduler', () => {
   });
 
   it('schedules follow-up #3 after sending #2', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)').run(
-      '972501234567', 2, '2026-03-09T08:00:00.000Z',
+      '972501234567', 2, '2020-01-01T08:00:00.000Z',
     );
 
     const mockSock = {} as any;
@@ -147,10 +148,8 @@ describe('follow-up scheduler', () => {
   });
 
   it('does NOT schedule further follow-ups after sending #3', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)').run(
-      '972501234567', 3, '2026-03-09T08:00:00.000Z',
+      '972501234567', 3, '2020-01-01T08:00:00.000Z',
     );
 
     const mockSock = {} as any;
@@ -163,11 +162,8 @@ describe('follow-up scheduler', () => {
   });
 
   it('skips cancelled follow-up on re-check', async () => {
-    const { processFollowUps } = await import('../scheduler.js');
-    const { sendWithTyping } = await import('../../whatsapp/rate-limiter.js');
-
     db.prepare('INSERT INTO follow_ups (phone, message_number, scheduled_at, cancelled) VALUES (?, ?, ?, ?)').run(
-      '972501234567', 1, '2026-03-09T08:00:00.000Z', 1,
+      '972501234567', 1, '2020-01-01T08:00:00.000Z', 1,
     );
 
     const mockSock = {} as any;
