@@ -27,4 +27,19 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status);
     CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
   `);
+
+  // Idempotent migration: add Monday.com columns to leads
+  const migrations = [
+    'ALTER TABLE leads ADD COLUMN monday_item_id INTEGER',
+    'ALTER TABLE leads ADD COLUMN monday_board_id INTEGER',
+    'ALTER TABLE leads ADD COLUMN interest TEXT',
+  ];
+
+  for (const sql of migrations) {
+    try {
+      db.exec(sql);
+    } catch {
+      // Column already exists — expected on subsequent runs
+    }
+  }
 }

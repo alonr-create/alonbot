@@ -9,6 +9,8 @@ const log = createLogger('http');
 export function createServer(port: number): http.Server {
   const app = express();
 
+  app.use(express.json());
+
   app.use('/', healthRouter);
   app.use('/', qrRouter);
 

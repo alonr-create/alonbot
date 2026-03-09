@@ -14,4 +14,8 @@ export const config = {
   telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
   alonPhone: process.env.ALON_PHONE || '972546300783',
   nodeEnv: process.env.NODE_ENV || 'development',
+  anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
+  mondayApiToken: process.env.MONDAY_API_TOKEN || '',
+  mondayBoardId: process.env.MONDAY_BOARD_ID || '',
+  mondayStatusColumnId: process.env.MONDAY_STATUS_COLUMN_ID || 'status',
 } as const;
