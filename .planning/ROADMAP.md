@@ -65,7 +65,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — Calendar module (Apps Script proxy + business hours) and escalation module (trigger detection + summary + Telegram notification)
+- [x] 03-01-PLAN.md — Calendar module (Apps Script proxy + business hours) and escalation module (trigger detection + summary + Telegram notification)
 - [ ] 03-02-PLAN.md — Wire calendar booking and escalation into conversation orchestrator and system prompt
 
 ### Phase 4: Follow-up
@@ -90,5 +90,5 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
-| 3. Closing Power | 0/2 | Planned     | - |
+| 3. Closing Power | 1/2 | In Progress | - |
 | 4. Follow-up | 0/? | Not started | - |

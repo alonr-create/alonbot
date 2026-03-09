@@ -29,9 +29,9 @@
 
 ### Scheduling
 
-- [ ] **CAL-01**: Bot checks Google Calendar free/busy slots before suggesting meeting times
-- [ ] **CAL-02**: Bot books discovery meeting on Google Calendar when lead confirms a time
-- [ ] **CAL-03**: Business hours awareness — different responses during and after hours (Israel timezone)
+- [x] **CAL-01**: Bot checks Google Calendar free/busy slots before suggesting meeting times
+- [x] **CAL-02**: Bot books discovery meeting on Google Calendar when lead confirms a time
+- [x] **CAL-03**: Business hours awareness — different responses during and after hours (Israel timezone)
 
 ### Follow-up
 
@@ -41,9 +41,9 @@
 
 ### Escalation
 
-- [ ] **ESC-01**: Bot escalates to Alon after 3 failed conversation attempts or when lead requests a human
-- [ ] **ESC-02**: Escalation sends Telegram notification to Alon with conversation summary
-- [ ] **ESC-03**: Bot generates 3-line conversation summary on escalation (what they want, budget signals, concerns)
+- [x] **ESC-01**: Bot escalates to Alon after 3 failed conversation attempts or when lead requests a human
+- [x] **ESC-02**: Escalation sends Telegram notification to Alon with conversation summary
+- [x] **ESC-03**: Bot generates 3-line conversation summary on escalation (what they want, budget signals, concerns)
 
 ### Infrastructure
 
@@ -102,15 +102,15 @@
 | AI-03 | Phase 2 | Complete |
 | AI-04 | Phase 2 | Complete |
 | AI-05 | Phase 2 | Complete |
-| CAL-01 | Phase 3 | Pending |
-| CAL-02 | Phase 3 | Pending |
-| CAL-03 | Phase 3 | Pending |
+| CAL-01 | Phase 3 | Complete |
+| CAL-02 | Phase 3 | Complete |
+| CAL-03 | Phase 3 | Complete |
 | FU-01 | Phase 4 | Pending |
 | FU-02 | Phase 4 | Pending |
 | FU-03 | Phase 4 | Pending |
-| ESC-01 | Phase 3 | Pending |
-| ESC-02 | Phase 3 | Pending |
-| ESC-03 | Phase 3 | Pending |
+| ESC-01 | Phase 3 | Complete |
+| ESC-02 | Phase 3 | Complete |
+| ESC-03 | Phase 3 | Complete |
 | INF-01 | Phase 1 | Complete |
 | INF-02 | Phase 1 | Complete |
 | INF-03 | Phase 1 | Complete |
