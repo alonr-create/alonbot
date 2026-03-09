@@ -62,11 +62,11 @@ Plans:
   3. Bot responds differently during business hours vs. after hours (Israel timezone)
   4. After 3 failed conversation attempts or when lead asks for a human, bot escalates and Alon receives a Telegram notification with a 3-line conversation summary
   5. Monday.com status updates to "meeting-scheduled" or "escalated" accordingly
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
+- [ ] 03-01-PLAN.md — Calendar module (Apps Script proxy + business hours) and escalation module (trigger detection + summary + Telegram notification)
+- [ ] 03-02-PLAN.md — Wire calendar booking and escalation into conversation orchestrator and system prompt
 
 ### Phase 4: Follow-up
 **Goal**: Unresponsive leads automatically receive a 3-message follow-up series that respects business hours and stops when the lead re-engages
@@ -89,6 +89,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
-| 2. Sales Conversation | 2/2 | Complete | 2026-03-09 |
-| 3. Closing Power | 0/? | Not started | - |
+| 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
+| 3. Closing Power | 0/2 | Planned     | - |
 | 4. Follow-up | 0/? | Not started | - |
