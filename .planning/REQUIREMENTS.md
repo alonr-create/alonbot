@@ -89,38 +89,38 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WA-01 | — | Pending |
-| WA-02 | — | Pending |
-| WA-03 | — | Pending |
-| WA-04 | — | Pending |
-| WA-05 | — | Pending |
-| MON-01 | — | Pending |
-| MON-02 | — | Pending |
-| MON-03 | — | Pending |
-| AI-01 | — | Pending |
-| AI-02 | — | Pending |
-| AI-03 | — | Pending |
-| AI-04 | — | Pending |
-| AI-05 | — | Pending |
-| CAL-01 | — | Pending |
-| CAL-02 | — | Pending |
-| CAL-03 | — | Pending |
-| FU-01 | — | Pending |
-| FU-02 | — | Pending |
-| FU-03 | — | Pending |
-| ESC-01 | — | Pending |
-| ESC-02 | — | Pending |
-| ESC-03 | — | Pending |
-| INF-01 | — | Pending |
-| INF-02 | — | Pending |
-| INF-03 | — | Pending |
-| INF-04 | — | Pending |
+| WA-01 | Phase 1 | Pending |
+| WA-02 | Phase 1 | Pending |
+| WA-03 | Phase 1 | Pending |
+| WA-04 | Phase 1 | Pending |
+| WA-05 | Phase 1 | Pending |
+| MON-01 | Phase 2 | Pending |
+| MON-02 | Phase 2 | Pending |
+| MON-03 | Phase 2 | Pending |
+| AI-01 | Phase 2 | Pending |
+| AI-02 | Phase 2 | Pending |
+| AI-03 | Phase 2 | Pending |
+| AI-04 | Phase 2 | Pending |
+| AI-05 | Phase 2 | Pending |
+| CAL-01 | Phase 3 | Pending |
+| CAL-02 | Phase 3 | Pending |
+| CAL-03 | Phase 3 | Pending |
+| FU-01 | Phase 4 | Pending |
+| FU-02 | Phase 4 | Pending |
+| FU-03 | Phase 4 | Pending |
+| ESC-01 | Phase 3 | Pending |
+| ESC-02 | Phase 3 | Pending |
+| ESC-03 | Phase 3 | Pending |
+| INF-01 | Phase 1 | Pending |
+| INF-02 | Phase 1 | Pending |
+| INF-03 | Phase 1 | Pending |
+| INF-04 | Phase 1 | Pending |
 
 **Coverage:**
 - v1 requirements: 26 total
-- Mapped to phases: 0
-- Unmapped: 26 ⚠️
+- Mapped to phases: 26
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-03-09*
-*Last updated: 2026-03-09 after initial definition*
+*Last updated: 2026-03-09 after roadmap creation*
