@@ -43,4 +43,22 @@ export function initSchema(db: Database.Database): void {
       // Column already exists — expected on subsequent runs
     }
   }
+
+  // Follow-ups table for automated re-engagement
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS follow_ups (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      message_number INTEGER NOT NULL CHECK(message_number IN (1, 2, 3)),
+      scheduled_at TEXT NOT NULL,
+      sent_at TEXT,
+      cancelled INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_follow_ups_due
+      ON follow_ups(scheduled_at) WHERE sent_at IS NULL AND cancelled = 0;
+    CREATE INDEX IF NOT EXISTS idx_follow_ups_phone
+      ON follow_ups(phone) WHERE sent_at IS NULL AND cancelled = 0;
+  `);
 }
