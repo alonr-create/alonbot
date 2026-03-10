@@ -26,7 +26,9 @@ RUN npm prune --production
 # Create data directory (Railway volume mount)
 RUN mkdir -p /data
 
+COPY entrypoint.sh ./
+RUN chmod +x entrypoint.sh
+
 EXPOSE 3000
 
-# Clean stale Chromium locks from previous containers before starting
-CMD find /data -name "SingletonLock" -delete -o -name "SingletonSocket" -delete -o -name "SingletonCookie" -delete 2>/dev/null; exec node dist/index.js
+CMD ["./entrypoint.sh"]
