@@ -68,8 +68,8 @@ export async function handleConversation(
   // Combine batched messages for escalation check
   const batchedText = batchedMessages.join('\n');
 
-  // Check escalation BEFORE calling Claude
-  const escalationCheck = shouldEscalate(phone, batchedText);
+  // Check escalation BEFORE calling Claude (skip for admin — never escalate the boss)
+  const escalationCheck = isAdminPhone(phone) ? { escalate: false, reason: null } : shouldEscalate(phone, batchedText);
   if (escalationCheck.escalate) {
     const historyRows = db
       .prepare(
