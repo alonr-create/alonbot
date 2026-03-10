@@ -34,6 +34,13 @@ export async function scrapeWebsite(url: string): Promise<ScrapedBranding> {
     url = 'https://' + url;
   }
 
+  // Known domain aliases → actual URLs
+  const domainMap: Record<string, string> = {
+    'https://alon.dev': 'https://alon-dev.vercel.app',
+    'https://www.alon.dev': 'https://alon-dev.vercel.app',
+  };
+  url = domainMap[url] || url;
+
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
   log.info({ url, execPath: execPath || 'bundled' }, 'starting website scrape');
 
