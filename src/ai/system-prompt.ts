@@ -7,8 +7,9 @@
 import { isBusinessHours, formatIsraelTime } from '../calendar/business-hours.js';
 import { getAvailableSlots } from '../calendar/api.js';
 
-export async function buildSystemPrompt(leadName: string, leadInterest: string): Promise<string> {
-  const name = leadName || 'לקוח';
+export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string): Promise<string> {
+  const isBoss = phone && (phone === '972546300783' || phone === '546300783' || phone.endsWith('546300783'));
+  const name = isBoss ? 'אלון (הבוס)' : (leadName || 'לקוח');
   const interest = leadInterest || '';
 
   // Fetch available slots during business hours

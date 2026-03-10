@@ -32,8 +32,14 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
     // Skip group messages
     if (from.includes('@g.us')) return;
 
-    // Extract phone number — strip any @suffix (@c.us, @lid, etc.)
-    const phone = from.split('@')[0];
+    // Extract phone number — resolve real number from contact if LID format
+    let phone = from.split('@')[0];
+    try {
+      const contact = await msg.getContact();
+      if (contact?.number) {
+        phone = contact.number; // Real phone: 972546300783
+      }
+    } catch (_) {}
 
     // Register chat object for sending replies (handles LID format)
     try {

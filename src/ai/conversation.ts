@@ -108,7 +108,7 @@ export async function handleConversation(
   }
 
   // Build system prompt (async — fetches calendar slots)
-  const systemPrompt = await buildSystemPrompt(leadName, leadInterest);
+  const systemPrompt = await buildSystemPrompt(leadName, leadInterest, phone);
 
   // Fetch last 20 messages for context
   const historyRows = db
@@ -302,7 +302,7 @@ export async function sendFirstMessage(
 ): Promise<void> {
   const db = getDb();
 
-  const systemPrompt = await buildSystemPrompt(name, interest);
+  const systemPrompt = await buildSystemPrompt(name, interest, phone);
 
   // Generate personalized intro
   const introPrompt = interest
