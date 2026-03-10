@@ -1,14 +1,18 @@
 /**
  * Generate a professional PDF price quote using Puppeteer.
- * Renders an HTML template to PDF with Alon.dev branding.
+ * If a website URL is provided, scrapes it for branding (colors, logo, name)
+ * to create a personalized, branded quote. Otherwise uses Alon.dev defaults.
  */
 import puppeteer from 'puppeteer';
 import { createLogger } from '../utils/logger.js';
+import { getBusinessName, getTimezone } from '../db/tenant-config.js';
+import { scrapeWebsite, type ScrapedBranding } from './scrape-website.js';
 
 const log = createLogger('generate-quote');
 
 /**
  * Generate a PDF price quote and return the buffer.
+ * @param websiteUrl — optional URL to scrape for branding
  */
 export async function generateQuotePDF(
   leadName: string,
@@ -16,9 +20,49 @@ export async function generateQuotePDF(
   service: string,
   priceRange: string,
   details?: string,
+  websiteUrl?: string,
 ): Promise<Buffer> {
-  const today = new Date().toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
-  const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+  const tz = getTimezone();
+  const today = new Date().toLocaleDateString('he-IL', { timeZone: tz });
+  const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('he-IL', { timeZone: tz });
+  const businessName = getBusinessName();
+
+  // Scrape website if URL provided
+  let branding: ScrapedBranding | null = null;
+  if (websiteUrl) {
+    log.info({ websiteUrl }, 'scraping website for quote branding');
+    branding = await scrapeWebsite(websiteUrl);
+    // Only use if we got meaningful data
+    if (!branding.colors.length && !branding.logoBase64) {
+      branding = null;
+    }
+  }
+
+  // Color scheme: use scraped colors or defaults
+  const primaryColor = branding?.colors[0] || '#7C3AED';
+  const secondaryColor = branding?.colors[1] || '#06B6D4';
+
+  // Logo section
+  const logoHtml = branding?.logoBase64
+    ? `<img src="${branding.logoBase64}" alt="logo" style="max-height: 60px; max-width: 200px; object-fit: contain;" />`
+    : '';
+
+  // Screenshot section (hero image from client's site)
+  const screenshotHtml = branding?.screenshot
+    ? `<div class="screenshot-section">
+        <div class="section-title">האתר הנוכחי שלכם</div>
+        <div class="screenshot-container">
+          <img src="data:image/jpeg;base64,${branding.screenshot}" alt="website screenshot" />
+        </div>
+        <p class="screenshot-caption">צילום מסך מהאתר הנוכחי — נשדרג אותו למשהו מדהים!</p>
+       </div>`
+    : '';
+
+  // Client branding info
+  const clientBranding = branding?.businessName
+    ? `<p><strong>עסק:</strong> ${escapeHtml(branding.businessName)}</p>
+       ${branding.tagline ? `<p><strong>תיאור:</strong> ${escapeHtml(branding.tagline)}</p>` : ''}`
+    : '';
 
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -41,9 +85,15 @@ export async function generateQuotePDF(
       display: flex;
       justify-content: space-between;
       align-items: center;
-      border-bottom: 3px solid #7C3AED;
+      border-bottom: 3px solid ${primaryColor};
       padding-bottom: 20px;
       margin-bottom: 30px;
+    }
+
+    .logo-section {
+      display: flex;
+      align-items: center;
+      gap: 15px;
     }
 
     .logo-section h1 {
@@ -53,7 +103,7 @@ export async function generateQuotePDF(
     }
 
     .logo-section h1 span {
-      color: #7C3AED;
+      color: ${primaryColor};
     }
 
     .logo-section p {
@@ -62,8 +112,8 @@ export async function generateQuotePDF(
       margin-top: 4px;
     }
 
-    .quote-number {
-      background: #7C3AED;
+    .quote-badge {
+      background: ${primaryColor};
       color: white;
       padding: 8px 20px;
       border-radius: 20px;
@@ -96,7 +146,7 @@ export async function generateQuotePDF(
       background: #f8f6ff;
       border-radius: 12px;
       padding: 20px;
-      border-right: 4px solid #7C3AED;
+      border-right: 4px solid ${primaryColor};
     }
 
     .client-info p {
@@ -112,7 +162,7 @@ export async function generateQuotePDF(
       background: #f8f6ff;
       border-radius: 12px;
       padding: 20px;
-      border-right: 4px solid #06B6D4;
+      border-right: 4px solid ${secondaryColor};
     }
 
     .service-name {
@@ -131,12 +181,35 @@ export async function generateQuotePDF(
 
     .price-tag {
       display: inline-block;
-      background: linear-gradient(135deg, #7C3AED, #06B6D4);
+      background: linear-gradient(135deg, ${primaryColor}, ${secondaryColor});
       color: white;
       padding: 10px 24px;
       border-radius: 25px;
       font-size: 22px;
       font-weight: 900;
+    }
+
+    .screenshot-section {
+      margin-bottom: 25px;
+    }
+
+    .screenshot-container {
+      border-radius: 12px;
+      overflow: hidden;
+      border: 2px solid #eee;
+      margin-bottom: 8px;
+    }
+
+    .screenshot-container img {
+      width: 100%;
+      display: block;
+    }
+
+    .screenshot-caption {
+      font-size: 13px;
+      color: ${primaryColor};
+      font-weight: 500;
+      text-align: center;
     }
 
     .terms {
@@ -162,7 +235,7 @@ export async function generateQuotePDF(
     }
 
     .footer a {
-      color: #7C3AED;
+      color: ${primaryColor};
       text-decoration: none;
       font-weight: 500;
     }
@@ -173,15 +246,33 @@ export async function generateQuotePDF(
       gap: 30px;
       margin-top: 8px;
     }
+
+    .color-bar {
+      display: flex;
+      gap: 0;
+      height: 4px;
+      border-radius: 2px;
+      overflow: hidden;
+      margin-bottom: 30px;
+    }
+
+    .color-bar span {
+      flex: 1;
+    }
   </style>
 </head>
 <body>
+  ${branding?.colors.length ? `<div class="color-bar">${branding.colors.slice(0, 5).map(c => `<span style="background:${c}"></span>`).join('')}</div>` : ''}
+
   <div class="header">
     <div class="logo-section">
-      <h1>Alon<span>.dev</span></h1>
-      <p>טכנולוגיה ודיגיטל לעסקים | אדם + AI = צוות שלם</p>
+      ${logoHtml}
+      <div>
+        <h1>Alon<span>.dev</span></h1>
+        <p>טכנולוגיה ודיגיטל לעסקים | אדם + AI = צוות שלם</p>
+      </div>
     </div>
-    <div class="quote-number">הצעת מחיר</div>
+    <div class="quote-badge">הצעת מחיר</div>
   </div>
 
   <div class="date-row">
@@ -194,15 +285,31 @@ export async function generateQuotePDF(
     <div class="client-info">
       <p><strong>שם:</strong> ${escapeHtml(leadName)}</p>
       <p><strong>טלפון:</strong> ${formatPhone(phone)}</p>
+      ${clientBranding}
     </div>
   </div>
+
+  ${screenshotHtml}
 
   <div class="section">
     <div class="section-title">פירוט השירות</div>
     <div class="service-box">
       <div class="service-name">${escapeHtml(service)}</div>
       ${details ? `<div class="service-details">${escapeHtml(details)}</div>` : ''}
-      <div class="price-tag">₪${escapeHtml(priceRange)}</div>
+      <div class="price-tag">${escapeHtml(priceRange).startsWith('₪') ? '' : '₪'}${escapeHtml(priceRange)}</div>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">מה כולל?</div>
+    <div class="terms">
+      <ul>
+        <li>עיצוב מותאם אישית בהתאם למיתוג שלכם</li>
+        <li>פיתוח מלא — responsive לכל המכשירים</li>
+        <li>עד 2 סבבי תיקונים כלולים במחיר</li>
+        <li>אופטימיזציה למהירות ו-SEO בסיסי</li>
+        <li>הדרכה על ניהול התוכן</li>
+      </ul>
     </div>
   </div>
 
@@ -213,18 +320,17 @@ export async function generateQuotePDF(
         <li>ההצעה תקפה ל-7 ימים מתאריך ההנפקה.</li>
         <li>תשלום: 50% מקדמה בתחילת העבודה, 50% בסיום.</li>
         <li>זמן אספקה יסוכם לאחר אפיון מפורט.</li>
-        <li>כולל עד 2 סבבי תיקונים. תיקונים נוספים בתשלום.</li>
         <li>המחיר לא כולל מע"מ.</li>
       </ul>
     </div>
   </div>
 
   <div class="footer">
-    <p>Alon.dev — שירותי טכנולוגיה ודיגיטל</p>
+    <p>${escapeHtml(businessName)} — שירותי טכנולוגיה ודיגיטל</p>
     <div class="contact-row">
-      <span>📞 054-630-0783</span>
-      <span>📧 alon12@gmail.com</span>
-      <span>🌐 alon-dev.vercel.app</span>
+      <span>054-630-0783</span>
+      <span>alon12@gmail.com</span>
+      <span>alon-dev.vercel.app</span>
     </div>
   </div>
 </body>
@@ -247,7 +353,10 @@ export async function generateQuotePDF(
       margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
     });
     const pdfBuffer = Buffer.from(pdfUint8);
-    log.info({ leadName, service, price: priceRange }, 'PDF quote generated');
+    log.info(
+      { leadName, service, price: priceRange, hasWebsite: !!websiteUrl, hasBranding: !!branding },
+      'PDF quote generated',
+    );
     return pdfBuffer;
   } finally {
     await browser.close();
@@ -263,7 +372,6 @@ function escapeHtml(text: string): string {
 }
 
 function formatPhone(phone: string): string {
-  // 972546300783 → 054-630-0783
   if (phone.startsWith('972')) {
     const local = '0' + phone.slice(3);
     return local.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');

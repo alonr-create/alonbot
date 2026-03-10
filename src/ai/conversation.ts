@@ -438,10 +438,10 @@ async function processBossMarkers(
     );
   }
 
-  // ── [QUOTE:name:service:price] — generate and send PDF quote ──
-  const quoteMatch = cleaned.match(/\[QUOTE:([^:]+):([^:]+):([^\]]+)\]/);
+  // ── [QUOTE:name:service:price] or [QUOTE:name:service:price:url] — generate and send PDF quote ──
+  const quoteMatch = cleaned.match(/\[QUOTE:([^:]+):([^:]+):([^:\]]+)(?::([^\]]+))?\]/);
   if (quoteMatch) {
-    const [, quoteName, quoteService, quotePrice] = quoteMatch;
+    const [, quoteName, quoteService, quotePrice, quoteUrl] = quoteMatch;
     cleaned = cleaned.replace(/\[QUOTE:[^\]]+\]/, '').trim();
 
     // Find lead by name to get their phone
@@ -451,7 +451,11 @@ async function processBossMarkers(
 
     if (targetLead) {
       const targetJid = targetLead.phone + '@s.whatsapp.net';
-      generateQuotePDF(quoteName.trim(), targetLead.phone, quoteService.trim(), quotePrice.trim())
+      if (quoteUrl) {
+        // Notify boss that we're scraping the website first
+        sendWithTyping(sock, jid, `🔍 סורק את ${quoteUrl.trim()} למיתוג...`).catch(() => {});
+      }
+      generateQuotePDF(quoteName.trim(), targetLead.phone, quoteService.trim(), quotePrice.trim(), undefined, quoteUrl?.trim())
         .then(async (pdfBuffer) => {
           try {
             await sock.sendDocument(
