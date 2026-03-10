@@ -1,7 +1,9 @@
 import { getDb } from '../db/index.js';
 import { notifyAlon } from '../notifications/telegram.js';
+import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { updateMondayStatus } from '../monday/api.js';
 import { generateEscalationSummary } from './summary.js';
+import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
 
@@ -64,7 +66,7 @@ export function shouldEscalate(
 /**
  * Execute full escalation flow:
  * 1. Generate conversation summary
- * 2. Notify Alon via Telegram
+ * 2. Notify Alon via WhatsApp (primary) + Telegram (backup)
  * 3. Update lead status in DB and Monday.com
  * 4. Send WhatsApp message to lead
  *
@@ -82,7 +84,28 @@ export async function triggerEscalation(
     // 1. Generate summary
     const summary = await generateEscalationSummary(messages, leadName);
 
-    // 2. Notify Alon via Telegram
+    // 2. Notify Alon via WhatsApp (primary channel)
+    const alonJid = `${config.alonPhone}@s.whatsapp.net`;
+    const whatsappAlert = [
+      `⚠️ *העברה לטיפול ידני*`,
+      ``,
+      `*שם:* ${leadName}`,
+      `*טלפון:* ${phone}`,
+      ``,
+      `*סיכום:*`,
+      summary,
+      ``,
+      `💬 תכתוב לו ישירות: wa.me/${phone}`,
+    ].join('\n');
+
+    try {
+      await sendWithTyping(sock, alonJid, whatsappAlert);
+      log.info({ phone, leadName }, 'escalation WhatsApp alert sent to Alon');
+    } catch (err) {
+      log.error({ err }, 'failed to send WhatsApp alert to Alon');
+    }
+
+    // 2b. Also try Telegram as backup (if configured)
     const telegramMessage = [
       `<b>העברה לטיפול ידני</b>`,
       ``,
@@ -92,8 +115,9 @@ export async function triggerEscalation(
       `<b>סיכום:</b>`,
       summary,
     ].join('\n');
-
-    await notifyAlon(telegramMessage);
+    notifyAlon(telegramMessage).catch(() => {
+      // Telegram is backup — silently ignore failures
+    });
 
     // 3. Update lead status in DB
     const db = getDb();
