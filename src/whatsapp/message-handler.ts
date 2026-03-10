@@ -5,13 +5,16 @@ import { addMessageToBatch } from './message-batcher.js';
 import { handleConversation, sendFirstMessage } from '../ai/conversation.js';
 import { setOnNewLeadCallback } from '../monday/webhook-handler.js';
 import { cancelFollowUps } from '../follow-up/follow-up-db.js';
+import { transcribeAudio } from '../ai/voice-transcribe.js';
 import type { BotAdapter } from './connection.js';
 import { registerChat } from './connection.js';
 
 const log = createLogger('message-handler');
 
-const MEDIA_RESPONSE =
-  'קיבלתי! כרגע אני עובד רק עם הודעות טקסט, אבל אשמח לעזור - ספר לי במילים מה אתה מחפש';
+const IMAGE_MEDIA_RESPONSE =
+  'קיבלתי! כרגע אני עובד רק עם הודעות טקסט ואודיו, אבל אשמח לעזור - ספר לי במילים מה אתה מחפש';
+const VOICE_FAIL_RESPONSE =
+  'קיבלתי את ההודעה הקולית אבל לא הצלחתי לתמלל אותה. אפשר לנסות שוב או לכתוב בטקסט?';
 
 /**
  * Set up the incoming message handler on the whatsapp-web.js client.
@@ -58,19 +61,52 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
 
     // Handle media messages
     if (msg.hasMedia) {
-      log.info({ phone }, 'media message received');
-      try {
-        await sendWithTyping(adapter, jid, MEDIA_RESPONSE);
-      } catch (err) {
-        log.error({ err, phone }, 'failed to send media response');
+      const msgType: string = msg.type ?? '';
+      const isVoice = msgType === 'ptt' || msgType === 'audio';
+
+      if (isVoice) {
+        log.info({ phone, type: msgType }, 'voice message received — transcribing');
+        try {
+          const media = await msg.downloadMedia();
+          if (media?.data) {
+            const audioBuffer = Buffer.from(media.data, 'base64');
+            const transcribed = await transcribeAudio(audioBuffer, media.mimetype);
+            if (transcribed) {
+              // Route transcribed text through the normal flow
+              log.info({ phone, preview: transcribed.slice(0, 50) }, 'voice transcribed');
+              // Fall through to text handling below
+              msg._transcribedText = transcribed;
+            } else {
+              await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+              return;
+            }
+          } else {
+            await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+            return;
+          }
+        } catch (err) {
+          log.error({ err, phone }, 'voice transcription failed');
+          await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+          return;
+        }
+      } else {
+        // Non-voice media (images, video, documents)
+        log.info({ phone, type: msgType }, 'non-voice media received');
+        try {
+          await sendWithTyping(adapter, jid, IMAGE_MEDIA_RESPONSE);
+        } catch (err) {
+          log.error({ err, phone }, 'failed to send media response');
+        }
+        return;
       }
-      return;
     }
 
-    const text: string = msg.body ?? '';
+    const text: string = msg._transcribedText ?? msg.body ?? '';
     if (!text.trim()) return;
 
-    log.info({ phone, preview: text.slice(0, 50) }, 'incoming message');
+    const isVoiceMessage = !!msg._transcribedText;
+
+    log.info({ phone, preview: text.slice(0, 50), voice: isVoiceMessage }, 'incoming message');
 
     const db = getDb();
 

@@ -19,4 +19,5 @@ export const config = {
   mondayBoardId: process.env.MONDAY_BOARD_ID || '',
   mondayStatusColumnId: process.env.MONDAY_STATUS_COLUMN_ID || 'status',
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
+  openaiApiKey: process.env.OPENAI_API_KEY || '',
 } as const;
