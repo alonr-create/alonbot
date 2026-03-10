@@ -340,13 +340,20 @@ export async function generateQuotePDF(
 
   const browser = await puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'],
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-gpu',
+      '--disable-dev-shm-usage',
+      '--single-process',
+      '--no-zygote',
+    ],
     ...(execPath ? { executablePath: execPath } : {}),
   });
 
   try {
     const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
+    await page.setContent(html, { waitUntil: 'domcontentloaded' });
     const pdfUint8 = await page.pdf({
       format: 'A4',
       printBackground: true,
