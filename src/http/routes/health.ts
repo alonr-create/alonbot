@@ -4,6 +4,14 @@ import { getDb, checkDbHealth } from '../../db/index.js';
 
 export const healthRouter = Router();
 
+// Admin: clear conversation history for a phone number
+healthRouter.post('/admin/clear-history/:phone', (req, res) => {
+  const phone = req.params.phone;
+  const db = getDb();
+  const result = db.prepare('DELETE FROM messages WHERE phone = ?').run(phone);
+  res.json({ ok: true, deleted: result.changes, phone });
+});
+
 healthRouter.get('/health', (_req, res) => {
   const db = getDb();
   const waStatus = getConnectionStatus();
