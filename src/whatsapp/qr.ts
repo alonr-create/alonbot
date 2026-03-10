@@ -3,13 +3,9 @@ import { EventEmitter } from 'events';
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
 let currentQR: string | null = null;
+let currentPairingCode: string | null = null;
 let connectionStatus: ConnectionStatus = 'disconnected';
 
-/**
- * EventEmitter for QR/connection state changes.
- * Emits 'qr' with data URL when new QR available.
- * Emits 'status' with ConnectionStatus on status change.
- */
 export const qrEvents = new EventEmitter();
 
 export function setQR(dataUrl: string): void {
@@ -19,11 +15,21 @@ export function setQR(dataUrl: string): void {
 
 export function clearQR(): void {
   currentQR = null;
+  currentPairingCode = null;
   qrEvents.emit('qr', null);
 }
 
 export function getCurrentQR(): string | null {
   return currentQR;
+}
+
+export function setPairingCode(code: string): void {
+  currentPairingCode = code;
+  qrEvents.emit('pairing-code', code);
+}
+
+export function getPairingCode(): string | null {
+  return currentPairingCode;
 }
 
 export function setConnectionStatus(status: ConnectionStatus): void {

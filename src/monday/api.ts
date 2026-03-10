@@ -44,14 +44,10 @@ export async function fetchMondayItem(itemId: number): Promise<MondayItem> {
 
   const columns = item.column_values;
   const phoneCol = columns.find(
-    (c) => c.id === 'phone' || c.id === 'phone_number' || c.id === 'טלפון',
+    (c) => c.id.startsWith('phone') || c.id === 'טלפון',
   );
   const interestCol = columns.find(
-    (c) =>
-      c.id === 'service' ||
-      c.id === 'interest' ||
-      c.id === 'שירות' ||
-      c.id === 'text',
+    (c) => c.id.startsWith('dropdown') || c.id.startsWith('service') || c.id === 'שירות',
   );
 
   return {

@@ -1,4 +1,4 @@
-import type { WASocket } from '@whiskeysockets/baileys';
+import type { BotAdapter } from '../whatsapp/connection.js';
 import { getDb } from '../db/index.js';
 import { generateResponse } from './claude-client.js';
 import { buildSystemPrompt } from './system-prompt.js';
@@ -42,7 +42,7 @@ interface MessageRow {
 export async function handleConversation(
   phone: string,
   batchedMessages: string[],
-  sock: WASocket,
+  sock: BotAdapter,
 ): Promise<void> {
   const db = getDb();
 
@@ -298,7 +298,7 @@ export async function sendFirstMessage(
   phone: string,
   name: string,
   interest: string,
-  sock: WASocket,
+  sock: BotAdapter,
 ): Promise<void> {
   const db = getDb();
 

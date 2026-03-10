@@ -37,9 +37,9 @@ async function main() {
     log.info('shutting down...');
 
     try {
-      sock.end(undefined);
+      (sock as any)._wwebClient?.destroy();
     } catch {
-      // socket may already be closed
+      // client may already be closed
     }
 
     try {

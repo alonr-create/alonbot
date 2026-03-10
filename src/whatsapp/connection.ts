@@ -1,138 +1,136 @@
-import makeWASocket, {
-  useMultiFileAuthState,
-  DisconnectReason,
-} from '@whiskeysockets/baileys';
-import { Boom } from '@hapi/boom';
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg;
 import QRCode from 'qrcode';
-import { mkdirSync, rmSync } from 'fs';
+import { mkdirSync } from 'fs';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
-import { setQR, clearQR, setConnectionStatus, getConnectionStatus } from './qr.js';
+import { setQR, clearQR, setConnectionStatus } from './qr.js';
 import { setupMessageHandler } from './message-handler.js';
 import { notifyAlon } from '../notifications/telegram.js';
-import { notifyAlonWhatsApp } from '../notifications/whatsapp-notify.js';
-
-import type { ConnectionState } from '@whiskeysockets/baileys';
 
 const log = createLogger('whatsapp');
 
-let sock: ReturnType<typeof makeWASocket> | null = null;
-let retryCount = 0;
-const MAX_RETRIES = 10;
+let client: InstanceType<typeof Client> | null = null;
 let hasConnectedOnce = false;
 
-/**
- * Connect to WhatsApp via Baileys.
- * Shows QR in terminal, generates data URL for web page, persists session,
- * auto-reconnects with exponential backoff on transient disconnects.
- */
-export async function connectWhatsApp(): Promise<ReturnType<typeof makeWASocket>> {
-  // Ensure session directory exists
-  mkdirSync(config.sessionDir, { recursive: true });
+// Chat registry: phone number -> wweb.js chat object
+// Populated when messages arrive so we can reply via the correct chat object
+const chatRegistry = new Map<string, any>();
 
-  const { state, saveCreds } = await useMultiFileAuthState(config.sessionDir);
-
-  sock = makeWASocket({
-    auth: state,
-    printQRInTerminal: true,
-    browser: ['AlonDev Sales', 'Chrome', '22.0'],
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      try {
-        const dataUrl = await QRCode.toDataURL(qr);
-        setQR(dataUrl);
-        setConnectionStatus('connecting');
-        log.info('QR code generated -- scan with WhatsApp');
-      } catch (err) {
-        log.error({ err }, 'failed to generate QR data URL');
-      }
-    }
-
-    if (connection === 'open') {
-      clearQR();
-      setConnectionStatus('connected');
-      retryCount = 0;
-
-      if (hasConnectedOnce) {
-        log.info('reconnected to WhatsApp');
-        await notifyAlon('<b>WhatsApp reconnected</b> successfully');
-      } else {
-        log.info('connected to WhatsApp');
-        hasConnectedOnce = true;
-      }
-    }
-
-    if (connection === 'close') {
-      setConnectionStatus('disconnected');
-      const reason = (lastDisconnect?.error as Boom)?.output?.statusCode;
-
-      if (reason === DisconnectReason.loggedOut) {
-        log.warn('session logged out -- clearing session and re-showing QR');
-
-        // Delete session directory
-        try {
-          rmSync(config.sessionDir, { recursive: true, force: true });
-        } catch (err) {
-          log.error({ err }, 'failed to delete session directory');
-        }
-
-        // Notify Alon on both channels
-        await notifyAlon(
-          '<b>WhatsApp session logged out</b> -- QR re-scan needed at /qr'
-        );
-        if (sock) {
-          await notifyAlonWhatsApp(
-            sock,
-            'WhatsApp session logged out -- QR re-scan needed'
-          );
-        }
-
-        // Reconnect to show new QR
-        hasConnectedOnce = false;
-        retryCount = 0;
-        setTimeout(() => {
-          connectWhatsApp().catch((err) =>
-            log.error({ err }, 'reconnect after logout failed')
-          );
-        }, 2000);
-      } else if (retryCount < MAX_RETRIES) {
-        const delay = Math.min(5000 * Math.pow(2, retryCount), 60000);
-        retryCount++;
-        log.info(
-          { retryCount, maxRetries: MAX_RETRIES, delay },
-          'reconnecting with exponential backoff'
-        );
-        setTimeout(() => {
-          connectWhatsApp().catch((err) =>
-            log.error({ err }, 'reconnect failed')
-          );
-        }, delay);
-      } else {
-        log.error('max retries reached -- manual intervention needed');
-        await notifyAlon(
-          '<b>WhatsApp reconnection failed</b> after 10 attempts -- manual intervention needed'
-        );
-      }
-    }
-  });
-
-  // Set up incoming message handler
-  setupMessageHandler(sock);
-
-  return sock;
+export function registerChat(phone: string, chat: any): void {
+  chatRegistry.set(phone, chat);
 }
 
 /**
- * Get the current WhatsApp socket instance.
+ * Adapter: wraps whatsapp-web.js Client with a Baileys-compatible interface.
+ * Uses chat registry to send via chat.sendMessage() which handles LID format.
  */
-export function getSocket(): ReturnType<typeof makeWASocket> | null {
-  return sock;
+function createAdapter(wwebClient: InstanceType<typeof Client>) {
+  return {
+    _wwebClient: wwebClient,
+
+    async sendMessage(jid: string, content: { text: string }) {
+      // Extract phone from jid (strip any @suffix)
+      const phone = jid.split('@')[0];
+      const chat = chatRegistry.get(phone);
+      if (chat) {
+        await chat.sendMessage(content.text);
+      } else {
+        // Fallback: try direct send with @c.us format
+        const chatId = jid.includes('@c.us') ? jid : `${phone}@c.us`;
+        await wwebClient.sendMessage(chatId, content.text);
+      }
+    },
+
+    async sendPresenceUpdate(state: 'composing' | 'paused', jid: string) {
+      try {
+        const phone = jid.split('@')[0];
+        const chat = chatRegistry.get(phone);
+        if (chat) {
+          if (state === 'composing') {
+            await chat.sendStateTyping();
+          } else {
+            await chat.clearState();
+          }
+        }
+      } catch (_) {
+        // presence updates are best-effort
+      }
+    },
+  };
+}
+
+export type BotAdapter = ReturnType<typeof createAdapter>;
+
+let adapter: BotAdapter | null = null;
+
+export async function connectWhatsApp(): Promise<BotAdapter> {
+  mkdirSync(config.sessionDir, { recursive: true });
+
+  const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
+  const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
+  client = new Client({
+    authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
+    puppeteer: {
+      headless: true,
+      args: puppeteerArgs,
+      ...(execPath ? { executablePath: execPath } : {}),
+    },
+  });
+
+  client.on('qr', async (qr: string) => {
+    try {
+      const dataUrl = await QRCode.toDataURL(qr);
+      setQR(dataUrl);
+      setConnectionStatus('connecting');
+      log.info('QR code ready — open http://localhost:3000/qr to scan');
+    } catch (err) {
+      log.error({ err }, 'failed to generate QR');
+    }
+  });
+
+  client.on('ready', async () => {
+    clearQR();
+    setConnectionStatus('connected');
+    log.info('connected to WhatsApp');
+
+    if (hasConnectedOnce) {
+      await notifyAlon('<b>WhatsApp reconnected</b> successfully');
+    }
+    hasConnectedOnce = true;
+  });
+
+  client.on('authenticated', () => {
+    log.info('WhatsApp authenticated');
+  });
+
+  client.on('auth_failure', async (msg: string) => {
+    log.error({ msg }, 'WhatsApp auth failure');
+    setConnectionStatus('disconnected');
+    await notifyAlon(`<b>WhatsApp auth failed</b>: ${msg}`);
+  });
+
+  client.on('disconnected', async (reason: string) => {
+    log.warn({ reason }, 'WhatsApp disconnected — reconnecting in 5s');
+    setConnectionStatus('disconnected');
+    await notifyAlon(`<b>WhatsApp disconnected</b>: ${reason}`);
+    setTimeout(
+      () => connectWhatsApp().catch(err => log.error({ err }, 'reconnect failed')),
+      5000
+    );
+  });
+
+  adapter = createAdapter(client);
+  setupMessageHandler(client, adapter);
+
+  await client.initialize();
+
+  return adapter;
+}
+
+export function getAdapter(): BotAdapter | null {
+  return adapter;
 }
 
 export { getConnectionStatus } from './qr.js';
