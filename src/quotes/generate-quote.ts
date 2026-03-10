@@ -1,19 +1,16 @@
 /**
- * Generate a professional PDF price quote using Puppeteer.
- * If a website URL is provided, scrapes it for branding (colors, logo, name)
- * to create a personalized, branded quote. Otherwise uses Alon.dev defaults.
+ * Generate a premium PDF price quote using Puppeteer.
+ * Dark theme, gradients, glassmorphism, optional AI-generated hero image.
+ * If a website URL is provided, scrapes it for branding (colors, logo, name).
  */
 import puppeteer from 'puppeteer';
 import { createLogger } from '../utils/logger.js';
 import { getBusinessName, getTimezone } from '../db/tenant-config.js';
 import { scrapeWebsite, type ScrapedBranding } from './scrape-website.js';
+import { generateHeroImage } from './generate-hero-image.js';
 
 const log = createLogger('generate-quote');
 
-/**
- * Generate a PDF price quote and return the buffer.
- * @param websiteUrl — optional URL to scrape for branding
- */
 export async function generateQuotePDF(
   leadName: string,
   phone: string,
@@ -32,307 +29,494 @@ export async function generateQuotePDF(
   if (websiteUrl) {
     log.info({ websiteUrl }, 'scraping website for quote branding');
     branding = await scrapeWebsite(websiteUrl);
-    // Only use if we got meaningful data
     if (!branding.colors.length && !branding.logoBase64) {
       branding = null;
     }
   }
 
-  // Color scheme: use scraped colors or defaults
-  const primaryColor = branding?.colors[0] || '#7C3AED';
-  const secondaryColor = branding?.colors[1] || '#06B6D4';
+  // Color scheme
+  const p = branding?.colors[0] || '#7C3AED';
+  const s = branding?.colors[1] || '#06B6D4';
+  const accent = branding?.colors[2] || '#F59E0B';
 
-  // Logo section
+  // Generate AI hero image (runs in parallel concept — but sequential here)
+  const heroImage = await generateHeroImage(service, leadName, [p, s]);
+
+  // Logo
   const logoHtml = branding?.logoBase64
-    ? `<img src="${branding.logoBase64}" alt="logo" style="max-height: 60px; max-width: 200px; object-fit: contain;" />`
+    ? `<img src="${branding.logoBase64}" class="client-logo" />`
     : '';
 
-  // Screenshot section (hero image from client's site)
+  // Screenshot
   const screenshotHtml = branding?.screenshot
-    ? `<div class="screenshot-section">
-        <div class="section-title">האתר הנוכחי שלכם</div>
-        <div class="screenshot-container">
-          <img src="data:image/jpeg;base64,${branding.screenshot}" alt="website screenshot" />
+    ? `<div class="screenshot-block">
+        <div class="label">האתר הנוכחי שלכם</div>
+        <div class="screenshot-frame">
+          <div class="browser-dots"><span></span><span></span><span></span></div>
+          <img src="data:image/jpeg;base64,${branding.screenshot}" />
         </div>
-        <p class="screenshot-caption">צילום מסך מהאתר הנוכחי — נשדרג אותו למשהו מדהים!</p>
+        <p class="screenshot-note">נשדרג אותו למשהו מדהים!</p>
        </div>`
     : '';
 
-  // Client branding info
-  const clientBranding = branding?.businessName
-    ? `<p><strong>עסק:</strong> ${escapeHtml(branding.businessName)}</p>
-       ${branding.tagline ? `<p><strong>תיאור:</strong> ${escapeHtml(branding.tagline)}</p>` : ''}`
+  // Client branding
+  const clientExtra = branding?.businessName
+    ? `<div class="info-chip">${esc(branding.businessName)}</div>
+       ${branding.tagline ? `<div class="info-chip muted">${esc(branding.tagline.slice(0, 80))}</div>` : ''}`
     : '';
+
+  // Hero section
+  const heroHtml = heroImage
+    ? `<div class="hero"><img src="${heroImage}" /></div>`
+    : `<div class="hero hero-gradient"></div>`;
+
+  // Determine service icon SVG based on keywords
+  const serviceIcon = getServiceIcon(service);
+
+  // "What's included" items — dynamic based on service type
+  const includes = getServiceIncludes(service);
 
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+<meta charset="UTF-8">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
 
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+:root {
+  --p: ${p};
+  --s: ${s};
+  --accent: ${accent};
+}
 
-    body {
-      font-family: 'Heebo', sans-serif;
-      background: #fff;
-      color: #1a1a2e;
-      padding: 40px;
-      direction: rtl;
-    }
+* { margin: 0; padding: 0; box-sizing: border-box; }
 
-    .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      border-bottom: 3px solid ${primaryColor};
-      padding-bottom: 20px;
-      margin-bottom: 30px;
-    }
+body {
+  font-family: 'Heebo', sans-serif;
+  background: #0B0F1A;
+  color: #E5E7EB;
+  direction: rtl;
+  min-height: 100vh;
+}
 
-    .logo-section {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
+/* ── Hero ── */
+.hero {
+  height: 160px;
+  overflow: hidden;
+  position: relative;
+}
+.hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.hero-gradient {
+  background: linear-gradient(135deg, ${p}40, ${s}40, ${p}20);
+  position: relative;
+}
+.hero-gradient::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 20% 50%, ${p}60 0%, transparent 50%),
+    radial-gradient(circle at 80% 30%, ${s}40 0%, transparent 40%),
+    radial-gradient(circle at 50% 80%, ${accent}30 0%, transparent 35%);
+}
+.hero::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background: linear-gradient(transparent, #0B0F1A);
+}
 
-    .logo-section h1 {
-      font-size: 32px;
-      font-weight: 900;
-      color: #1A0E3C;
-    }
+/* ── Main content ── */
+.content {
+  padding: 0 40px 40px;
+  margin-top: -40px;
+  position: relative;
+  z-index: 1;
+}
 
-    .logo-section h1 span {
-      color: ${primaryColor};
-    }
+/* ── Header bar ── */
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 30px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.brand-icon {
+  width: 48px;
+  height: 48px;
+  background: linear-gradient(135deg, var(--p), var(--s));
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  font-weight: 900;
+  color: white;
+  box-shadow: 0 4px 20px ${p}40;
+}
+.brand h1 {
+  font-size: 28px;
+  font-weight: 900;
+  color: #fff;
+}
+.brand h1 span { color: var(--p); }
+.brand p {
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 2px;
+}
+.badge {
+  background: linear-gradient(135deg, var(--p), var(--s));
+  color: white;
+  padding: 8px 22px;
+  border-radius: 20px;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  box-shadow: 0 4px 15px ${p}50;
+}
+.dates {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: #6B7280;
+  margin-bottom: 24px;
+  padding: 0 4px;
+}
 
-    .logo-section p {
-      color: #666;
-      font-size: 14px;
-      margin-top: 4px;
-    }
+/* ── Glass cards ── */
+.glass {
+  background: rgba(255,255,255,0.04);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+.glass-accent {
+  border-right: 3px solid var(--p);
+}
+.glass-service {
+  border-right: 3px solid var(--s);
+  position: relative;
+  overflow: hidden;
+}
+.glass-service::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle, ${s}08, transparent 50%);
+}
 
-    .quote-badge {
-      background: ${primaryColor};
-      color: white;
-      padding: 8px 20px;
-      border-radius: 20px;
-      font-weight: 700;
-      font-size: 14px;
-    }
+.label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--p);
+  font-weight: 700;
+  margin-bottom: 14px;
+}
 
-    .date-row {
-      display: flex;
-      justify-content: space-between;
-      margin-bottom: 30px;
-      font-size: 14px;
-      color: #555;
-    }
+/* ── Client info ── */
+.client-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.client-logo {
+  max-height: 50px;
+  max-width: 140px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+.client-details p {
+  font-size: 14px;
+  margin-bottom: 4px;
+  color: #D1D5DB;
+}
+.client-details strong { color: #fff; }
+.info-chip {
+  display: inline-block;
+  background: rgba(255,255,255,0.06);
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #9CA3AF;
+  margin-top: 8px;
+  margin-left: 6px;
+}
+.info-chip.muted { color: #6B7280; font-size: 11px; }
 
-    .section {
-      margin-bottom: 25px;
-    }
+/* ── Service ── */
+.service-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+  position: relative;
+}
+.service-icon {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, ${s}30, ${p}30);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.service-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke: var(--s);
+  fill: none;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.service-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #fff;
+}
+.service-desc {
+  color: #9CA3AF;
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 16px;
+  position: relative;
+}
+.price-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  position: relative;
+}
+.price-tag {
+  background: linear-gradient(135deg, var(--p), var(--s));
+  color: white;
+  padding: 12px 32px;
+  border-radius: 30px;
+  font-size: 26px;
+  font-weight: 900;
+  box-shadow: 0 6px 25px ${p}40;
+  letter-spacing: 0.5px;
+}
+.price-note {
+  font-size: 12px;
+  color: #6B7280;
+}
 
-    .section-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: #1A0E3C;
-      margin-bottom: 10px;
-      padding-bottom: 5px;
-      border-bottom: 1px solid #eee;
-    }
+/* ── Screenshot ── */
+.screenshot-block { margin-bottom: 20px; }
+.screenshot-frame {
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: #111827;
+}
+.browser-dots {
+  display: flex;
+  gap: 6px;
+  padding: 10px 14px;
+  background: #1F2937;
+}
+.browser-dots span {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+.browser-dots span:nth-child(1) { background: #EF4444; }
+.browser-dots span:nth-child(2) { background: #F59E0B; }
+.browser-dots span:nth-child(3) { background: #10B981; }
+.screenshot-frame img {
+  width: 100%;
+  display: block;
+}
+.screenshot-note {
+  font-size: 12px;
+  color: var(--s);
+  text-align: center;
+  margin-top: 8px;
+  font-weight: 500;
+}
 
-    .client-info {
-      background: #f8f6ff;
-      border-radius: 12px;
-      padding: 20px;
-      border-right: 4px solid ${primaryColor};
-    }
+/* ── Includes grid ── */
+.includes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.include-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 10px;
+  font-size: 13px;
+  color: #D1D5DB;
+}
+.include-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--p), var(--s));
+  flex-shrink: 0;
+}
 
-    .client-info p {
-      margin-bottom: 6px;
-      font-size: 15px;
-    }
+/* ── Terms ── */
+.terms-list {
+  list-style: none;
+  font-size: 12px;
+  color: #6B7280;
+  line-height: 2;
+}
+.terms-list li::before {
+  content: '•';
+  color: var(--p);
+  margin-left: 8px;
+  font-weight: 700;
+}
 
-    .client-info strong {
-      color: #1A0E3C;
-    }
+/* ── Footer ── */
+.footer {
+  margin-top: 30px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+  text-align: center;
+}
+.footer-brand {
+  font-size: 13px;
+  color: #6B7280;
+  margin-bottom: 6px;
+}
+.footer-contacts {
+  display: flex;
+  justify-content: center;
+  gap: 24px;
+  font-size: 12px;
+  color: #4B5563;
+}
+.footer-contacts span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.footer-tagline {
+  margin-top: 12px;
+  font-size: 11px;
+  color: #374151;
+  letter-spacing: 1px;
+}
 
-    .service-box {
-      background: #f8f6ff;
-      border-radius: 12px;
-      padding: 20px;
-      border-right: 4px solid ${secondaryColor};
-    }
-
-    .service-name {
-      font-size: 20px;
-      font-weight: 700;
-      color: #1A0E3C;
-      margin-bottom: 8px;
-    }
-
-    .service-details {
-      color: #555;
-      font-size: 14px;
-      line-height: 1.6;
-      margin-bottom: 12px;
-    }
-
-    .price-tag {
-      display: inline-block;
-      background: linear-gradient(135deg, ${primaryColor}, ${secondaryColor});
-      color: white;
-      padding: 10px 24px;
-      border-radius: 25px;
-      font-size: 22px;
-      font-weight: 900;
-    }
-
-    .screenshot-section {
-      margin-bottom: 25px;
-    }
-
-    .screenshot-container {
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #eee;
-      margin-bottom: 8px;
-    }
-
-    .screenshot-container img {
-      width: 100%;
-      display: block;
-    }
-
-    .screenshot-caption {
-      font-size: 13px;
-      color: ${primaryColor};
-      font-weight: 500;
-      text-align: center;
-    }
-
-    .terms {
-      background: #fafafa;
-      border-radius: 12px;
-      padding: 20px;
-      font-size: 13px;
-      color: #777;
-      line-height: 1.8;
-    }
-
-    .terms li {
-      margin-bottom: 4px;
-    }
-
-    .footer {
-      margin-top: 40px;
-      padding-top: 20px;
-      border-top: 2px solid #eee;
-      text-align: center;
-      color: #999;
-      font-size: 13px;
-    }
-
-    .footer a {
-      color: ${primaryColor};
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .contact-row {
-      display: flex;
-      justify-content: center;
-      gap: 30px;
-      margin-top: 8px;
-    }
-
-    .color-bar {
-      display: flex;
-      gap: 0;
-      height: 4px;
-      border-radius: 2px;
-      overflow: hidden;
-      margin-bottom: 30px;
-    }
-
-    .color-bar span {
-      flex: 1;
-    }
-  </style>
+/* ── Decorative ── */
+.glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.15;
+  pointer-events: none;
+}
+</style>
 </head>
 <body>
-  ${branding?.colors.length ? `<div class="color-bar">${branding.colors.slice(0, 5).map(c => `<span style="background:${c}"></span>`).join('')}</div>` : ''}
 
-  <div class="header">
-    <div class="logo-section">
-      ${logoHtml}
+${heroHtml}
+
+<div class="content">
+  <div class="header-bar">
+    <div class="brand">
+      <div class="brand-icon">A</div>
       <div>
         <h1>Alon<span>.dev</span></h1>
-        <p>טכנולוגיה ודיגיטל לעסקים | אדם + AI = צוות שלם</p>
+        <p>אדם + AI = צוות שלם</p>
       </div>
     </div>
-    <div class="quote-badge">הצעת מחיר</div>
+    <div class="badge">הצעת מחיר</div>
   </div>
 
-  <div class="date-row">
+  <div class="dates">
     <span>תאריך: ${today}</span>
-    <span>תוקף ההצעה: ${validUntil}</span>
+    <span>תוקף: ${validUntil}</span>
   </div>
 
-  <div class="section">
-    <div class="section-title">פרטי הלקוח</div>
-    <div class="client-info">
-      <p><strong>שם:</strong> ${escapeHtml(leadName)}</p>
-      <p><strong>טלפון:</strong> ${formatPhone(phone)}</p>
-      ${clientBranding}
+  <!-- Client Info -->
+  <div class="glass glass-accent">
+    <div class="label">פרטי הלקוח</div>
+    <div class="client-row">
+      ${logoHtml}
+      <div class="client-details">
+        <p><strong>${esc(leadName)}</strong></p>
+        <p>${formatPhone(phone)}</p>
+      </div>
     </div>
+    ${clientExtra}
   </div>
 
   ${screenshotHtml}
 
-  <div class="section">
-    <div class="section-title">פירוט השירות</div>
-    <div class="service-box">
-      <div class="service-name">${escapeHtml(service)}</div>
-      ${details ? `<div class="service-details">${escapeHtml(details)}</div>` : ''}
-      <div class="price-tag">${escapeHtml(priceRange).startsWith('₪') ? '' : '₪'}${escapeHtml(priceRange)}</div>
+  <!-- Service -->
+  <div class="glass glass-service">
+    <div class="label">פירוט השירות</div>
+    <div class="service-header">
+      <div class="service-icon">${serviceIcon}</div>
+      <div class="service-name">${esc(service)}</div>
+    </div>
+    ${details ? `<div class="service-desc">${esc(details)}</div>` : ''}
+    <div class="price-row">
+      <div class="price-tag">${esc(priceRange).startsWith('₪') ? '' : '₪'}${esc(priceRange)}</div>
+      <div class="price-note">לא כולל מע"מ</div>
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">מה כולל?</div>
-    <div class="terms">
-      <ul>
-        <li>עיצוב מותאם אישית בהתאם למיתוג שלכם</li>
-        <li>פיתוח מלא — responsive לכל המכשירים</li>
-        <li>עד 2 סבבי תיקונים כלולים במחיר</li>
-        <li>אופטימיזציה למהירות ו-SEO בסיסי</li>
-        <li>הדרכה על ניהול התוכן</li>
-      </ul>
+  <!-- What's Included -->
+  <div class="glass">
+    <div class="label">מה כולל?</div>
+    <div class="includes-grid">
+      ${includes.map(i => `<div class="include-item"><div class="include-dot"></div>${i}</div>`).join('\n      ')}
     </div>
   </div>
 
-  <div class="section">
-    <div class="section-title">תנאים</div>
-    <div class="terms">
-      <ul>
-        <li>ההצעה תקפה ל-7 ימים מתאריך ההנפקה.</li>
-        <li>תשלום: 50% מקדמה בתחילת העבודה, 50% בסיום.</li>
-        <li>זמן אספקה יסוכם לאחר אפיון מפורט.</li>
-        <li>המחיר לא כולל מע"מ.</li>
-      </ul>
-    </div>
+  <!-- Terms -->
+  <div class="glass">
+    <div class="label">תנאים</div>
+    <ul class="terms-list">
+      <li>ההצעה תקפה ל-7 ימים מתאריך ההנפקה</li>
+      <li>תשלום: 50% מקדמה בתחילת העבודה, 50% בסיום</li>
+      <li>זמן אספקה יסוכם לאחר אפיון מפורט</li>
+      <li>כולל עד 2 סבבי תיקונים</li>
+    </ul>
   </div>
 
+  <!-- Footer -->
   <div class="footer">
-    <p>${escapeHtml(businessName)} — שירותי טכנולוגיה ודיגיטל</p>
-    <div class="contact-row">
+    <div class="footer-brand">${esc(businessName)} — שירותי טכנולוגיה ודיגיטל</div>
+    <div class="footer-contacts">
       <span>054-630-0783</span>
       <span>alon12@gmail.com</span>
-      <span>alon-dev.vercel.app</span>
+      <span>alon.dev</span>
     </div>
+    <div class="footer-tagline">P O W E R E D &nbsp; B Y &nbsp; A I</div>
   </div>
+</div>
+
 </body>
 </html>`;
 
@@ -357,11 +541,11 @@ export async function generateQuotePDF(
     const pdfUint8 = await page.pdf({
       format: 'A4',
       printBackground: true,
-      margin: { top: '10mm', bottom: '10mm', left: '10mm', right: '10mm' },
+      margin: { top: '0', bottom: '0', left: '0', right: '0' },
     });
     const pdfBuffer = Buffer.from(pdfUint8);
     log.info(
-      { leadName, service, price: priceRange, hasWebsite: !!websiteUrl, hasBranding: !!branding },
+      { leadName, service, price: priceRange, hasWebsite: !!websiteUrl, hasBranding: !!branding, hasHero: !!heroImage },
       'PDF quote generated',
     );
     return pdfBuffer;
@@ -370,7 +554,7 @@ export async function generateQuotePDF(
   }
 }
 
-function escapeHtml(text: string): string {
+function esc(text: string): string {
   return text
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
@@ -384,4 +568,65 @@ function formatPhone(phone: string): string {
     return local.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
   }
   return phone;
+}
+
+/** Get an SVG icon based on service keywords. */
+function getServiceIcon(service: string): string {
+  const s = service.toLowerCase();
+  if (s.includes('אתר') || s.includes('website') || s.includes('לנדינג') || s.includes('דף'))
+    return '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>';
+  if (s.includes('בוט') || s.includes('bot') || s.includes('אוטומציה') || s.includes('automation'))
+    return '<svg viewBox="0 0 24 24"><path d="M12 8V4H8"/><rect x="5" y="8" width="14" height="12" rx="2"/><path d="M2 14h2m16 0h2"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M10 17h4"/></svg>';
+  if (s.includes('crm') || s.includes('דשבורד') || s.includes('מערכת') || s.includes('dashboard'))
+    return '<svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>';
+  if (s.includes('אפליקציה') || s.includes('app') || s.includes('משחק') || s.includes('game'))
+    return '<svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>';
+  if (s.includes('שיווק') || s.includes('marketing') || s.includes('קמפיין') || s.includes('תוכן'))
+    return '<svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>';
+  // Default: code icon
+  return '<svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
+}
+
+/** Get "what's included" list based on service type. */
+function getServiceIncludes(service: string): string[] {
+  const s = service.toLowerCase();
+  if (s.includes('אתר') || s.includes('website') || s.includes('לנדינג')) {
+    return [
+      'עיצוב מותאם למיתוג שלכם',
+      'Responsive לכל מכשיר',
+      'אופטימיזציה למהירות',
+      'SEO בסיסי',
+      'הדרכה על ניהול תוכן',
+      'חיבור דומיין ואחסון',
+    ];
+  }
+  if (s.includes('בוט') || s.includes('bot') || s.includes('אוטומציה')) {
+    return [
+      'פיתוח בוט AI מותאם',
+      'חיבור WhatsApp / Telegram',
+      'מענה אוטומטי 24/7',
+      'ניהול לידים אוטומטי',
+      'פולואפים חכמים',
+      'דשבורד ניהול ומעקב',
+    ];
+  }
+  if (s.includes('crm') || s.includes('דשבורד') || s.includes('מערכת')) {
+    return [
+      'עיצוב ממשק מותאם',
+      'ניהול לקוחות ולידים',
+      'דוחות וגרפים',
+      'הרשאות משתמשים',
+      'חיבור APIs חיצוניים',
+      'אבטחת מידע',
+    ];
+  }
+  // Default
+  return [
+    'עיצוב מותאם אישית',
+    'פיתוח מלא מ-0',
+    'עד 2 סבבי תיקונים',
+    'אופטימיזציה וביצועים',
+    'הדרכה מלאה',
+    'תמיכה טכנית',
+  ];
 }
