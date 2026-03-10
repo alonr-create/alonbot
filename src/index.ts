@@ -5,6 +5,7 @@ import { initDb, getDb } from './db/index.js';
 import { connectWhatsApp } from './whatsapp/connection.js';
 import { createServer } from './http/server.js';
 import { startFollowUpScheduler } from './follow-up/scheduler.js';
+import { startDailySummaryScheduler } from './schedulers/daily-summary.js';
 
 const log = createLogger('main');
 
@@ -30,7 +31,11 @@ async function main() {
   startFollowUpScheduler(sock);
   log.info('follow-up scheduler started');
 
-  log.info({ port: config.port }, 'Bot ready (with follow-up scheduler)');
+  // 5. Start daily summary scheduler (sends Alon a morning recap)
+  startDailySummaryScheduler(sock);
+  log.info('daily summary scheduler started');
+
+  log.info({ port: config.port }, 'Bot ready (all schedulers active)');
 
   // Graceful shutdown
   const shutdown = () => {

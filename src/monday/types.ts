@@ -4,7 +4,9 @@ export type LeadStatus =
   | 'in-conversation'
   | 'quote-sent'
   | 'meeting-scheduled'
-  | 'escalated';
+  | 'escalated'
+  | 'closed-won'
+  | 'closed-lost';
 
 export interface MondayWebhookPayload {
   challenge?: string;
