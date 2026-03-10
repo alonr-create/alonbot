@@ -28,4 +28,5 @@ RUN mkdir -p /data
 
 EXPOSE 3000
 
-CMD ["node", "dist/index.js"]
+# Clean stale Chromium locks from previous containers before starting
+CMD find /data -name "SingletonLock" -delete -o -name "SingletonSocket" -delete -o -name "SingletonCookie" -delete 2>/dev/null; exec node dist/index.js
