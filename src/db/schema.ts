@@ -34,6 +34,7 @@ export function initSchema(db: Database.Database): void {
     'ALTER TABLE leads ADD COLUMN monday_board_id INTEGER',
     'ALTER TABLE leads ADD COLUMN interest TEXT',
     'ALTER TABLE leads ADD COLUMN escalation_count INTEGER DEFAULT 0',
+    "ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT ''",
   ];
 
   for (const sql of migrations) {

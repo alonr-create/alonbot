@@ -280,19 +280,35 @@ async function processBossMarkers(
     }, 2000);
   }
 
-  // ── [NOTE:phone:content] ──
+  // ── [NOTE:identifier:content] — save note to DB + Monday.com ──
   const noteMatch = cleaned.match(/\[NOTE:([^:]+):([^\]]+)\]/);
   if (noteMatch) {
-    const [, targetPhone, noteContent] = noteMatch;
+    const [, identifier, noteContent] = noteMatch;
     cleaned = cleaned.replace(/\[NOTE:[^\]]+\]/, '').trim();
-    const lead = db
-      .prepare('SELECT monday_item_id FROM leads WHERE phone = ?')
-      .get(targetPhone) as { monday_item_id: number | null } | undefined;
 
-    if (lead?.monday_item_id) {
-      addItemUpdate(lead.monday_item_id, noteContent).catch((err) => {
-        log.error({ err }, 'Failed to add note to Monday.com');
-      });
+    // Find lead by phone OR name
+    const lead = db
+      .prepare('SELECT phone, monday_item_id, notes FROM leads WHERE phone = ? OR name LIKE ?')
+      .get(identifier, `%${identifier}%`) as { phone: string; monday_item_id: number | null; notes: string | null } | undefined;
+
+    if (lead) {
+      // Append to local notes field (persistent memory)
+      const timestamp = new Date().toISOString().slice(0, 16);
+      const existingNotes = lead.notes || '';
+      const newNotes = existingNotes
+        ? `${existingNotes}\n[${timestamp}] ${noteContent}`
+        : `[${timestamp}] ${noteContent}`;
+      db.prepare('UPDATE leads SET notes = ? WHERE phone = ?').run(newNotes, lead.phone);
+      log.info({ phone: lead.phone, note: noteContent }, 'Note saved to lead');
+
+      // Also push to Monday.com if connected
+      if (lead.monday_item_id) {
+        addItemUpdate(lead.monday_item_id, noteContent).catch((err) => {
+          log.error({ err }, 'Failed to add note to Monday.com');
+        });
+      }
+    } else {
+      log.warn({ identifier }, 'NOTE: lead not found');
     }
   }
 

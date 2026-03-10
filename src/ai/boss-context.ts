@@ -46,7 +46,7 @@ export async function buildBossContext(): Promise<string> {
     // ── 2. Hot leads: in-conversation or quote-sent ──
     const hotLeads = db
       .prepare(
-        `SELECT l.phone, l.name, l.status, l.interest, l.monday_item_id,
+        `SELECT l.phone, l.name, l.status, l.interest, l.notes, l.monday_item_id,
                 m.content as last_msg, m.created_at as last_msg_time
          FROM leads l
          LEFT JOIN (
@@ -63,6 +63,7 @@ export async function buildBossContext(): Promise<string> {
       name: string | null;
       status: string;
       interest: string | null;
+      notes: string | null;
       monday_item_id: number | null;
       last_msg: string | null;
       last_msg_time: string | null;
@@ -75,7 +76,8 @@ export async function buildBossContext(): Promise<string> {
           const status = translateStatus(l.status);
           const interest = l.interest || '?';
           const lastMsg = l.last_msg ? `"${l.last_msg.slice(0, 40)}${l.last_msg.length > 40 ? '...' : ''}"` : '';
-          return `  • ${name} — ${status} | ${interest} ${lastMsg}`;
+          const notes = l.notes ? ` 📝${l.notes.split('\n').pop()}` : '';
+          return `  • ${name} — ${status} | ${interest} ${lastMsg}${notes}`;
         })
         .join('\n');
       sections.push(`🔥 לידים חמים:\n${leadLines}`);
@@ -181,6 +183,7 @@ export function searchLeadContext(query: string): string {
     name: string | null;
     status: string;
     interest: string | null;
+    notes: string | null;
     source: string;
     created_at: string;
     updated_at: string;
@@ -199,6 +202,7 @@ export function searchLeadContext(query: string): string {
         `👤 ${l.name || 'ללא שם'} (${l.phone})`,
         `   סטטוס: ${translateStatus(l.status)}`,
         l.interest ? `   עניין: ${l.interest}` : '',
+        l.notes ? `   📝 הערות: ${l.notes}` : '',
         `   מקור: ${l.source}`,
         `   הודעות: ${l.msg_count}`,
         l.last_message
