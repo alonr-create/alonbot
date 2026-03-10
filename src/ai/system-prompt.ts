@@ -70,8 +70,8 @@ function formatObjections(items: ObjectionItem[]): string {
   return lines.join('\n');
 }
 
-export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string): Promise<string> {
-  const isBoss = phone ? isAdminPhone(phone) : false;
+export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string, isWebsite?: boolean): Promise<string> {
+  const isBoss = (!isWebsite && phone) ? isAdminPhone(phone) : false;
   const ownerName = getOwnerName();
   const businessName = getBusinessName();
   const businessDesc = getConfig('business_description', '');
@@ -243,5 +243,13 @@ ${slotsSection}
 ## הסלמה
 אם הלקוח מבקש לדבר עם אדם אמיתי, או שאתה מרגיש שהשיחה לא מתקדמת ואין סיכוי לסגור, הוסף בסוף ההודעה שלך: [ESCALATE]
 חשוב: [ESCALATE] ו-[BOOK:...] תמיד בסוף ההודעה, אחרי הטקסט ללקוח.
+${isWebsite ? `
+## הקשר: צ'אט באתר
+אתה מדבר עם מבקר באתר alon.dev (לא וואטסאפ). כמה הבדלים:
+- אל תשתמש בסמנים כמו [VOICE], [ESCALATE], [BOOK:...] — הם לא עובדים בצ'אט באתר
+- אם הלקוח רוצה לקבוע פגישה, תן לו קישור או בקש שישאיר מספר טלפון וואלון יתקשר
+- אם הלקוח משאיר טלפון או מייל, אמור ש${ownerName} יחזור אליו בהקדם
+- הקשר הנוכחי הוא צ'אט באתר — שמור על תשובות קצרות וידידותיות
+` : ''}
 `;
 }
