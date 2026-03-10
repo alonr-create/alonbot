@@ -7,6 +7,7 @@ import { getDb } from '../db/index.js';
 import { getBoardStats } from '../monday/api.js';
 import { getAvailableSlots } from '../calendar/api.js';
 import { formatIsraelTime } from '../calendar/business-hours.js';
+import { calculateLeadScore } from './lead-scoring.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('boss-context');
@@ -77,7 +78,8 @@ export async function buildBossContext(): Promise<string> {
           const interest = l.interest || '?';
           const lastMsg = l.last_msg ? `"${l.last_msg.slice(0, 40)}${l.last_msg.length > 40 ? '...' : ''}"` : '';
           const notes = l.notes ? ` 📝${l.notes.split('\n').pop()}` : '';
-          return `  • ${name} — ${status} | ${interest} ${lastMsg}${notes}`;
+          const { score } = calculateLeadScore(l.phone);
+          return `  • ${name} [${score}] — ${status} | ${interest} ${lastMsg}${notes}`;
         })
         .join('\n');
       sections.push(`🔥 לידים חמים:\n${leadLines}`);
@@ -198,8 +200,10 @@ export function searchLeadContext(query: string): string {
 
   return leads
     .map((l) => {
+      const { score, factors } = calculateLeadScore(l.phone);
       const lines = [
         `👤 ${l.name || 'ללא שם'} (${l.phone})`,
+        `   ניקוד: ${score}/100 — ${factors.join(', ')}`,
         `   סטטוס: ${translateStatus(l.status)}`,
         l.interest ? `   עניין: ${l.interest}` : '',
         l.notes ? `   📝 הערות: ${l.notes}` : '',

@@ -35,6 +35,7 @@ export function initSchema(db: Database.Database): void {
     'ALTER TABLE leads ADD COLUMN interest TEXT',
     'ALTER TABLE leads ADD COLUMN escalation_count INTEGER DEFAULT 0',
     "ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT ''",
+    'ALTER TABLE leads ADD COLUMN score INTEGER DEFAULT 0',
   ];
 
   for (const sql of migrations) {
@@ -61,5 +62,20 @@ export function initSchema(db: Database.Database): void {
       ON follow_ups(scheduled_at) WHERE sent_at IS NULL AND cancelled = 0;
     CREATE INDEX IF NOT EXISTS idx_follow_ups_phone
       ON follow_ups(phone) WHERE sent_at IS NULL AND cancelled = 0;
+  `);
+
+  // Reminders table for boss-scheduled reminders
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS reminders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      message TEXT NOT NULL,
+      scheduled_at TEXT NOT NULL,
+      sent INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_reminders_due
+      ON reminders(scheduled_at) WHERE sent = 0;
   `);
 }

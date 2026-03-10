@@ -6,6 +6,7 @@ import { handleConversation, sendFirstMessage } from '../ai/conversation.js';
 import { setOnNewLeadCallback } from '../monday/webhook-handler.js';
 import { cancelFollowUps } from '../follow-up/follow-up-db.js';
 import { transcribeAudio } from '../ai/voice-transcribe.js';
+import { analyzeImage } from '../ai/image-analysis.js';
 import type { BotAdapter } from './connection.js';
 import { registerChat } from './connection.js';
 
@@ -89,8 +90,54 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
           await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
           return;
         }
+      } else if (msgType === 'image' || msgType === 'sticker') {
+        // Image/sticker: analyze with Claude Vision
+        log.info({ phone, type: msgType }, 'image received — analyzing');
+        try {
+          const media = await msg.downloadMedia();
+          if (media?.data) {
+            // Build lead context
+            const db = getDb();
+            const leadRow = db
+              .prepare('SELECT name, interest, status FROM leads WHERE phone = ?')
+              .get(phone) as { name: string | null; interest: string | null; status: string } | undefined;
+            const leadContext = leadRow
+              ? `שם: ${leadRow.name || 'לא ידוע'}, עניין: ${leadRow.interest || 'לא ידוע'}, סטטוס: ${leadRow.status}`
+              : 'ליד חדש';
+
+            const analysisResult = await analyzeImage(media.data, media.mimetype, leadContext);
+
+            // Route through normal conversation flow (add as message to batch)
+            // Create lead if not exists
+            const existingLead = db
+              .prepare('SELECT id FROM leads WHERE phone = ?')
+              .get(phone) as { id: number } | undefined;
+            if (!existingLead) {
+              db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
+              log.info({ phone }, 'new lead created from image');
+            }
+
+            addMessageToBatch(
+              phone,
+              `[הלקוח שלח תמונה. תוצאת הניתוח: ${analysisResult}]`,
+              async (batchPhone: string, batchMessages: string[]) => {
+                try {
+                  await handleConversation(batchPhone, batchMessages, adapter);
+                } catch (err) {
+                  log.error({ err, phone: batchPhone }, 'conversation handling failed (image)');
+                }
+              }
+            );
+          } else {
+            await sendWithTyping(adapter, jid, IMAGE_MEDIA_RESPONSE);
+          }
+        } catch (err) {
+          log.error({ err, phone }, 'image analysis failed');
+          await sendWithTyping(adapter, jid, IMAGE_MEDIA_RESPONSE);
+        }
+        return;
       } else {
-        // Non-voice media (images, video, documents)
+        // Non-voice, non-image media (video, documents, etc.)
         log.info({ phone, type: msgType }, 'non-voice media received');
         try {
           await sendWithTyping(adapter, jid, IMAGE_MEDIA_RESPONSE);

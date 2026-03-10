@@ -17,8 +17,11 @@ import {
   incrementEscalationCount,
 } from '../escalation/handler.js';
 import { scheduleFollowUp, cancelFollowUps } from '../follow-up/follow-up-db.js';
+import { scheduleReminder } from '../schedulers/reminders.js';
 import { searchLeadContext, getLeadConversation } from './boss-context.js';
+import { calculateLeadScore } from './lead-scoring.js';
 import { synthesizeSpeech } from './voice-synthesize.js';
+import { generateQuotePDF } from '../quotes/generate-quote.js';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
@@ -254,6 +257,12 @@ export async function handleConversation(
     }
   }
 
+  // Update lead score
+  if (lead) {
+    const { score } = calculateLeadScore(phone);
+    db.prepare('UPDATE leads SET score = ? WHERE phone = ?').run(score, phone);
+  }
+
   // Schedule follow-up (skip for Alon)
   if (phone !== config.alonPhone) {
     cancelFollowUps(phone);
@@ -385,6 +394,89 @@ async function processBossMarkers(
       }, 2000);
     } catch (err) {
       log.error({ err }, 'Failed to get Monday stats');
+    }
+  }
+
+  // ── [REMINDER:HH:mm:message] — schedule a reminder for the boss ──
+  const reminderMatch = cleaned.match(/\[REMINDER:(\d{2}:\d{2}):([^\]]+)\]/);
+  if (reminderMatch) {
+    const [, timeStr, reminderMessage] = reminderMatch;
+    cleaned = cleaned.replace(/\[REMINDER:[^\]]+\]/, '').trim();
+
+    // Parse time in Israel timezone
+    const [hours, minutes] = timeStr.split(':').map(Number);
+    const nowIsrael = new Date(
+      new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }),
+    );
+
+    // Build scheduled date in Israel timezone for today
+    const scheduledIsrael = new Date(nowIsrael);
+    scheduledIsrael.setHours(hours, minutes, 0, 0);
+
+    // If the time already passed today, schedule for tomorrow
+    if (scheduledIsrael <= nowIsrael) {
+      scheduledIsrael.setDate(scheduledIsrael.getDate() + 1);
+    }
+
+    // Convert Israel local time back to UTC for storage
+    // Offset = UTC now - Israel now
+    const utcNow = new Date();
+    const israelNow = new Date(
+      utcNow.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }),
+    );
+    const offsetMs = utcNow.getTime() - israelNow.getTime();
+    const scheduledUtc = new Date(scheduledIsrael.getTime() + offsetMs);
+
+    // Extract boss phone from jid
+    const bossPhone = jid.split('@')[0];
+    scheduleReminder(bossPhone, reminderMessage, scheduledUtc);
+
+    log.info(
+      { time: timeStr, message: reminderMessage, scheduledUtc: scheduledUtc.toISOString() },
+      'reminder scheduled via boss marker',
+    );
+  }
+
+  // ── [QUOTE:name:service:price] — generate and send PDF quote ──
+  const quoteMatch = cleaned.match(/\[QUOTE:([^:]+):([^:]+):([^\]]+)\]/);
+  if (quoteMatch) {
+    const [, quoteName, quoteService, quotePrice] = quoteMatch;
+    cleaned = cleaned.replace(/\[QUOTE:[^\]]+\]/, '').trim();
+
+    // Find lead by name to get their phone
+    const targetLead = db
+      .prepare('SELECT phone FROM leads WHERE name LIKE ?')
+      .get(`%${quoteName.trim()}%`) as { phone: string } | undefined;
+
+    if (targetLead) {
+      const targetJid = targetLead.phone + '@s.whatsapp.net';
+      generateQuotePDF(quoteName.trim(), targetLead.phone, quoteService.trim(), quotePrice.trim())
+        .then(async (pdfBuffer) => {
+          try {
+            await sock.sendDocument(
+              targetJid,
+              pdfBuffer,
+              `הצעת-מחיר-${quoteName.trim()}.pdf`,
+              `הצעת מחיר מ-Alon.dev — ${quoteService.trim()}`,
+            );
+            await sendWithTyping(sock, jid, `✅ הצעת מחיר נשלחה ל${quoteName.trim()}!`);
+            log.info({ name: quoteName, service: quoteService, price: quotePrice }, 'Quote sent');
+          } catch (err) {
+            log.error({ err }, 'Failed to send quote PDF');
+            await sendWithTyping(sock, jid, `❌ שגיאה בשליחת הצעת המחיר`);
+          }
+        })
+        .catch((err) => {
+          log.error({ err }, 'Failed to generate quote PDF');
+        });
+    } else {
+      setTimeout(async () => {
+        try {
+          await sendWithTyping(sock, jid, `❌ לא מצאתי ליד בשם "${quoteName.trim()}" במערכת`);
+        } catch (err) {
+          log.error({ err }, 'Failed to send quote error');
+        }
+      }, 1000);
     }
   }
 

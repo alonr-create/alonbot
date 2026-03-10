@@ -6,6 +6,8 @@ import { connectWhatsApp } from './whatsapp/connection.js';
 import { createServer } from './http/server.js';
 import { startFollowUpScheduler } from './follow-up/scheduler.js';
 import { startDailySummaryScheduler } from './schedulers/daily-summary.js';
+import { startWeeklyReportScheduler } from './schedulers/weekly-report.js';
+import { startReminderScheduler } from './schedulers/reminders.js';
 
 const log = createLogger('main');
 
@@ -34,6 +36,14 @@ async function main() {
   // 5. Start daily summary scheduler (sends Alon a morning recap)
   startDailySummaryScheduler(sock);
   log.info('daily summary scheduler started');
+
+  // 6. Start weekly report scheduler (sends Alon a Sunday recap)
+  startWeeklyReportScheduler(sock);
+  log.info('weekly report scheduler started');
+
+  // 7. Start reminder scheduler (checks every minute for due reminders)
+  startReminderScheduler(sock);
+  log.info('reminder scheduler started');
 
   log.info({ port: config.port }, 'Bot ready (all schedulers active)');
 

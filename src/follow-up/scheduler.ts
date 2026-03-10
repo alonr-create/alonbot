@@ -55,11 +55,12 @@ export async function processFollowUps(sock: any): Promise<void> {
         continue;
       }
 
-      // Generate and send message
+      // Generate personalized message using conversation context
       const message = await generateFollowUpMessage(
         fu.message_number,
         fu.name,
         fu.interest,
+        fu.phone,
       );
 
       const jid = `${fu.phone}@s.whatsapp.net`;

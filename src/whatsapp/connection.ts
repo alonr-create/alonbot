@@ -55,6 +55,19 @@ function createAdapter(wwebClient: InstanceType<typeof Client>) {
       }
     },
 
+    async sendDocument(jid: string, buffer: Buffer, filename: string, caption?: string) {
+      const phone = jid.split('@')[0];
+      const chat = chatRegistry.get(phone);
+      const media = new MessageMedia('application/pdf', buffer.toString('base64'), filename);
+      const options = caption ? { caption } : {};
+      if (chat) {
+        await chat.sendMessage(media, options);
+      } else {
+        const chatId = jid.includes('@c.us') ? jid : `${phone}@c.us`;
+        await wwebClient.sendMessage(chatId, media, options);
+      }
+    },
+
     async sendPresenceUpdate(state: 'composing' | 'paused', jid: string) {
       try {
         const phone = jid.split('@')[0];
