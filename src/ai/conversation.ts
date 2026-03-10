@@ -174,8 +174,8 @@ export async function handleConversation(
     return;
   }
 
-  // ── Parse [ESCALATE] marker ──
-  if (response.includes('[ESCALATE]')) {
+  // ── Parse [ESCALATE] marker (never escalate admin) ──
+  if (response.includes('[ESCALATE]') && !isAdminPhone(phone)) {
     const cleanResponse = response.replace('[ESCALATE]', '').trim();
     await sendWithTyping(sock, jid, cleanResponse);
 
