@@ -4,6 +4,7 @@ import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { updateMondayStatus } from '../monday/api.js';
 import { generateEscalationSummary } from './summary.js';
 import { config } from '../config.js';
+import { getAdminPhone, getOwnerName, getEscalationMessage } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
 
@@ -84,8 +85,8 @@ export async function triggerEscalation(
     // 1. Generate summary
     const summary = await generateEscalationSummary(messages, leadName);
 
-    // 2. Notify Alon via WhatsApp (primary channel)
-    const alonJid = `${config.alonPhone}@s.whatsapp.net`;
+    // 2. Notify admin via WhatsApp (primary channel)
+    const alonJid = `${getAdminPhone()}@s.whatsapp.net`;
     const whatsappAlert = [
       `⚠️ *העברה לטיפול ידני*`,
       ``,
@@ -100,9 +101,9 @@ export async function triggerEscalation(
 
     try {
       await sendWithTyping(sock, alonJid, whatsappAlert);
-      log.info({ phone, leadName }, 'escalation WhatsApp alert sent to Alon');
+      log.info({ phone, leadName }, 'escalation WhatsApp alert sent to admin');
     } catch (err) {
-      log.error({ err }, 'failed to send WhatsApp alert to Alon');
+      log.error({ err }, 'failed to send WhatsApp alert to admin');
     }
 
     // 2b. Also try Telegram as backup (if configured)
@@ -138,7 +139,7 @@ export async function triggerEscalation(
     try {
       await sock.sendPresenceUpdate('composing', jid);
       await sock.sendMessage(jid, {
-        text: 'תודה על הסבלנות! אלון יחזור אליך בהקדם האפשרי.',
+        text: getEscalationMessage(),
       });
     } catch (err) {
       log.error({ err, phone }, 'failed to send escalation WhatsApp message');

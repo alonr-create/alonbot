@@ -4,7 +4,7 @@
  */
 import { getDb } from '../db/index.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
-import { config } from '../config.js';
+import { getAdminPhone, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import type { BotAdapter } from '../whatsapp/connection.js';
 
@@ -13,28 +13,31 @@ const log = createLogger('daily-summary');
 const DAILY_CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 let lastSentDate = '';
 
-function getIsraelDate(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+function getTz(): string {
+  return getTimezone();
 }
 
-function getIsraelHour(): number {
+function getLocalDate(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: getTz() });
+}
+
+function getLocalHour(): number {
   return parseInt(
-    new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }),
+    new Date().toLocaleString('en-US', { timeZone: getTz(), hour: 'numeric', hour12: false }),
     10,
   );
 }
 
 function isWeekday(): boolean {
-  // Israel: Sun=0 to Fri=5 are workdays, Sat=6 is off
-  const day = new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Jerusalem', weekday: 'short' });
+  const day = new Date().toLocaleDateString('en-US', { timeZone: getTz(), weekday: 'short' });
   return day !== 'Sat';
 }
 
 async function sendDailySummary(sock: BotAdapter): Promise<void> {
-  const today = getIsraelDate();
+  const today = getLocalDate();
   if (lastSentDate === today) return;
 
-  const hour = getIsraelHour();
+  const hour = getLocalHour();
   if (hour !== 9) return; // Only send at 09:xx Israel time
 
   if (!isWeekday()) return; // Skip Shabbat
@@ -43,7 +46,7 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
 
   try {
     const db = getDb();
-    const jid = config.alonPhone + '@s.whatsapp.net';
+    const jid = getAdminPhone() + '@s.whatsapp.net';
 
     // Pipeline
     const statusCounts = db
@@ -134,7 +137,7 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
     ].join('\n');
 
     await sendWithTyping(sock, jid, message);
-    log.info('Daily summary sent to Alon');
+    log.info('Daily summary sent to admin');
   } catch (err) {
     log.error({ err }, 'Failed to send daily summary');
   }

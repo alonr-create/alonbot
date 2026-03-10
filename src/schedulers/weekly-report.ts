@@ -5,7 +5,7 @@
  */
 import { getDb } from '../db/index.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
-import { config } from '../config.js';
+import { getAdminPhone, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import type { BotAdapter } from '../whatsapp/connection.js';
 
@@ -14,25 +14,29 @@ const log = createLogger('weekly-report');
 const WEEKLY_CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 let lastSentWeek = '';
 
-function getIsraelDate(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' });
+function getTz(): string {
+  return getTimezone();
 }
 
-function getIsraelHour(): number {
+function getLocalDate(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: getTz() });
+}
+
+function getLocalHour(): number {
   return parseInt(
-    new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }),
+    new Date().toLocaleString('en-US', { timeZone: getTz(), hour: 'numeric', hour12: false }),
     10,
   );
 }
 
-function getIsraelDayOfWeek(): string {
-  return new Date().toLocaleDateString('en-US', { timeZone: 'Asia/Jerusalem', weekday: 'short' });
+function getLocalDayOfWeek(): string {
+  return new Date().toLocaleDateString('en-US', { timeZone: getTz(), weekday: 'short' });
 }
 
 /** Get ISO week identifier (YYYY-Www) for dedup */
 function getWeekId(): string {
   const now = new Date();
-  const d = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+  const d = new Date(now.toLocaleString('en-US', { timeZone: getTz() }));
   const dayNum = d.getDay(); // 0=Sun
   const startOfYear = new Date(d.getFullYear(), 0, 1);
   const diff = d.getTime() - startOfYear.getTime();
@@ -44,17 +48,17 @@ async function sendWeeklyReport(sock: BotAdapter): Promise<void> {
   const weekId = getWeekId();
   if (lastSentWeek === weekId) return;
 
-  const day = getIsraelDayOfWeek();
+  const day = getLocalDayOfWeek();
   if (day !== 'Sun') return; // Only on Sunday
 
-  const hour = getIsraelHour();
+  const hour = getLocalHour();
   if (hour !== 9) return; // Only at 09:xx (covers 09:30 within the hourly check)
 
   lastSentWeek = weekId;
 
   try {
     const db = getDb();
-    const jid = config.alonPhone + '@s.whatsapp.net';
+    const jid = getAdminPhone() + '@s.whatsapp.net';
 
     // ── This week stats (last 7 days) ──
     const newLeadsThisWeek = db
@@ -159,7 +163,7 @@ async function sendWeeklyReport(sock: BotAdapter): Promise<void> {
       messagesThisWeek.count < messagesLastWeek.count ? '📉' : '➡️';
 
     const message = [
-      `📊 דוח שבועי — ${getIsraelDate()}`,
+      `📊 דוח שבועי — ${getLocalDate()}`,
       '',
       `🏢 סה"כ לידים במערכת: ${totalLeads.count}`,
       '',
@@ -178,7 +182,7 @@ async function sendWeeklyReport(sock: BotAdapter): Promise<void> {
     ].join('\n');
 
     await sendWithTyping(sock, jid, message);
-    log.info('Weekly report sent to Alon');
+    log.info('Weekly report sent to admin');
   } catch (err) {
     log.error({ err }, 'Failed to send weekly report');
   }

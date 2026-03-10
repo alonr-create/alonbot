@@ -1,20 +1,12 @@
 import { getDb } from '../db/index.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
+import { getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import type { BotAdapter } from '../whatsapp/connection.js';
 
 const log = createLogger('reminders');
 
 const REMINDER_CHECK_INTERVAL_MS = 60 * 1000; // 1 minute
-
-/**
- * Get current time in Israel timezone.
- */
-function nowInIsrael(): Date {
-  return new Date(
-    new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }),
-  );
-}
 
 /**
  * Schedule a reminder to be sent at a specific time.

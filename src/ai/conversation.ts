@@ -23,6 +23,7 @@ import { calculateLeadScore } from './lead-scoring.js';
 import { synthesizeSpeech } from './voice-synthesize.js';
 import { generateQuotePDF } from '../quotes/generate-quote.js';
 import { config } from '../config.js';
+import { isAdminPhone, getAdminPhone, getOwnerName, getBusinessName, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
 
@@ -156,13 +157,13 @@ export async function handleConversation(
 
     const result = await bookMeeting(date, time, leadName, phone, leadInterest, 'Discovery call');
     if (result.success) {
-      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. אלון יתקשר אליך`);
+      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${getOwnerName()} יתקשר אליך`);
       newStatus = 'meeting-scheduled';
       cancelFollowUps(phone);
     } else {
       await sendWithTyping(
         sock, jid,
-        'סליחה, הייתה בעיה עם קביעת הפגישה. אלון יחזור אליך עם זמנים מעודכנים.',
+        `סליחה, הייתה בעיה עם קביעת הפגישה. ${getOwnerName()} יחזור אליך עם זמנים מעודכנים.`,
       );
     }
 
@@ -190,8 +191,8 @@ export async function handleConversation(
     return;
   }
 
-  // ── Process boss-mode markers (only for Alon) ──
-  const isBoss = phone.endsWith('546300783');
+  // ── Process boss-mode markers (only for admin) ──
+  const isBoss = isAdminPhone(phone);
   let finalResponse = response;
 
   if (isBoss) {
@@ -263,8 +264,8 @@ export async function handleConversation(
     db.prepare('UPDATE leads SET score = ? WHERE phone = ?').run(score, phone);
   }
 
-  // Schedule follow-up (skip for Alon)
-  if (phone !== config.alonPhone) {
+  // Schedule follow-up (skip for admin)
+  if (!isAdminPhone(phone)) {
     cancelFollowUps(phone);
     const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     scheduleFollowUp(phone, 1, followUpTime);
@@ -403,29 +404,29 @@ async function processBossMarkers(
     const [, timeStr, reminderMessage] = reminderMatch;
     cleaned = cleaned.replace(/\[REMINDER:[^\]]+\]/, '').trim();
 
-    // Parse time in Israel timezone
+    // Parse time in tenant timezone
+    const tz = getTimezone();
     const [hours, minutes] = timeStr.split(':').map(Number);
-    const nowIsrael = new Date(
-      new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }),
+    const nowLocal = new Date(
+      new Date().toLocaleString('en-US', { timeZone: tz }),
     );
 
-    // Build scheduled date in Israel timezone for today
-    const scheduledIsrael = new Date(nowIsrael);
-    scheduledIsrael.setHours(hours, minutes, 0, 0);
+    // Build scheduled date in tenant timezone for today
+    const scheduledLocal = new Date(nowLocal);
+    scheduledLocal.setHours(hours, minutes, 0, 0);
 
     // If the time already passed today, schedule for tomorrow
-    if (scheduledIsrael <= nowIsrael) {
-      scheduledIsrael.setDate(scheduledIsrael.getDate() + 1);
+    if (scheduledLocal <= nowLocal) {
+      scheduledLocal.setDate(scheduledLocal.getDate() + 1);
     }
 
-    // Convert Israel local time back to UTC for storage
-    // Offset = UTC now - Israel now
+    // Convert local time back to UTC for storage
     const utcNow = new Date();
     const israelNow = new Date(
-      utcNow.toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }),
+      utcNow.toLocaleString('en-US', { timeZone: tz }),
     );
     const offsetMs = utcNow.getTime() - israelNow.getTime();
-    const scheduledUtc = new Date(scheduledIsrael.getTime() + offsetMs);
+    const scheduledUtc = new Date(scheduledLocal.getTime() + offsetMs);
 
     // Extract boss phone from jid
     const bossPhone = jid.split('@')[0];
@@ -457,9 +458,19 @@ async function processBossMarkers(
               targetJid,
               pdfBuffer,
               `הצעת-מחיר-${quoteName.trim()}.pdf`,
-              `הצעת מחיר מ-Alon.dev — ${quoteService.trim()}`,
+              `הצעת מחיר מ-${getBusinessName()} — ${quoteService.trim()}`,
             );
-            await sendWithTyping(sock, jid, `✅ הצעת מחיר נשלחה ל${quoteName.trim()}!`);
+            const confirmMsg = `✅ הצעת מחיר נשלחה ל${quoteName.trim()}!`;
+            await sendWithTyping(sock, jid, confirmMsg);
+            // Store quote send in conversation history so the bot remembers it
+            const insertQuoteMsg = db.prepare(
+              'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+            );
+            const quoteRecord = `[שלחתי הצעת מחיר PDF ל${quoteName.trim()} — ${quoteService.trim()} — ₪${quotePrice.trim()}]`;
+            insertQuoteMsg.run(targetLead.phone, null, 'out', quoteRecord);
+            // Also store confirmation in boss conversation
+            const bossPhone = jid.split('@')[0];
+            insertQuoteMsg.run(bossPhone, null, 'out', confirmMsg);
             log.info({ name: quoteName, service: quoteService, price: quotePrice }, 'Quote sent');
           } catch (err) {
             log.error({ err }, 'Failed to send quote PDF');
@@ -584,7 +595,7 @@ export async function sendFirstMessage(
     );
   }
 
-  if (phone !== config.alonPhone) {
+  if (!isAdminPhone(phone)) {
     const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     scheduleFollowUp(phone, 1, followUpTime);
   }

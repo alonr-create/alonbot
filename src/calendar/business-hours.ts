@@ -1,9 +1,14 @@
-const TIMEZONE = 'Asia/Jerusalem';
+import { getTimezone } from '../db/tenant-config.js';
+
+// Use tenant timezone, with fallback to Israel
+function tz(): string {
+  try { return getTimezone(); } catch { return 'Asia/Jerusalem'; }
+}
 
 // Day of week in Israel: 0=Sunday, 1=Monday, ... 5=Friday, 6=Saturday
 function getIsraelDay(date: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMEZONE,
+    timeZone: tz(),
     weekday: 'short',
   }).formatToParts(date);
   const weekday = parts.find((p) => p.type === 'weekday')?.value;
@@ -15,7 +20,7 @@ function getIsraelDay(date: Date): number {
 
 function getIsraelHour(date: Date): number {
   const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: TIMEZONE,
+    timeZone: tz(),
     hour: 'numeric',
     minute: 'numeric',
     hour12: false,
@@ -66,7 +71,7 @@ export function getNextBusinessDay(from?: Date): Date {
   // Set to 09:00 Israel time by using formatter to find the current offset
   // Create a date at 09:00 Israel time on the target day
   const dateStr = new Intl.DateTimeFormat('en-CA', {
-    timeZone: TIMEZONE,
+    timeZone: tz(),
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -89,7 +94,7 @@ export function getNextBusinessDay(from?: Date): Date {
 export function formatIsraelTime(date?: Date): string {
   const d = date || new Date();
   return new Intl.DateTimeFormat('he-IL', {
-    timeZone: TIMEZONE,
+    timeZone: tz(),
     weekday: 'long',
     hour: '2-digit',
     minute: '2-digit',

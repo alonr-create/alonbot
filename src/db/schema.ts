@@ -78,4 +78,68 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_reminders_due
       ON reminders(scheduled_at) WHERE sent = 0;
   `);
+
+  // Tenant configuration table — makes the bot configurable per deployment
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenant_config (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    );
+  `);
+
+  // Seed default tenant config (Alon.dev) — only inserts if key doesn't exist
+  const seedConfig = db.prepare(
+    'INSERT OR IGNORE INTO tenant_config (key, value) VALUES (?, ?)',
+  );
+
+  const defaults: Record<string, string> = {
+    // Business identity
+    business_name: 'Alon.dev',
+    business_description: 'עסק של אלון, יזם עצמאי שמשתמש ב-AI כדי לתת ללקוחות יכולת של צוות שלם במחיר של פרילנסר',
+    business_website: 'alon-dev.vercel.app',
+    owner_name: 'אלון',
+    admin_phone: '972546300783',
+
+    // Personality
+    bot_personality: 'אגרסיבי במכירות — דוחף אבל לא גס. יוצר תחושת דחיפות. עברית לא פורמלית, ידידותית אבל עסקית. תמיד מסיים עם שאלה או הצעה לפעולה הבאה.',
+    escalation_message: 'תודה על הסבלנות! {owner} יחזור אליך בהקדם האפשרי.',
+
+    // Service catalog (JSON)
+    service_catalog: JSON.stringify([
+      { category: 'אתרים', items: [
+        { name: 'דפי נחיתה (Landing pages)', min: 2000, max: 5000 },
+        { name: 'אתרים עסקיים (Business sites)', min: 5000, max: 15000 },
+        { name: 'חנויות אונליין (E-commerce)', min: 10000, max: 30000 },
+      ]},
+      { category: 'אפליקציות', items: [
+        { name: 'אפליקציות מובייל (Mobile apps)', min: 15000, max: 50000 },
+        { name: 'אפליקציות ווב (Web apps)', min: 10000, max: 40000 },
+      ]},
+      { category: 'משחקים', items: [
+        { name: 'משחקי דפדפן (Browser games)', min: 5000, max: 20000 },
+        { name: 'משחקי מובייל (Mobile games)', min: 20000, max: 60000 },
+      ]},
+      { category: 'אוטומציה ו-CRM', items: [
+        { name: 'תהליכי אוטומציה (Automation flows)', min: 3000, max: 10000 },
+        { name: 'הקמת CRM (CRM setup)', min: 5000, max: 15000 },
+      ]},
+      { category: 'שיווק דיגיטלי', items: [
+        { name: 'ניהול רשתות חברתיות (Social media)', min: 2000, max: 5000, unit: 'חודש' },
+        { name: 'קידום אורגני SEO', min: 3000, max: 8000, unit: 'חודש' },
+      ]},
+    ]),
+
+    // Timezone & hours
+    timezone: 'Asia/Jerusalem',
+    business_hours_start: '9',
+    business_hours_end: '18',
+    work_days: 'Sun,Mon,Tue,Wed,Thu',
+
+    // Meeting type
+    meeting_type: 'שיחת Zoom',
+  };
+
+  for (const [key, value] of Object.entries(defaults)) {
+    seedConfig.run(key, value);
+  }
 }

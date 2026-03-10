@@ -1,5 +1,5 @@
 import { getDb } from '../db/index.js';
-import { config } from '../config.js';
+import { isAdminPhone } from '../db/tenant-config.js';
 
 export interface FollowUpRow {
   id: number;
@@ -18,7 +18,7 @@ const TERMINAL_STATUSES = ['escalated', 'meeting-scheduled', 'closed-won', 'clos
  * Skips Alon's own phone number.
  */
 export function scheduleFollowUp(phone: string, messageNumber: 1 | 2 | 3, scheduledAt: Date): void {
-  if (phone === config.alonPhone) return;
+  if (isAdminPhone(phone)) return;
 
   const db = getDb();
   db.prepare(
