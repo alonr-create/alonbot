@@ -40,8 +40,8 @@ export function isBusinessHours(date?: Date): boolean {
   // Friday — 09:00-13:00
   if (day === 5) return hourDecimal >= 9 && hourDecimal < 13;
 
-  // Sunday-Thursday — 09:00-18:00
-  return hourDecimal >= 9 && hourDecimal < 18;
+  // Sunday-Thursday — 09:00-16:00
+  return hourDecimal >= 9 && hourDecimal < 16;
 }
 
 /**

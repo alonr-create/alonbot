@@ -10,7 +10,7 @@
 // Israel business hours: Sun-Thu 09:00-18:00, Fri 09:00-13:00
 var SLOT_DURATION = 30; // minutes
 var START_HOUR = 9;
-var END_HOUR_WEEKDAY = 18;
+var END_HOUR_WEEKDAY = 16;
 var END_HOUR_FRIDAY = 13;
 var TIMEZONE = 'Asia/Jerusalem';
 

@@ -1,7 +1,8 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 import QRCode from 'qrcode';
-import { mkdirSync } from 'fs';
+import { mkdirSync, rmSync, readdirSync } from 'fs';
+import { join } from 'path';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 import { setQR, clearQR, setConnectionStatus } from './qr.js';
@@ -64,10 +65,32 @@ export type BotAdapter = ReturnType<typeof createAdapter>;
 
 let adapter: BotAdapter | null = null;
 
+function removeStaleLocks(dir: string): void {
+  try {
+    const walk = (d: string) => {
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        const full = join(d, entry.name);
+        if (entry.isDirectory()) {
+          walk(full);
+        } else if (entry.name === 'SingletonLock' || entry.name === 'SingletonSocket' || entry.name === 'SingletonCookie') {
+          log.info({ file: full }, 'removing stale Chromium lock');
+          rmSync(full, { force: true });
+        }
+      }
+    };
+    walk(dir);
+  } catch (_) {
+    // Session dir may not exist yet
+  }
+}
+
 export async function connectWhatsApp(): Promise<BotAdapter> {
   mkdirSync(config.sessionDir, { recursive: true });
 
-  const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu'];
+  // Remove stale Chromium lock files from previous container
+  removeStaleLocks(config.sessionDir);
+
+  const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
   client = new Client({
