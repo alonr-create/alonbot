@@ -60,24 +60,18 @@ export async function bookMeeting(
   }
 
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      signal: AbortSignal.timeout(10000),
-      body: JSON.stringify({
-        action: 'add',
-        date,
-        time,
-        duration: 30,
-        title: `פגישת היכרות - ${leadName}`,
-        description: [
-          `שם: ${leadName}`,
-          `טלפון: ${phone}`,
-          `תחום עניין: ${interest}`,
-          `סיכום: ${summary}`,
-        ].join('\n'),
-      }),
+    const params = new URLSearchParams({
+      action: 'add',
+      date,
+      time,
+      duration: '30',
+      title: `פגישת היכרות - ${leadName}`,
+      description: `שם: ${leadName}\nטלפון: ${phone}\nתחום עניין: ${interest}\nסיכום: ${summary}`,
     });
+    const response = await fetch(
+      `${url}?${params.toString()}`,
+      { signal: AbortSignal.timeout(10000) },
+    );
 
     const data = (await response.json()) as BookingResult;
     log.info({ success: data.success, eventId: data.eventId }, 'booking result');
