@@ -11,7 +11,8 @@ import type { LeadStatus } from '../monday/types.js';
 const log = createLogger('escalation');
 
 // Hebrew patterns that indicate a request to speak with a human
-const HUMAN_REQUEST_PATTERN = /דבר.*אד[םמ]|נציג|מישהו אמיתי|אלון|בן אדם|תעביר.*אלון/i;
+// Note: "אלון" removed — was causing false escalations when boss mentions his own name in commands
+const HUMAN_REQUEST_PATTERN = /דבר.*אד[םמ]|נציג.*אמיתי|מישהו אמיתי|בן אדם אמיתי|תעביר.*לאלון|תקשר.*לאלון|רוצה לדבר עם אלון/i;
 
 /**
  * Increment the escalation counter for a lead. Returns the new count.

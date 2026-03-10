@@ -4,6 +4,7 @@
  * Future tenants: change values in tenant_config table per deployment.
  */
 import { getDb } from './index.js';
+import { config as appConfig } from '../config.js';
 
 const cache = new Map<string, string>();
 let cacheLoaded = false;
@@ -44,7 +45,10 @@ export function getConfigJSON<T>(key: string, fallback: T): T {
 /** Check if a phone number is the admin (boss). */
 export function isAdminPhone(phone: string): boolean {
   const adminPhone = getConfig('admin_phone');
-  if (!adminPhone) return false;
+  if (!adminPhone) {
+    // Fallback to config.alonPhone if tenant_config not set
+    return phone === appConfig.alonPhone || phone.endsWith(appConfig.alonPhone.slice(-9));
+  }
   return phone === adminPhone || phone.endsWith(adminPhone.slice(-9));
 }
 
