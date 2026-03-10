@@ -18,6 +18,7 @@ import {
 } from '../escalation/handler.js';
 import { scheduleFollowUp, cancelFollowUps } from '../follow-up/follow-up-db.js';
 import { searchLeadContext, getLeadConversation } from './boss-context.js';
+import { synthesizeSpeech } from './voice-synthesize.js';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 import type { LeadStatus } from '../monday/types.js';
@@ -194,8 +195,30 @@ export async function handleConversation(
     finalResponse = await processBossMarkers(finalResponse, sock, jid);
   }
 
-  // Normal flow: send response
+  // ── Parse [VOICE] marker — send voice note alongside text ──
+  const wantsVoice = finalResponse.includes('[VOICE]');
+  if (wantsVoice) {
+    finalResponse = finalResponse.replace(/\[VOICE\]/g, '').trim();
+  }
+
+  // Normal flow: send text response
   await sendWithTyping(sock, jid, finalResponse);
+
+  // Send voice message if requested (fire-and-forget, don't block)
+  if (wantsVoice) {
+    synthesizeSpeech(finalResponse).then(async (audio) => {
+      if (audio) {
+        try {
+          await sock.sendAudio(jid, audio);
+          log.info({ phone }, 'voice message sent');
+        } catch (err) {
+          log.error({ err, phone }, 'failed to send voice message');
+        }
+      }
+    }).catch((err) => {
+      log.error({ err, phone }, 'voice synthesis failed');
+    });
+  }
 
   storeMessages(insertMsg, batchedMessages, phone, leadId, finalResponse);
 

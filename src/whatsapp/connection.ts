@@ -1,5 +1,5 @@
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg;
+const { Client, LocalAuth, MessageMedia } = pkg;
 import QRCode from 'qrcode';
 import { mkdirSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
@@ -40,6 +40,18 @@ function createAdapter(wwebClient: InstanceType<typeof Client>) {
         // Fallback: try direct send with @c.us format
         const chatId = jid.includes('@c.us') ? jid : `${phone}@c.us`;
         await wwebClient.sendMessage(chatId, content.text);
+      }
+    },
+
+    async sendAudio(jid: string, audioBuffer: Buffer, ptt = true) {
+      const phone = jid.split('@')[0];
+      const chat = chatRegistry.get(phone);
+      const media = new MessageMedia('audio/mpeg', audioBuffer.toString('base64'), 'voice.mp3');
+      if (chat) {
+        await chat.sendMessage(media, { sendAudioAsVoice: ptt });
+      } else {
+        const chatId = jid.includes('@c.us') ? jid : `${phone}@c.us`;
+        await wwebClient.sendMessage(chatId, media, { sendAudioAsVoice: ptt });
       }
     },
 

@@ -20,4 +20,6 @@ export const config = {
   mondayStatusColumnId: process.env.MONDAY_STATUS_COLUMN_ID || 'status',
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
+  elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
+  elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'jUBxo582xuRbgYNI6JJ2',
 } as const;
