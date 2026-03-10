@@ -53,11 +53,15 @@ export async function fetchMondayItem(itemId: number): Promise<MondayItem> {
   const interestCol = columns.find(
     (c) => c.id.startsWith('dropdown') || c.id.startsWith('service') || c.id === 'שירות',
   );
+  const sourceCol = columns.find(
+    (c) => c.id.startsWith('source') || c.id === 'מקור' || c.id.startsWith('utm') || c.id.startsWith('campaign'),
+  );
 
   return {
     name: item.name,
     phone: phoneCol?.text || '',
     interest: interestCol?.text || '',
+    source: sourceCol?.text || '',
   };
 }
 

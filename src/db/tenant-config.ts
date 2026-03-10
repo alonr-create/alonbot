@@ -101,3 +101,32 @@ export interface ServiceCategory {
 export function getServiceCatalog(): ServiceCategory[] {
   return getConfigJSON<ServiceCategory[]>('service_catalog', []);
 }
+
+export interface PortfolioItem {
+  name: string;
+  url: string;
+  type: string;
+  desc: string;
+}
+
+export function getPortfolio(): PortfolioItem[] {
+  return getConfigJSON<PortfolioItem[]>('portfolio', []);
+}
+
+export interface FAQItem {
+  q: string;
+  a: string;
+}
+
+export function getSalesFAQ(): FAQItem[] {
+  return getConfigJSON<FAQItem[]>('sales_faq', []);
+}
+
+export interface ObjectionItem {
+  objection: string;
+  response: string;
+}
+
+export function getSalesObjections(): ObjectionItem[] {
+  return getConfigJSON<ObjectionItem[]>('sales_objections', []);
+}

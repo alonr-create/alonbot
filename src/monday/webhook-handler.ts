@@ -95,8 +95,8 @@ async function processWebhookEvent(
 
     // Update existing lead with Monday.com data
     db.prepare(
-      `UPDATE leads SET monday_item_id = ?, monday_board_id = ?, interest = ?, name = COALESCE(?, name), updated_at = datetime('now') WHERE phone = ?`,
-    ).run(pulseId, boardId, item.interest, item.name, phone);
+      `UPDATE leads SET monday_item_id = ?, monday_board_id = ?, interest = ?, name = COALESCE(?, name), source_detail = COALESCE(NULLIF(?, ''), source_detail), updated_at = datetime('now') WHERE phone = ?`,
+    ).run(pulseId, boardId, item.interest, item.name, item.source, phone);
 
     if (recentMsg) {
       log.info({ phone, pulseId }, 'Lead has recent messages, skipping auto-intro');
@@ -107,8 +107,8 @@ async function processWebhookEvent(
   } else {
     // Create new lead
     db.prepare(
-      `INSERT INTO leads (phone, name, source, status, monday_item_id, monday_board_id, interest) VALUES (?, ?, 'monday', 'new', ?, ?, ?)`,
-    ).run(phone, item.name, pulseId, boardId, item.interest);
+      `INSERT INTO leads (phone, name, source, status, monday_item_id, monday_board_id, interest, source_detail) VALUES (?, ?, 'monday', 'new', ?, ?, ?, ?)`,
+    ).run(phone, item.name, pulseId, boardId, item.interest, item.source);
 
     log.info({ phone, pulseId }, 'Created new lead from Monday.com');
   }

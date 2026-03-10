@@ -36,6 +36,7 @@ export function initSchema(db: Database.Database): void {
     'ALTER TABLE leads ADD COLUMN escalation_count INTEGER DEFAULT 0',
     "ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT ''",
     'ALTER TABLE leads ADD COLUMN score INTEGER DEFAULT 0',
+    "ALTER TABLE leads ADD COLUMN source_detail TEXT DEFAULT ''",
   ];
 
   for (const sql of migrations) {
@@ -137,9 +138,47 @@ export function initSchema(db: Database.Database): void {
 
     // Meeting type
     meeting_type: 'שיחת Zoom',
+
+    // Portfolio — showcase links the bot can share
+    portfolio: JSON.stringify([
+      { name: 'מצפן לעושר — אתר קורסים', url: 'https://wealthy-mindset.vercel.app', type: 'אתר עסקי', desc: 'אתר עם מערכת תשלומים, קורסים ותוכן' },
+      { name: 'דקל לפרישה — מערכת אוטומציה', url: 'https://dprisha.co.il', type: 'CRM + אוטומציה', desc: 'מערכת דוחות אוטומטית, ניהול לידים, אימיילים' },
+      { name: 'בנצי הצב — משחק AI', url: 'https://bentzi-production.up.railway.app', type: 'משחק + AI', desc: 'טמגוצ׳י דיגיטלי עם בינה מלאכותית' },
+      { name: 'כפר קלוד — עולם וירטואלי', url: 'https://easygoing-vitality-production-2c44.up.railway.app', type: 'אפליקציה + AI', desc: 'כפר אנימטיבי עם סוכנים אוטונומיים' },
+      { name: 'עליזה המפרסמת — ניהול שיווק', url: 'https://aliza-web-production.up.railway.app', type: 'אפליקציה + AI', desc: 'פלטפורמת ניהול רשתות חברתיות עם AI' },
+    ]),
+
+    // Sales playbook — FAQ, objections, closing techniques
+    sales_faq: JSON.stringify([
+      { q: 'כמה זמן לוקח לבנות אתר?', a: 'אתר עסקי: 1-2 שבועות. דף נחיתה: 3-5 ימים. חנות אונליין: 2-4 שבועות. הכל תלוי בהיקף.' },
+      { q: 'מה כלול במחיר?', a: 'עיצוב מותאם אישית, פיתוח מלא, התאמה למובייל, SEO בסיסי, הדרכה, ו-30 יום תמיכה אחרי השקה.' },
+      { q: 'איך התהליך עובד?', a: 'פגישת היכרות חינם → הצעת מחיר → עיצוב ואישור → פיתוח → השקה. תשלום: 50% מקדמה, 50% בהשקה.' },
+      { q: 'למה לא לבנות לבד ב-Wix?', a: 'Wix מצוין להתחלה, אבל כשצריך ביצועים, SEO אמיתי, ואינטגרציות מותאמות — צריך פיתוח מקצועי. וזה לא יקר כמו שחושבים.' },
+      { q: 'יש אחריות?', a: '30 יום תמיכה מלאה אחרי השקה, וחבילות תחזוקה חודשיות לטווח ארוך.' },
+    ]),
+
+    // Common objection handling
+    sales_objections: JSON.stringify([
+      { objection: 'יקר/לא בתקציב', response: 'אני מבין. בוא נדבר על מה שאתה באמת צריך — אולי אפשר להתחיל עם גרסה בסיסית ולהרחיב בהמשך. מה התקציב שנוח לך?' },
+      { objection: 'צריך לחשוב על זה', response: 'בטח, קח את הזמן. רק שתדע — יש לי עומס גדול החודש ומי שנכנס עכשיו מתחיל מהר. אשמח לשריין לך מקום אם תרצה.' },
+      { objection: 'יש לי כבר מישהו/מפתח', response: 'מעולה! אם אתה מרוצה, זה הכי חשוב. אם בעתיד תצטרך עזרה נוספת או דעה שנייה — אני כאן.' },
+      { objection: 'אני יכול לעשות לבד', response: 'יש הרבה כלים טובים היום. אבל הזמן שלך שווה כסף — מה שלוקח לך שבועות, אני עושה בימים. ובאיכות שמניבה תוצאות.' },
+      { objection: 'צריך לדבר עם שותף/אשה', response: 'ברור, חשוב להתייעץ. רוצה שאשלח לך סיכום קצר שתוכל להעביר? ככה יהיה לכם קל להחליט ביחד.' },
+    ]),
   };
 
   for (const [key, value] of Object.entries(defaults)) {
     seedConfig.run(key, value);
   }
+
+  // Bot learning rules — boss corrections and preferences that persist
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS bot_rules (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule TEXT NOT NULL,
+      source TEXT NOT NULL DEFAULT 'boss',
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+  `);
 }

@@ -20,6 +20,7 @@ import { scheduleFollowUp, cancelFollowUps } from '../follow-up/follow-up-db.js'
 import { scheduleReminder } from '../schedulers/reminders.js';
 import { searchLeadContext, getLeadConversation } from './boss-context.js';
 import { calculateLeadScore } from './lead-scoring.js';
+import { addRule, getActiveRules, removeRule } from './bot-rules.js';
 import { synthesizeSpeech } from './voice-synthesize.js';
 import { generateQuotePDF } from '../quotes/generate-quote.js';
 import { config } from '../config.js';
@@ -516,6 +517,42 @@ async function processBossMarkers(
     }
   }
 
+  // ── [RULE:content] — boss teaches the bot a new rule ──
+  const ruleMatch = cleaned.match(/\[RULE:([^\]]+)\]/);
+  if (ruleMatch) {
+    const ruleText = ruleMatch[1].trim();
+    cleaned = cleaned.replace(/\[RULE:[^\]]+\]/, '').trim();
+    addRule(ruleText);
+    log.info({ rule: ruleText }, 'boss added new rule');
+  }
+
+  // ── [REMOVE_RULE:id] — boss removes a rule ──
+  const removeRuleMatch = cleaned.match(/\[REMOVE_RULE:(\d+)\]/);
+  if (removeRuleMatch) {
+    const ruleId = parseInt(removeRuleMatch[1], 10);
+    cleaned = cleaned.replace(/\[REMOVE_RULE:\d+\]/, '').trim();
+    removeRule(ruleId);
+    log.info({ ruleId }, 'boss removed rule');
+  }
+
+  // ── [LIST_RULES] — boss wants to see all rules ──
+  if (cleaned.includes('[LIST_RULES]')) {
+    cleaned = cleaned.replace(/\[LIST_RULES\]/, '').trim();
+    const rules = getActiveRules();
+    if (rules.length === 0) {
+      setTimeout(async () => {
+        try { await sendWithTyping(sock, jid, '📋 אין כללים שמורים עדיין. תלמד אותי!'); }
+        catch (err) { log.error({ err }, 'Failed to send rules list'); }
+      }, 1500);
+    } else {
+      const rulesList = rules.map((r) => `  ${r.id}. ${r.rule}`).join('\n');
+      setTimeout(async () => {
+        try { await sendWithTyping(sock, jid, `📋 כללים שלמדתי (${rules.length}):\n\n${rulesList}\n\nלמחיקה: "תמחק כלל [מספר]"`); }
+        catch (err) { log.error({ err }, 'Failed to send rules list'); }
+      }, 1500);
+    }
+  }
+
   return cleaned;
 }
 
@@ -565,9 +602,21 @@ export async function sendFirstMessage(
 
   const systemPrompt = await buildSystemPrompt(name, interest, phone);
 
-  const introPrompt = interest
-    ? `היי ${name}! ראיתי שאתה מעוניין ב${interest}. תציג את עצמך בקצרה ותשאל איך אתה יכול לעזור.`
-    : `היי ${name}! תציג את עצמך בקצרה ותשאל במה הלקוח מעוניין.`;
+  // Check if lead has source info (campaign tracking)
+  const leadRow = db
+    .prepare('SELECT source_detail FROM leads WHERE phone = ?')
+    .get(phone) as { source_detail: string | null } | undefined;
+  const sourceDetail = leadRow?.source_detail || '';
+
+  // Build a tailored intro prompt based on context
+  let introPrompt: string;
+  if (interest && sourceDetail) {
+    introPrompt = `הליד ${name} הגיע מ: ${sourceDetail} ומתעניין ב: ${interest}. שלח הודעה ראשונה חמה וקצרה — הכר בעניין שלו, הצג את עצמך בקצרה, ותן ערך מיידי (טיפ קטן או תובנה רלוונטית). סיים עם שאלה שמקדמת את השיחה.`;
+  } else if (interest) {
+    introPrompt = `הליד ${name} מתעניין ב: ${interest}. שלח הודעה ראשונה חמה וקצרה — הצג את עצמך, תן ערך מיידי, ושאל שאלה ממוקדת כדי להבין מה בדיוק הוא צריך.`;
+  } else {
+    introPrompt = `הליד ${name} נרשם ורוצה לשמוע עוד. שלח הודעה ראשונה חמה וקצרה — הצג את עצמך ושאל במה הוא מתעניין ומה הוא מחפש.`;
+  }
 
   const response = await generateResponse(
     [{ role: 'user', content: introPrompt }],

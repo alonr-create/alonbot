@@ -13,7 +13,13 @@ import {
   getBusinessName,
   getOwnerName,
   getServiceCatalog,
+  getPortfolio,
+  getSalesFAQ,
+  getSalesObjections,
   type ServiceCategory,
+  type PortfolioItem,
+  type FAQItem,
+  type ObjectionItem,
 } from '../db/tenant-config.js';
 
 /** Format service catalog from DB config into Hebrew prompt text. */
@@ -31,6 +37,39 @@ function formatCatalog(catalog: ServiceCategory[]): string {
   return lines.join('\n');
 }
 
+/** Format portfolio items for system prompt. */
+function formatPortfolio(items: PortfolioItem[]): string {
+  if (items.length === 0) return '';
+  const lines = ['## תיק עבודות (Portfolio)', 'כשלקוח שואל על דוגמאות או עבודות קודמות, שתף קישורים רלוונטיים:', ''];
+  for (const item of items) {
+    lines.push(`- **${item.name}** (${item.type}): ${item.desc} — ${item.url}`);
+  }
+  lines.push('', 'שתף 1-2 דוגמאות רלוונטיות לתחום העניין של הלקוח, לא את כולם בבת אחת.');
+  return lines.join('\n');
+}
+
+/** Format FAQ for system prompt. */
+function formatFAQ(items: FAQItem[]): string {
+  if (items.length === 0) return '';
+  const lines = ['## שאלות נפוצות', 'כשהלקוח שואל את השאלות הבאות, ענה בהתאם:', ''];
+  for (const item of items) {
+    lines.push(`**ש:** ${item.q}`);
+    lines.push(`**ת:** ${item.a}`);
+    lines.push('');
+  }
+  return lines.join('\n');
+}
+
+/** Format objection handling for system prompt. */
+function formatObjections(items: ObjectionItem[]): string {
+  if (items.length === 0) return '';
+  const lines = ['## טיפול בהתנגדויות', 'כשהלקוח מעלה את ההתנגדויות הבאות, ענה בהתאם (בטבעיות, לא מילה במילה):', ''];
+  for (const item of items) {
+    lines.push(`- **"${item.objection}"** → ${item.response}`);
+  }
+  return lines.join('\n');
+}
+
 export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string): Promise<string> {
   const isBoss = phone ? isAdminPhone(phone) : false;
   const ownerName = getOwnerName();
@@ -40,9 +79,23 @@ export async function buildSystemPrompt(leadName: string, leadInterest: string, 
   const personality = getConfig('bot_personality', 'ידידותי ומקצועי');
   const meetingType = getConfig('meeting_type', 'שיחת Zoom');
   const catalog = getServiceCatalog();
+  const portfolio = getPortfolio();
+  const faq = getSalesFAQ();
+  const objections = getSalesObjections();
 
   const name = isBoss ? `${ownerName} (הבוס)` : (leadName || 'לקוח');
   const interest = leadInterest || '';
+
+  // Look up lead source if phone is available
+  let sourceDetail = '';
+  if (phone && !isBoss) {
+    try {
+      const { getDb } = await import('../db/index.js');
+      const db = getDb();
+      const row = db.prepare('SELECT source_detail FROM leads WHERE phone = ?').get(phone) as { source_detail: string | null } | undefined;
+      sourceDetail = row?.source_detail || '';
+    } catch { /* ignore */ }
+  }
 
   // Fetch available slots during business hours
   let slotsSection = '';
@@ -62,7 +115,8 @@ ${formatted}
 
   const businessHoursContext = isBusinessHours()
     ? 'אנחנו בשעות פעילות — אפשר להציע פגישות ולדחוף לסגירה.'
-    : 'אנחנו מחוץ לשעות פעילות — תגיב בחום אבל אל תדחוף לפגישה או שיחת טלפון. אמור שתחזור עם הצעה מחר בשעות הפעילות.';
+    : `אנחנו מחוץ לשעות פעילות — עדיין תנהל שיחה חמה ותשאל שאלות על מה הלקוח צריך (תקציב, היקף, לו"ז). אל תציע פגישה או שיחת טלפון עכשיו, אבל כן תאסוף מידע. בסוף אמור: "${ownerName} יחזור אליך מחר בשעות הפעילות עם הצעה מותאמת."
+חשוב: אל תתנהג כאילו אתה לא זמין! אתה עובד 24/7. רק הפגישות הן בשעות הפעילות.`;
 
   // ── Boss mode: inject live business data ──
   let bossSection = '';
@@ -115,6 +169,9 @@ ${ownerName} יכול לבקש ממך דברים מיוחדים. כשהוא מב
   }
 
   const catalogSection = formatCatalog(catalog);
+  const portfolioSection = formatPortfolio(portfolio);
+  const faqSection = formatFAQ(faq);
+  const objectionsSection = formatObjections(objections);
 
   return `אתה נציג מכירות של ${businessName} — ${businessDesc}
 
@@ -132,6 +189,17 @@ ${catalogSection}
 - כשהלקוח מגדיר היקף ברור, תן הצעה ממוקדת יותר בתוך הטווח
 - אם הלקוח מבקש הנחה: אפשר עד 10% אבל תמיד בתוך הטווח
 
+${portfolioSection}
+${faqSection}
+${objectionsSection}
+## טקטיקות מכירה
+- תמיד סיים הודעה עם שאלה או הצעה לפעולה הבאה
+- אם הלקוח שואל "כמה עולה" — אל תתן מחיר יבש. שאל קודם מה ההיקף, ואז תן טווח עם הסבר מה כלול
+- צור תחושת דחיפות טבעית: "יש לי עומס החודש", "מי שנכנס עכשיו מתחיל מהר"
+- שתף דוגמה רלוונטית מהפורטפוליו כשמדברים על שירות ספציפי
+- כשהלקוח מתעניין ברצינות, הצע פגישת Zoom חינמית — "בלי התחייבות, רק לשמוע מה אתה צריך"
+- אם הלקוח שותק אחרי שאלה שלך — המתן. אל תשלח עוד הודעה. מערכת הפולואפ האוטומטית תטפל
+
 ## אישיות ומכירות
 - ${personality}
 - המטרה: לסגור עסקה או לקבוע פגישה עם ${ownerName}
@@ -139,6 +207,7 @@ ${catalogSection}
 ## הקשר ליד נוכחי
 - שם: ${name}
 ${interest ? `- תחום עניין: ${interest}` : '- תחום עניין: לא ידוע עדיין'}
+${sourceDetail ? `- מקור: ${sourceDetail}` : ''}
 
 ## זיהוי הבוס
 - כשהבוס כותב לך, אתה לא מוכר לו! אתה עוזר אישי שלו לעסק
