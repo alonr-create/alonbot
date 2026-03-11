@@ -23,6 +23,14 @@ import { calculateLeadScore } from './lead-scoring.js';
 import { addRule, getActiveRules, removeRule } from './bot-rules.js';
 import { synthesizeSpeech } from './voice-synthesize.js';
 import { generateQuotePDF } from '../quotes/generate-quote.js';
+import {
+  getActiveCampaigns,
+  getAccountInsights,
+  pauseCampaign,
+  resumeCampaign,
+  updateDailyBudget,
+} from '../facebook/api.js';
+import type { DatePreset } from '../facebook/types.js';
 import { config } from '../config.js';
 import { isAdminPhone, getAdminPhone, getOwnerName, getBusinessName, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
@@ -526,6 +534,110 @@ async function processBossMarkers(
         (err) => { log.error({ err }, 'Failed to update Monday.com close status'); },
       );
     }
+  }
+
+  // ── [FB_REPORT:date_range] — Facebook Ads performance report ──
+  const fbReportMatch = cleaned.match(/\[FB_REPORT:([^\]]+)\]/);
+  if (fbReportMatch) {
+    const dateRange = fbReportMatch[1] as DatePreset;
+    cleaned = cleaned.replace(/\[FB_REPORT:[^\]]+\]/, '').trim();
+
+    const dateLabels: Record<string, string> = {
+      today: 'היום',
+      yesterday: 'אתמול',
+      last_7d: '7 ימים אחרונים',
+      last_30d: '30 ימים אחרונים',
+    };
+    const label = dateLabels[dateRange] || dateRange;
+
+    (async () => {
+      try {
+        const [account, campaigns] = await Promise.all([
+          getAccountInsights(dateRange),
+          getActiveCampaigns(),
+        ]);
+
+        const lines: string[] = [
+          `📊 דוח פרסום פייסבוק — ${label}:`,
+          '',
+          `💰 הוצאה: ₪${account.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+          `👁️ חשיפות: ${account.impressions.toLocaleString('he-IL')}`,
+          `👆 קליקים: ${account.clicks.toLocaleString('he-IL')}`,
+          `🎯 לידים: ${account.leads}`,
+          `💵 עלות לקליק: ₪${account.cpc.toFixed(2)}`,
+          `📈 עלות לליד: ${account.leads > 0 ? '₪' + account.cpl.toFixed(2) : 'אין לידים'}`,
+        ];
+
+        if (campaigns.length > 0) {
+          lines.push('', `🎯 קמפיינים פעילים (${campaigns.length}):`);
+          for (const c of campaigns) {
+            const budget = c.daily_budget
+              ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
+              : 'ללא תקציב יומי';
+            lines.push(`  • ${c.name} — ${budget} (ID: ${c.id})`);
+          }
+        }
+
+        await sendWithTyping(sock, jid, lines.join('\n'));
+      } catch (err) {
+        log.error({ err, dateRange }, 'Failed to get Facebook report');
+        await sendWithTyping(sock, jid, '❌ שגיאה בשליפת נתוני פייסבוק. בדוק שה-Access Token תקין.');
+      }
+    })();
+  }
+
+  // ── [FB_PAUSE:campaign_id] — Pause a Facebook campaign ──
+  const fbPauseMatch = cleaned.match(/\[FB_PAUSE:([^\]]+)\]/);
+  if (fbPauseMatch) {
+    const campaignId = fbPauseMatch[1];
+    cleaned = cleaned.replace(/\[FB_PAUSE:[^\]]+\]/, '').trim();
+
+    (async () => {
+      try {
+        await pauseCampaign(campaignId);
+        await sendWithTyping(sock, jid, `⏸️ קמפיין ${campaignId} הושהה בהצלחה.`);
+      } catch (err) {
+        log.error({ err, campaignId }, 'Failed to pause campaign');
+        await sendWithTyping(sock, jid, `❌ שגיאה בהשהיית קמפיין ${campaignId}.`);
+      }
+    })();
+  }
+
+  // ── [FB_RESUME:campaign_id] — Resume a Facebook campaign ──
+  const fbResumeMatch = cleaned.match(/\[FB_RESUME:([^\]]+)\]/);
+  if (fbResumeMatch) {
+    const campaignId = fbResumeMatch[1];
+    cleaned = cleaned.replace(/\[FB_RESUME:[^\]]+\]/, '').trim();
+
+    (async () => {
+      try {
+        await resumeCampaign(campaignId);
+        await sendWithTyping(sock, jid, `▶️ קמפיין ${campaignId} הופעל מחדש בהצלחה.`);
+      } catch (err) {
+        log.error({ err, campaignId }, 'Failed to resume campaign');
+        await sendWithTyping(sock, jid, `❌ שגיאה בהפעלת קמפיין ${campaignId}.`);
+      }
+    })();
+  }
+
+  // ── [FB_BUDGET:campaign_id:amount] — Update daily budget (amount in shekels) ──
+  const fbBudgetMatch = cleaned.match(/\[FB_BUDGET:([^:]+):([^\]]+)\]/);
+  if (fbBudgetMatch) {
+    const campaignId = fbBudgetMatch[1];
+    const amountShekels = parseFloat(fbBudgetMatch[2]);
+    cleaned = cleaned.replace(/\[FB_BUDGET:[^\]]+\]/, '').trim();
+
+    const budgetInAgorot = Math.round(amountShekels * 100);
+
+    (async () => {
+      try {
+        await updateDailyBudget(campaignId, budgetInAgorot);
+        await sendWithTyping(sock, jid, `💰 תקציב קמפיין ${campaignId} עודכן ל-₪${amountShekels}/יום.`);
+      } catch (err) {
+        log.error({ err, campaignId, budgetInAgorot }, 'Failed to update budget');
+        await sendWithTyping(sock, jid, `❌ שגיאה בעדכון תקציב קמפיין ${campaignId}.`);
+      }
+    })();
   }
 
   // ── [RULE:content] — boss teaches the bot a new rule ──
