@@ -6,6 +6,7 @@ import { getDb } from '../db/index.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { getAdminPhone, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
+import { getAccountInsights, getActiveCampaigns, getAllAdAccountIds } from '../facebook/api.js';
 import type { BotAdapter } from '../whatsapp/connection.js';
 
 const log = createLogger('daily-summary');
@@ -138,6 +139,51 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
 
     await sendWithTyping(sock, jid, message);
     log.info('Daily summary sent to admin');
+
+    // Facebook Ads daily report (yesterday's data)
+    try {
+      const accounts = getAllAdAccountIds();
+      const [allInsights, campaigns, ...perAccountInsights] = await Promise.all([
+        getAccountInsights('yesterday'),
+        getActiveCampaigns(),
+        ...accounts.map((a) => getAccountInsights('yesterday', a.id)),
+      ]);
+
+      const fbLines: string[] = ['📊 דוח פרסום פייסבוק — אתמול:'];
+
+      for (let i = 0; i < accounts.length; i++) {
+        const acct = accounts[i];
+        const ins = perAccountInsights[i];
+        const acctCampaigns = campaigns.filter((c: any) => c.accountName === acct.name);
+        fbLines.push(
+          '',
+          `━━━ ${acct.name} ━━━`,
+          `💰 הוצאה: ₪${ins.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+          `👁️ ${ins.impressions.toLocaleString('he-IL')} חשיפות | 👆 ${ins.clicks} קליקים | 🎯 ${ins.leads} לידים`,
+          `💵 CPC: ${ins.clicks > 0 ? '₪' + ins.cpc.toFixed(2) : '—'} | CPL: ${ins.leads > 0 ? '₪' + ins.cpl.toFixed(2) : '—'}`,
+        );
+        if (acctCampaigns.length > 0) {
+          fbLines.push(`🎯 קמפיינים (${acctCampaigns.length}):`);
+          for (const c of acctCampaigns) {
+            const budget = c.daily_budget
+              ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
+              : 'ללא תקציב';
+            fbLines.push(`  • ${c.name} — ${budget}`);
+          }
+        }
+      }
+
+      fbLines.push(
+        '',
+        `━━━ סה״כ ━━━`,
+        `💰 ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })} | 🎯 ${allInsights.leads} לידים | 👆 ${allInsights.clicks} קליקים`,
+      );
+
+      await sendWithTyping(sock, jid, fbLines.join('\n'));
+      log.info('Daily Facebook report sent to admin');
+    } catch (fbErr) {
+      log.error({ err: fbErr }, 'Failed to send daily Facebook report');
+    }
   } catch (err) {
     log.error({ err }, 'Failed to send daily summary');
   }
