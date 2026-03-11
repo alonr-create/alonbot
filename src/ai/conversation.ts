@@ -462,7 +462,7 @@ async function processBossMarkers(
             await sock.sendDocument(
               targetJid,
               pdfBuffer,
-              `הצעת-מחיר-${quoteName.trim()}.pdf`,
+              `quote-${Date.now()}.pdf`,
               `הצעת מחיר מ-${getBusinessName()} — ${quoteService.trim()}`,
             );
             const confirmMsg = `✅ הצעת מחיר נשלחה ל${quoteName.trim()}!`;
@@ -478,8 +478,19 @@ async function processBossMarkers(
             insertQuoteMsg.run(bossPhone, null, 'out', confirmMsg);
             log.info({ name: quoteName, service: quoteService, price: quotePrice }, 'Quote sent');
           } catch (err) {
-            log.error({ err }, 'Failed to send quote PDF');
-            await sendWithTyping(sock, jid, `❌ שגיאה בשליחת הצעת המחיר`);
+            log.error({ err, targetPhone: targetLead.phone }, 'Failed to send quote PDF to lead — trying to send to boss');
+            // Fallback: send PDF to the boss instead
+            try {
+              await sock.sendDocument(
+                jid,
+                pdfBuffer,
+                `quote-${Date.now()}.pdf`,
+                `הצעת מחיר ל${quoteName.trim()} — ${quoteService.trim()} (שליחה ללקוח נכשלה, שולח לך)`,
+              );
+            } catch (err2) {
+              log.error({ err: err2 }, 'Failed to send quote PDF to boss too');
+              await sendWithTyping(sock, jid, `❌ שגיאה בשליחת הצעת המחיר — הקובץ נוצר אבל לא הצלחתי לשלוח`);
+            }
           }
         })
         .catch((err) => {
