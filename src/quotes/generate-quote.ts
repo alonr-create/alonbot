@@ -113,7 +113,7 @@ body {
 
 /* ── Hero ── */
 .hero {
-  height: 160px;
+  height: 120px;
   overflow: hidden;
   position: relative;
 }
@@ -147,8 +147,8 @@ body {
 
 /* ── Main content ── */
 .content {
-  padding: 0 40px 40px;
-  margin-top: -40px;
+  padding: 0 30px 20px;
+  margin-top: -30px;
   position: relative;
   z-index: 1;
 }
@@ -158,7 +158,7 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
+  margin-bottom: 16px;
 }
 .brand {
   display: flex;
@@ -210,12 +210,11 @@ body {
 
 /* ── Glass cards ── */
 .glass {
-  background: rgba(255,255,255,0.04);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,0.08);
+  background: #151B2E;
+  border: 1px solid #1E2642;
   border-radius: 16px;
-  padding: 24px;
-  margin-bottom: 20px;
+  padding: 20px;
+  margin-bottom: 14px;
 }
 .glass-accent {
   border-right: 3px solid var(--p);
@@ -232,16 +231,16 @@ body {
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, ${s}08, transparent 50%);
+  background: radial-gradient(circle, ${s}20, transparent 50%);
 }
 
 .label {
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 2px;
   color: var(--p);
   font-weight: 700;
-  margin-bottom: 14px;
+  margin-bottom: 8px;
 }
 
 /* ── Client info ── */
@@ -303,7 +302,7 @@ body {
   stroke-linejoin: round;
 }
 .service-name {
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
   color: #fff;
 }
@@ -323,11 +322,11 @@ body {
 .price-tag {
   background: linear-gradient(135deg, var(--p), var(--s));
   color: white;
-  padding: 12px 32px;
+  padding: 10px 28px;
   border-radius: 30px;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 900;
-  box-shadow: 0 6px 25px ${p}40;
+  box-shadow: 0 4px 15px ${p}40;
   letter-spacing: 0.5px;
 }
 .price-note {
@@ -411,9 +410,9 @@ body {
 .payment-cta {
   background: linear-gradient(135deg, var(--p), var(--s));
   border-radius: 16px;
-  padding: 24px;
+  padding: 18px;
   text-align: center;
-  margin-bottom: 20px;
+  margin-bottom: 14px;
   position: relative;
   overflow: hidden;
 }
@@ -457,8 +456,8 @@ body {
 
 /* ── Footer ── */
 .footer {
-  margin-top: 30px;
-  padding-top: 20px;
+  margin-top: 16px;
+  padding-top: 12px;
   border-top: 1px solid rgba(255,255,255,0.06);
   text-align: center;
 }
