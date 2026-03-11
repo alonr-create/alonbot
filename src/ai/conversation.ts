@@ -553,32 +553,51 @@ async function processBossMarkers(
 
     (async () => {
       try {
-        const [allInsights, campaigns] = await Promise.all([
+        const accounts = getAllAdAccountIds();
+        const [allInsights, campaigns, ...perAccountInsights] = await Promise.all([
           getAccountInsights(dateRange),
           getActiveCampaigns(),
+          ...accounts.map((a) => getAccountInsights(dateRange, a.id)),
         ]);
 
         const lines: string[] = [
-          `📊 דוח פרסום פייסבוק — ${label} (כל החשבונות):`,
-          '',
-          `💰 הוצאה כוללת: ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
-          `👁️ חשיפות: ${allInsights.impressions.toLocaleString('he-IL')}`,
-          `👆 קליקים: ${allInsights.clicks.toLocaleString('he-IL')}`,
-          `🎯 לידים: ${allInsights.leads}`,
-          `💵 עלות לקליק: ₪${allInsights.cpc.toFixed(2)}`,
-          `📈 עלות לליד: ${allInsights.leads > 0 ? '₪' + allInsights.cpl.toFixed(2) : 'אין לידים'}`,
+          `📊 דוח פרסום פייסבוק — ${label}:`,
         ];
 
-        if (campaigns.length > 0) {
-          lines.push('', `🎯 קמפיינים פעילים (${campaigns.length}):`);
-          for (const c of campaigns) {
-            const budget = c.daily_budget
-              ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
-              : 'ללא תקציב יומי';
-            const acctLabel = (c as any).accountName ? ` [${(c as any).accountName}]` : '';
-            lines.push(`  • ${c.name}${acctLabel} — ${budget} (ID: ${c.id})`);
+        // Per-account breakdown
+        for (let i = 0; i < accounts.length; i++) {
+          const acct = accounts[i];
+          const ins = perAccountInsights[i];
+          const acctCampaigns = campaigns.filter((c: any) => c.accountName === acct.name);
+          lines.push(
+            '',
+            `━━━ ${acct.name} ━━━`,
+            `💰 הוצאה: ₪${ins.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+            `👁️ חשיפות: ${ins.impressions.toLocaleString('he-IL')}`,
+            `👆 קליקים: ${ins.clicks.toLocaleString('he-IL')}`,
+            `🎯 לידים: ${ins.leads}`,
+            `💵 עלות לקליק: ${ins.clicks > 0 ? '₪' + ins.cpc.toFixed(2) : '—'}`,
+            `📈 עלות לליד: ${ins.leads > 0 ? '₪' + ins.cpl.toFixed(2) : '—'}`,
+          );
+          if (acctCampaigns.length > 0) {
+            lines.push(`🎯 קמפיינים (${acctCampaigns.length}):`);
+            for (const c of acctCampaigns) {
+              const budget = c.daily_budget
+                ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
+                : 'ללא תקציב יומי';
+              lines.push(`  • ${c.name} — ${budget}`);
+            }
           }
         }
+
+        // Total summary
+        lines.push(
+          '',
+          `━━━ סה״כ כל החשבונות ━━━`,
+          `💰 הוצאה כוללת: ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+          `🎯 לידים: ${allInsights.leads} | 👆 קליקים: ${allInsights.clicks.toLocaleString('he-IL')}`,
+          `💵 CPC: ${allInsights.clicks > 0 ? '₪' + allInsights.cpc.toFixed(2) : '—'} | 📈 CPL: ${allInsights.leads > 0 ? '₪' + allInsights.cpl.toFixed(2) : '—'}`,
+        );
 
         await sendWithTyping(sock, jid, lines.join('\n'));
       } catch (err) {
