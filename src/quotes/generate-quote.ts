@@ -1,6 +1,6 @@
 /**
  * Generate a premium PDF price quote using Puppeteer.
- * Dark theme, gradients, glassmorphism, optional AI-generated hero image.
+ * Light theme with purple accents, Alon.dev branding.
  * If a website URL is provided, scrapes it for branding (colors, logo, name).
  */
 import puppeteer from 'puppeteer';
@@ -8,6 +8,7 @@ import { createLogger } from '../utils/logger.js';
 import { getBusinessName, getTimezone, getConfig } from '../db/tenant-config.js';
 import { scrapeWebsite, type ScrapedBranding } from './scrape-website.js';
 import { generateHeroImage } from './generate-hero-image.js';
+import { ALON_LOGO_BASE64 } from './logo.js';
 
 const log = createLogger('generate-quote');
 
@@ -34,58 +35,41 @@ export async function generateQuotePDF(
     }
   }
 
-  // Color scheme
   const p = branding?.colors[0] || '#7C3AED';
   const s = branding?.colors[1] || '#06B6D4';
-  const accent = branding?.colors[2] || '#F59E0B';
 
-  // Generate AI hero image (runs in parallel concept — but sequential here)
+  // Generate AI hero image
   const heroImage = await generateHeroImage(service, leadName, [p, s]);
 
-  // Logo
-  const logoHtml = branding?.logoBase64
+  // Client logo from scraped website
+  const clientLogoHtml = branding?.logoBase64
     ? `<img src="${branding.logoBase64}" class="client-logo" />`
+    : '';
+
+  // Client branding extras
+  const clientExtra = branding?.businessName
+    ? `<div class="chip">${esc(branding.businessName)}</div>
+       ${branding.tagline ? `<div class="chip muted">${esc(branding.tagline.slice(0, 80))}</div>` : ''}`
     : '';
 
   // Screenshot
   const screenshotHtml = branding?.screenshot
-    ? `<div class="screenshot-block">
-        <div class="label">האתר הנוכחי שלכם</div>
-        <div class="screenshot-frame">
-          <div class="browser-dots"><span></span><span></span><span></span></div>
-          <img src="data:image/jpeg;base64,${branding.screenshot}" />
-        </div>
-        <p class="screenshot-note">נשדרג אותו למשהו מדהים!</p>
+    ? `<div class="screenshot">
+        <div class="browser-bar"><span></span><span></span><span></span></div>
+        <img src="data:image/jpeg;base64,${branding.screenshot}" />
        </div>`
     : '';
 
-  // Client branding
-  const clientExtra = branding?.businessName
-    ? `<div class="info-chip">${esc(branding.businessName)}</div>
-       ${branding.tagline ? `<div class="info-chip muted">${esc(branding.tagline.slice(0, 80))}</div>` : ''}`
-    : '';
-
-  // Hero section
-  const heroHtml = heroImage
-    ? `<div class="hero"><img src="${heroImage}" /></div>`
-    : `<div class="hero hero-gradient"></div>`;
-
-  // Determine service icon SVG based on keywords
   const serviceIcon = getServiceIcon(service);
-
-  // "What's included" items — dynamic based on service type
   const includes = getServiceIncludes(service);
 
-  // Payment link (Bit)
+  // Payment link
   const paymentUrl = getConfig('payment_url');
   const paymentHtml = paymentUrl
-    ? `<!-- Payment CTA -->
-  <div class="payment-cta">
-    <div class="payment-title">💳 מוכנים להתחיל?</div>
-    <div class="payment-subtitle">לחצו לתשלום מקדמה מאובטח דרך Bit</div>
-    <a href="${paymentUrl}" class="payment-btn">לתשלום מאובטח →</a>
-    <div class="payment-secure">🔒 תשלום מאובטח באמצעות Bit</div>
-  </div>`
+    ? `<div class="payment">
+        <div class="payment-text">מוכנים להתחיל? לחצו לתשלום מקדמה מאובטח</div>
+        <a href="${paymentUrl}" class="payment-btn">לתשלום מאובטח דרך Bit &larr;</a>
+       </div>`
     : '';
 
   const html = `<!DOCTYPE html>
@@ -94,436 +78,272 @@ export async function generateQuotePDF(
 <meta charset="UTF-8">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
-
-:root {
-  --p: ${p};
-  --s: ${s};
-  --accent: ${accent};
-}
-
 * { margin: 0; padding: 0; box-sizing: border-box; }
-
 body {
   font-family: 'Heebo', sans-serif;
-  background: #0B0F1A;
-  color: #E5E7EB;
+  background: #F5F3FF;
+  color: #1F2937;
   direction: rtl;
-  min-height: 100vh;
 }
 
-/* ── Hero ── */
-.hero {
-  height: 120px;
-  overflow: hidden;
-  position: relative;
-}
-.hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-.hero-gradient {
-  background: linear-gradient(135deg, ${p}40, ${s}40, ${p}20);
-  position: relative;
-}
-.hero-gradient::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(circle at 20% 50%, ${p}60 0%, transparent 50%),
-    radial-gradient(circle at 80% 30%, ${s}40 0%, transparent 40%),
-    radial-gradient(circle at 50% 80%, ${accent}30 0%, transparent 35%);
-}
-.hero::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 60px;
-  background: linear-gradient(transparent, #0B0F1A);
-}
-
-/* ── Main content ── */
-.content {
-  padding: 0 30px 20px;
-  margin-top: -30px;
-  position: relative;
-  z-index: 1;
-}
-
-/* ── Header bar ── */
-.header-bar {
+/* ── Header ── */
+.header {
+  background: linear-gradient(135deg, ${p}, ${s});
+  padding: 20px 30px;
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 16px;
 }
-.brand {
+.header-right {
   display: flex;
   align-items: center;
   gap: 12px;
 }
-.brand-icon {
-  width: 48px;
-  height: 48px;
-  background: linear-gradient(135deg, var(--p), var(--s));
+.logo {
+  width: 50px;
+  height: 50px;
   border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  object-fit: cover;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+.brand-name {
   font-size: 24px;
   font-weight: 900;
   color: white;
-  box-shadow: 0 4px 20px ${p}40;
 }
-.brand h1 {
-  font-size: 28px;
-  font-weight: 900;
-  color: #fff;
-}
-.brand h1 span { color: var(--p); }
-.brand p {
-  font-size: 12px;
-  color: #9CA3AF;
-  margin-top: 2px;
+.brand-sub {
+  font-size: 11px;
+  color: rgba(255,255,255,0.8);
 }
 .badge {
-  background: linear-gradient(135deg, var(--p), var(--s));
+  background: rgba(255,255,255,0.2);
   color: white;
-  padding: 8px 22px;
+  padding: 6px 18px;
   border-radius: 20px;
   font-weight: 700;
   font-size: 13px;
-  letter-spacing: 0.5px;
-  box-shadow: 0 4px 15px ${p}50;
 }
+
+/* ── Dates ── */
 .dates {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
+  padding: 8px 30px;
+  font-size: 11px;
   color: #6B7280;
-  margin-bottom: 24px;
-  padding: 0 4px;
+  background: #EDE9FE;
 }
 
-/* ── Glass cards ── */
-.glass {
-  background: #151B2E;
-  border: 1px solid #1E2642;
-  border-radius: 16px;
-  padding: 20px;
-  margin-bottom: 14px;
+/* ── Content ── */
+.content { padding: 16px 30px 12px; }
+
+/* ── Cards ── */
+.card {
+  background: white;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin-bottom: 10px;
+  border: 1px solid #E5E7EB;
 }
-.glass-accent {
-  border-right: 3px solid var(--p);
-}
-.glass-service {
-  border-right: 3px solid var(--s);
-  position: relative;
-  overflow: hidden;
-}
-.glass-service::before {
-  content: '';
-  position: absolute;
-  top: -50%;
-  left: -50%;
-  width: 200%;
-  height: 200%;
-  background: radial-gradient(circle, ${s}20, transparent 50%);
-}
+.card-accent { border-right: 3px solid ${p}; }
+.card-service { border-right: 3px solid ${s}; }
 
 .label {
-  font-size: 10px;
+  font-size: 9px;
   text-transform: uppercase;
   letter-spacing: 2px;
-  color: var(--p);
+  color: ${p};
   font-weight: 700;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
-/* ── Client info ── */
+/* ── Client ── */
 .client-row {
   display: flex;
   align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
+  gap: 12px;
 }
 .client-logo {
-  max-height: 50px;
-  max-width: 140px;
-  object-fit: contain;
-  border-radius: 8px;
+  max-height: 36px;
+  max-width: 100px;
+  border-radius: 6px;
 }
-.client-details p {
-  font-size: 14px;
-  margin-bottom: 4px;
-  color: #D1D5DB;
-}
-.client-details strong { color: #fff; }
-.info-chip {
+.client-name { font-size: 15px; font-weight: 700; }
+.client-phone { font-size: 12px; color: #6B7280; }
+.chip {
   display: inline-block;
-  background: rgba(255,255,255,0.06);
-  padding: 4px 12px;
-  border-radius: 8px;
-  font-size: 12px;
-  color: #9CA3AF;
-  margin-top: 8px;
-  margin-left: 6px;
+  background: #F3F4F6;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  color: #6B7280;
+  margin-top: 4px;
 }
-.info-chip.muted { color: #6B7280; font-size: 11px; }
 
 /* ── Service ── */
-.service-header {
+.service-row {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 12px;
-  position: relative;
+  gap: 10px;
+  margin-bottom: 8px;
 }
-.service-icon {
-  width: 44px;
-  height: 44px;
-  background: linear-gradient(135deg, ${s}30, ${p}30);
-  border-radius: 12px;
+.s-icon {
+  width: 36px;
+  height: 36px;
+  background: ${p}15;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
 }
-.service-icon svg {
-  width: 22px;
-  height: 22px;
-  stroke: var(--s);
+.s-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: ${p};
   fill: none;
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.service-name {
-  font-size: 18px;
-  font-weight: 700;
-  color: #fff;
-}
-.service-desc {
-  color: #9CA3AF;
-  font-size: 13px;
-  line-height: 1.7;
-  margin-bottom: 16px;
-  position: relative;
-}
-.price-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  position: relative;
-}
-.price-tag {
-  background: linear-gradient(135deg, var(--p), var(--s));
+.s-name { font-size: 16px; font-weight: 700; }
+.s-desc { font-size: 12px; color: #6B7280; line-height: 1.6; margin-bottom: 8px; }
+.price {
+  display: inline-block;
+  background: linear-gradient(135deg, ${p}, ${s});
   color: white;
-  padding: 10px 28px;
-  border-radius: 30px;
-  font-size: 22px;
+  padding: 8px 24px;
+  border-radius: 24px;
+  font-size: 20px;
   font-weight: 900;
-  box-shadow: 0 4px 15px ${p}40;
-  letter-spacing: 0.5px;
 }
-.price-note {
-  font-size: 12px;
-  color: #6B7280;
-}
+.price-note { display: inline; font-size: 11px; color: #9CA3AF; margin-right: 8px; }
 
 /* ── Screenshot ── */
-.screenshot-block { margin-bottom: 20px; }
-.screenshot-frame {
-  border-radius: 12px;
+.screenshot {
+  border-radius: 10px;
   overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.1);
-  background: #111827;
+  border: 1px solid #E5E7EB;
+  margin-bottom: 10px;
 }
-.browser-dots {
+.browser-bar {
   display: flex;
-  gap: 6px;
-  padding: 10px 14px;
-  background: #1F2937;
+  gap: 5px;
+  padding: 7px 12px;
+  background: #F3F4F6;
 }
-.browser-dots span {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-}
-.browser-dots span:nth-child(1) { background: #EF4444; }
-.browser-dots span:nth-child(2) { background: #F59E0B; }
-.browser-dots span:nth-child(3) { background: #10B981; }
-.screenshot-frame img {
-  width: 100%;
-  display: block;
-}
-.screenshot-note {
-  font-size: 12px;
-  color: var(--s);
-  text-align: center;
-  margin-top: 8px;
-  font-weight: 500;
-}
+.browser-bar span { width: 8px; height: 8px; border-radius: 50%; }
+.browser-bar span:nth-child(1) { background: #EF4444; }
+.browser-bar span:nth-child(2) { background: #F59E0B; }
+.browser-bar span:nth-child(3) { background: #10B981; }
+.screenshot img { width: 100%; display: block; }
 
-/* ── Includes grid ── */
-.includes-grid {
+/* ── Includes ── */
+.grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 10px;
+  gap: 6px;
 }
-.include-item {
+.grid-item {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: rgba(255,255,255,0.03);
-  border-radius: 10px;
-  font-size: 13px;
-  color: #D1D5DB;
+  gap: 8px;
+  padding: 6px 10px;
+  background: #F9FAFB;
+  border-radius: 8px;
+  font-size: 12px;
 }
-.include-dot {
-  width: 8px;
-  height: 8px;
+.dot {
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--p), var(--s));
+  background: ${p};
   flex-shrink: 0;
 }
 
 /* ── Terms ── */
-.terms-list {
+.terms {
   list-style: none;
-  font-size: 12px;
+  font-size: 11px;
   color: #6B7280;
-  line-height: 2;
+  line-height: 1.8;
 }
-.terms-list li::before {
-  content: '•';
-  color: var(--p);
-  margin-left: 8px;
+.terms li::before {
+  content: '\\2022';
+  color: ${p};
+  margin-left: 6px;
   font-weight: 700;
 }
 
-/* ── Payment CTA ── */
-.payment-cta {
-  background: linear-gradient(135deg, var(--p), var(--s));
-  border-radius: 16px;
-  padding: 18px;
+/* ── Payment ── */
+.payment {
+  background: linear-gradient(135deg, ${p}, ${s});
+  border-radius: 12px;
+  padding: 14px;
   text-align: center;
-  margin-bottom: 14px;
-  position: relative;
-  overflow: hidden;
+  margin-bottom: 10px;
 }
-.payment-cta::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.1), transparent 60%);
-}
-.payment-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: white;
+.payment-text {
+  font-size: 12px;
+  color: rgba(255,255,255,0.9);
   margin-bottom: 8px;
-  position: relative;
-}
-.payment-subtitle {
-  font-size: 13px;
-  color: rgba(255,255,255,0.8);
-  margin-bottom: 16px;
-  position: relative;
 }
 .payment-btn {
   display: inline-block;
   background: white;
-  color: #1a1a2e;
-  padding: 12px 40px;
-  border-radius: 30px;
-  font-size: 16px;
+  color: ${p};
+  padding: 8px 30px;
+  border-radius: 24px;
+  font-size: 14px;
   font-weight: 700;
   text-decoration: none;
-  position: relative;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-}
-.payment-secure {
-  font-size: 11px;
-  color: rgba(255,255,255,0.6);
-  margin-top: 10px;
-  position: relative;
 }
 
 /* ── Footer ── */
 .footer {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(255,255,255,0.06);
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #E5E7EB;
   text-align: center;
-}
-.footer-brand {
-  font-size: 13px;
-  color: #6B7280;
-  margin-bottom: 6px;
+  font-size: 11px;
+  color: #9CA3AF;
 }
 .footer-contacts {
   display: flex;
   justify-content: center;
-  gap: 24px;
-  font-size: 12px;
-  color: #4B5563;
-}
-.footer-contacts span {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.footer-tagline {
-  margin-top: 12px;
+  gap: 16px;
+  margin-top: 4px;
   font-size: 11px;
-  color: #374151;
-  letter-spacing: 1px;
-}
-
-/* ── Decorative ── */
-.glow-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(60px);
-  opacity: 0.15;
-  pointer-events: none;
+  color: #6B7280;
 }
 </style>
 </head>
 <body>
 
-${heroHtml}
+<div class="header">
+  <div class="header-right">
+    <img src="${ALON_LOGO_BASE64}" class="logo" />
+    <div>
+      <div class="brand-name">Alon.dev</div>
+      <div class="brand-sub">אדם + AI = צוות שלם</div>
+    </div>
+  </div>
+  <div class="badge">הצעת מחיר</div>
+</div>
+
+<div class="dates">
+  <span>תאריך: ${today}</span>
+  <span>תוקף: ${validUntil}</span>
+</div>
 
 <div class="content">
-  <div class="header-bar">
-    <div class="brand">
-      <div class="brand-icon">A</div>
-      <div>
-        <h1>Alon<span>.dev</span></h1>
-        <p>אדם + AI = צוות שלם</p>
-      </div>
-    </div>
-    <div class="badge">הצעת מחיר</div>
-  </div>
-
-  <div class="dates">
-    <span>תאריך: ${today}</span>
-    <span>תוקף: ${validUntil}</span>
-  </div>
-
-  <!-- Client Info -->
-  <div class="glass glass-accent">
+  <!-- Client -->
+  <div class="card card-accent">
     <div class="label">פרטי הלקוח</div>
     <div class="client-row">
-      ${logoHtml}
-      <div class="client-details">
-        <p><strong>${esc(leadName)}</strong></p>
-        <p>${formatPhone(phone)}</p>
+      ${clientLogoHtml}
+      <div>
+        <div class="client-name">${esc(leadName)}</div>
+        <div class="client-phone">${formatPhone(phone)}</div>
       </div>
     </div>
     ${clientExtra}
@@ -532,34 +352,34 @@ ${heroHtml}
   ${screenshotHtml}
 
   <!-- Service -->
-  <div class="glass glass-service">
+  <div class="card card-service">
     <div class="label">פירוט השירות</div>
-    <div class="service-header">
-      <div class="service-icon">${serviceIcon}</div>
-      <div class="service-name">${esc(service)}</div>
+    <div class="service-row">
+      <div class="s-icon">${serviceIcon}</div>
+      <div class="s-name">${esc(service)}</div>
     </div>
-    ${details ? `<div class="service-desc">${esc(details)}</div>` : ''}
-    <div class="price-row">
-      <div class="price-tag">${esc(priceRange).startsWith('₪') ? '' : '₪'}${esc(priceRange)}</div>
-      <div class="price-note">לא כולל מע"מ</div>
+    ${details ? `<div class="s-desc">${esc(details)}</div>` : ''}
+    <div>
+      <span class="price">${esc(priceRange).startsWith('₪') ? '' : '₪'}${esc(priceRange)}</span>
+      <span class="price-note">לא כולל מע"מ</span>
     </div>
   </div>
 
-  <!-- What's Included -->
-  <div class="glass">
+  <!-- Includes -->
+  <div class="card">
     <div class="label">מה כולל?</div>
-    <div class="includes-grid">
-      ${includes.map(i => `<div class="include-item"><div class="include-dot"></div>${i}</div>`).join('\n      ')}
+    <div class="grid">
+      ${includes.map(i => `<div class="grid-item"><div class="dot"></div>${i}</div>`).join('\n      ')}
     </div>
   </div>
 
   <!-- Terms -->
-  <div class="glass">
+  <div class="card">
     <div class="label">תנאים</div>
-    <ul class="terms-list">
-      <li>ההצעה תקפה ל-7 ימים מתאריך ההנפקה</li>
-      <li>תשלום: 50% מקדמה בתחילת העבודה, 50% בסיום</li>
-      <li>זמן אספקה יסוכם לאחר אפיון מפורט</li>
+    <ul class="terms">
+      <li>ההצעה תקפה ל-7 ימים</li>
+      <li>תשלום: 50% מקדמה, 50% בסיום</li>
+      <li>זמן אספקה יסוכם לאחר אפיון</li>
       <li>כולל עד 2 סבבי תיקונים</li>
     </ul>
   </div>
@@ -568,13 +388,12 @@ ${heroHtml}
 
   <!-- Footer -->
   <div class="footer">
-    <div class="footer-brand">${esc(businessName)} — שירותי טכנולוגיה ודיגיטל</div>
+    ${esc(businessName)} — שירותי טכנולוגיה ודיגיטל
     <div class="footer-contacts">
       <span>054-630-0783</span>
       <span>alon12@gmail.com</span>
       <span>alon.dev</span>
     </div>
-    <div class="footer-tagline">P O W E R E D &nbsp; B Y &nbsp; A I</div>
   </div>
 </div>
 
@@ -631,7 +450,6 @@ function formatPhone(phone: string): string {
   return phone;
 }
 
-/** Get an SVG icon based on service keywords. */
 function getServiceIcon(service: string): string {
   const s = service.toLowerCase();
   if (s.includes('אתר') || s.includes('website') || s.includes('לנדינג') || s.includes('דף'))
@@ -644,50 +462,19 @@ function getServiceIcon(service: string): string {
     return '<svg viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></svg>';
   if (s.includes('שיווק') || s.includes('marketing') || s.includes('קמפיין') || s.includes('תוכן'))
     return '<svg viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>';
-  // Default: code icon
   return '<svg viewBox="0 0 24 24"><polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/></svg>';
 }
 
-/** Get "what's included" list based on service type. */
 function getServiceIncludes(service: string): string[] {
   const s = service.toLowerCase();
   if (s.includes('אתר') || s.includes('website') || s.includes('לנדינג')) {
-    return [
-      'עיצוב מותאם למיתוג שלכם',
-      'Responsive לכל מכשיר',
-      'אופטימיזציה למהירות',
-      'SEO בסיסי',
-      'הדרכה על ניהול תוכן',
-      'חיבור דומיין ואחסון',
-    ];
+    return ['עיצוב מותאם למיתוג', 'Responsive לכל מכשיר', 'אופטימיזציה למהירות', 'SEO בסיסי', 'הדרכה על ניהול תוכן', 'חיבור דומיין ואחסון'];
   }
   if (s.includes('בוט') || s.includes('bot') || s.includes('אוטומציה')) {
-    return [
-      'פיתוח בוט AI מותאם',
-      'חיבור WhatsApp / Telegram',
-      'מענה אוטומטי 24/7',
-      'ניהול לידים אוטומטי',
-      'פולואפים חכמים',
-      'דשבורד ניהול ומעקב',
-    ];
+    return ['פיתוח בוט AI מותאם', 'חיבור WhatsApp / Telegram', 'מענה אוטומטי 24/7', 'ניהול לידים אוטומטי', 'פולואפים חכמים', 'דשבורד ניהול ומעקב'];
   }
   if (s.includes('crm') || s.includes('דשבורד') || s.includes('מערכת')) {
-    return [
-      'עיצוב ממשק מותאם',
-      'ניהול לקוחות ולידים',
-      'דוחות וגרפים',
-      'הרשאות משתמשים',
-      'חיבור APIs חיצוניים',
-      'אבטחת מידע',
-    ];
+    return ['עיצוב ממשק מותאם', 'ניהול לקוחות ולידים', 'דוחות וגרפים', 'הרשאות משתמשים', 'חיבור APIs חיצוניים', 'אבטחת מידע'];
   }
-  // Default
-  return [
-    'עיצוב מותאם אישית',
-    'פיתוח מלא מ-0',
-    'עד 2 סבבי תיקונים',
-    'אופטימיזציה וביצועים',
-    'הדרכה מלאה',
-    'תמיכה טכנית',
-  ];
+  return ['עיצוב מותאם אישית', 'פיתוח מלא מ-0', 'עד 2 סבבי תיקונים', 'אופטימיזציה וביצועים', 'הדרכה מלאה', 'תמיכה טכנית'];
 }
