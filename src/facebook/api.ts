@@ -1,6 +1,7 @@
 /**
  * Facebook Marketing API client.
  * Uses Graph API v21.0 with native fetch.
+ * Supports multiple ad accounts.
  */
 import { createLogger } from '../utils/logger.js';
 import type {
@@ -17,22 +18,60 @@ const log = createLogger('facebook-api');
 const GRAPH_API_VERSION = 'v21.0';
 const GRAPH_BASE_URL = `https://graph.facebook.com/${GRAPH_API_VERSION}`;
 
-function getAccessToken(): string {
-  const token = process.env.FACEBOOK_ACCESS_TOKEN;
-  if (!token) throw new Error('FACEBOOK_ACCESS_TOKEN env var is not set');
+// Ad accounts with their tokens (each Business Manager has its own System User token)
+interface AdAccountConfig {
+  id: string;
+  tokenEnv: string; // env var name for the token
+}
+
+const AD_ACCOUNTS: Record<string, AdAccountConfig> = {
+  'דקל לפרישה': { id: 'act_293504438925223', tokenEnv: 'FACEBOOK_ACCESS_TOKEN' },
+  'Alon.dev': { id: 'act_1314904720689466', tokenEnv: 'FACEBOOK_ACCESS_TOKEN_ALON' },
+};
+
+function getAccessToken(tokenEnv = 'FACEBOOK_ACCESS_TOKEN'): string {
+  const token = process.env[tokenEnv];
+  if (!token) throw new Error(`${tokenEnv} env var is not set`);
   return token;
 }
 
-function getAdAccountId(): string {
-  return process.env.FACEBOOK_AD_ACCOUNT_ID || 'act_1840092926437010';
+function getTokenForAccount(accountId: string): string {
+  for (const config of Object.values(AD_ACCOUNTS)) {
+    if (config.id === accountId) return getAccessToken(config.tokenEnv);
+  }
+  return getAccessToken();
+}
+
+function getTokenEnvForAccount(accountId: string): string {
+  for (const config of Object.values(AD_ACCOUNTS)) {
+    if (config.id === accountId) return config.tokenEnv;
+  }
+  return 'FACEBOOK_ACCESS_TOKEN';
+}
+
+/** Get all ad account IDs. */
+export function getAllAdAccountIds(): { name: string; id: string }[] {
+  return Object.entries(AD_ACCOUNTS).map(([name, config]) => ({ name, id: config.id }));
+}
+
+/** Get ad account ID by name (partial match). Falls back to first account. */
+export function getAdAccountId(name?: string): string {
+  if (!name) return Object.values(AD_ACCOUNTS)[0].id;
+  const lower = name.toLowerCase();
+  for (const [key, config] of Object.entries(AD_ACCOUNTS)) {
+    if (key.toLowerCase().includes(lower) || lower.includes(key.toLowerCase())) {
+      return config.id;
+    }
+  }
+  return Object.values(AD_ACCOUNTS)[0].id;
 }
 
 /**
  * Generic Facebook Graph API request helper.
  */
-async function fbGet<T>(path: string, params: Record<string, string> = {}): Promise<T> {
+async function fbGet<T>(path: string, params: Record<string, string> = {}, tokenEnv?: string): Promise<T> {
   const url = new URL(`${GRAPH_BASE_URL}${path}`);
-  url.searchParams.set('access_token', getAccessToken());
+  url.searchParams.set('access_token', tokenEnv ? getAccessToken(tokenEnv) : getAccessToken());
   for (const [key, value] of Object.entries(params)) {
     url.searchParams.set(key, value);
   }
@@ -72,20 +111,44 @@ async function fbPost<T>(path: string, body: Record<string, string> = {}): Promi
 // ── Public API ──────────────────────────────────────────────
 
 /**
- * Get all active campaigns for the ad account.
+ * Get active campaigns for a specific ad account (or all accounts).
  */
-export async function getActiveCampaigns(): Promise<FacebookCampaign[]> {
-  const accountId = getAdAccountId();
+export async function getActiveCampaigns(accountId?: string): Promise<(FacebookCampaign & { accountName?: string })[]> {
+  if (accountId) {
+    return fetchCampaignsForAccount(accountId);
+  }
+
+  // Fetch from all accounts in parallel
+  const results = await Promise.allSettled(
+    Object.entries(AD_ACCOUNTS).map(async ([name, config]) => {
+      const campaigns = await fetchCampaignsForAccount(config.id);
+      return campaigns.map((c) => ({ ...c, accountName: name }));
+    }),
+  );
+
+  const all: (FacebookCampaign & { accountName?: string })[] = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') all.push(...r.value);
+  }
+  log.info({ totalActive: all.length }, 'fetched campaigns from all accounts');
+  return all;
+}
+
+async function fetchCampaignsForAccount(accountId: string): Promise<FacebookCampaign[]> {
+  const tokenEnv = getTokenEnvForAccount(accountId);
   const result = await fbGet<{ data: FacebookCampaign[] }>(
     `/${accountId}/campaigns`,
     {
-      fields: 'id,name,status,daily_budget,objective',
-      filtering: JSON.stringify([{ field: 'status', operator: 'IN', value: ['ACTIVE'] }]),
+      fields: 'id,name,status,effective_status,daily_budget,objective',
       limit: '100',
     },
+    tokenEnv,
   );
-  log.info({ count: result.data.length }, 'fetched active campaigns');
-  return result.data;
+  const active = result.data.filter(
+    (c) => c.status === 'ACTIVE' || c.effective_status === 'ACTIVE',
+  );
+  log.info({ accountId, total: result.data.length, active: active.length }, 'fetched campaigns');
+  return active;
 }
 
 /**
@@ -122,32 +185,61 @@ export async function getCampaignInsights(
 }
 
 /**
- * Get aggregated insights for the entire ad account.
+ * Get aggregated insights for a specific ad account (or all accounts combined).
  */
 export async function getAccountInsights(
   datePreset: DatePreset = 'today',
+  accountId?: string,
 ): Promise<AccountInsightsResult> {
-  const accountId = getAdAccountId();
+  if (accountId) {
+    return fetchInsightsForAccount(accountId, datePreset);
+  }
+
+  // Fetch from all accounts and sum up
+  const results = await Promise.allSettled(
+    Object.values(AD_ACCOUNTS).map((config) => fetchInsightsForAccount(config.id, datePreset)),
+  );
+
+  let totalSpend = 0, totalImpressions = 0, totalClicks = 0, totalLeads = 0;
+  let dateStart = '', dateStop = '';
+
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      totalSpend += r.value.spend;
+      totalImpressions += r.value.impressions;
+      totalClicks += r.value.clicks;
+      totalLeads += r.value.leads;
+      if (r.value.dateStart && (!dateStart || r.value.dateStart < dateStart)) dateStart = r.value.dateStart;
+      if (r.value.dateStop && (!dateStop || r.value.dateStop > dateStop)) dateStop = r.value.dateStop;
+    }
+  }
+
+  return {
+    spend: totalSpend,
+    impressions: totalImpressions,
+    clicks: totalClicks,
+    leads: totalLeads,
+    cpc: totalClicks > 0 ? Math.round((totalSpend / totalClicks) * 100) / 100 : 0,
+    cpl: totalLeads > 0 ? Math.round((totalSpend / totalLeads) * 100) / 100 : 0,
+    dateStart,
+    dateStop,
+  };
+}
+
+async function fetchInsightsForAccount(accountId: string, datePreset: DatePreset): Promise<AccountInsightsResult> {
+  const tokenEnv = getTokenEnvForAccount(accountId);
   const result = await fbGet<{ data: FacebookInsights[] }>(
     `/${accountId}/insights`,
     {
       fields: 'spend,impressions,clicks,actions,cost_per_action_type,cpc',
       date_preset: datePreset,
     },
+    tokenEnv,
   );
 
   const insights = result.data[0];
   if (!insights) {
-    return {
-      spend: 0,
-      impressions: 0,
-      clicks: 0,
-      leads: 0,
-      cpc: 0,
-      cpl: 0,
-      dateStart: '',
-      dateStop: '',
-    };
+    return { spend: 0, impressions: 0, clicks: 0, leads: 0, cpc: 0, cpl: 0, dateStart: '', dateStop: '' };
   }
 
   const parsed = parseInsights(insights);

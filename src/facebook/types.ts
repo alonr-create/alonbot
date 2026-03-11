@@ -6,6 +6,7 @@ export interface FacebookCampaign {
   id: string;
   name: string;
   status: 'ACTIVE' | 'PAUSED' | 'DELETED' | 'ARCHIVED';
+  effective_status?: string;
   daily_budget?: string;
   objective: string;
 }

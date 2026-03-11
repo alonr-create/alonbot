@@ -26,6 +26,7 @@ import { generateQuotePDF } from '../quotes/generate-quote.js';
 import {
   getActiveCampaigns,
   getAccountInsights,
+  getAllAdAccountIds,
   pauseCampaign,
   resumeCampaign,
   updateDailyBudget,
@@ -552,20 +553,20 @@ async function processBossMarkers(
 
     (async () => {
       try {
-        const [account, campaigns] = await Promise.all([
+        const [allInsights, campaigns] = await Promise.all([
           getAccountInsights(dateRange),
           getActiveCampaigns(),
         ]);
 
         const lines: string[] = [
-          `📊 דוח פרסום פייסבוק — ${label}:`,
+          `📊 דוח פרסום פייסבוק — ${label} (כל החשבונות):`,
           '',
-          `💰 הוצאה: ₪${account.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
-          `👁️ חשיפות: ${account.impressions.toLocaleString('he-IL')}`,
-          `👆 קליקים: ${account.clicks.toLocaleString('he-IL')}`,
-          `🎯 לידים: ${account.leads}`,
-          `💵 עלות לקליק: ₪${account.cpc.toFixed(2)}`,
-          `📈 עלות לליד: ${account.leads > 0 ? '₪' + account.cpl.toFixed(2) : 'אין לידים'}`,
+          `💰 הוצאה כוללת: ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+          `👁️ חשיפות: ${allInsights.impressions.toLocaleString('he-IL')}`,
+          `👆 קליקים: ${allInsights.clicks.toLocaleString('he-IL')}`,
+          `🎯 לידים: ${allInsights.leads}`,
+          `💵 עלות לקליק: ₪${allInsights.cpc.toFixed(2)}`,
+          `📈 עלות לליד: ${allInsights.leads > 0 ? '₪' + allInsights.cpl.toFixed(2) : 'אין לידים'}`,
         ];
 
         if (campaigns.length > 0) {
@@ -574,7 +575,8 @@ async function processBossMarkers(
             const budget = c.daily_budget
               ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
               : 'ללא תקציב יומי';
-            lines.push(`  • ${c.name} — ${budget} (ID: ${c.id})`);
+            const acctLabel = (c as any).accountName ? ` [${(c as any).accountName}]` : '';
+            lines.push(`  • ${c.name}${acctLabel} — ${budget} (ID: ${c.id})`);
           }
         }
 
