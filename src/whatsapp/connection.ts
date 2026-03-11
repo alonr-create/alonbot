@@ -59,7 +59,8 @@ function createAdapter(wwebClient: InstanceType<typeof Client>) {
       const phone = jid.split('@')[0];
       const chat = chatRegistry.get(phone);
       const media = new MessageMedia('application/pdf', buffer.toString('base64'), filename);
-      const options = caption ? { caption } : {};
+      const options: Record<string, any> = { sendMediaAsDocument: true };
+      if (caption) options.caption = caption;
       if (chat) {
         await chat.sendMessage(media, options);
       } else {
