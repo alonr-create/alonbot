@@ -130,6 +130,9 @@ export function initSchema(db: Database.Database): void {
       ]},
     ]),
 
+    // Payment
+    payment_url: 'https://www.bitpay.co.il/app/me/38949393-1774-D91E-21A0-A16CDB3A39A29D00',
+
     // Timezone & hours
     timezone: 'Asia/Jerusalem',
     business_hours_start: '9',

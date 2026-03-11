@@ -5,7 +5,7 @@
  */
 import puppeteer from 'puppeteer';
 import { createLogger } from '../utils/logger.js';
-import { getBusinessName, getTimezone } from '../db/tenant-config.js';
+import { getBusinessName, getTimezone, getConfig } from '../db/tenant-config.js';
 import { scrapeWebsite, type ScrapedBranding } from './scrape-website.js';
 import { generateHeroImage } from './generate-hero-image.js';
 
@@ -75,6 +75,18 @@ export async function generateQuotePDF(
 
   // "What's included" items — dynamic based on service type
   const includes = getServiceIncludes(service);
+
+  // Payment link (Bit)
+  const paymentUrl = getConfig('payment_url');
+  const paymentHtml = paymentUrl
+    ? `<!-- Payment CTA -->
+  <div class="payment-cta">
+    <div class="payment-title">💳 מוכנים להתחיל?</div>
+    <div class="payment-subtitle">לחצו לתשלום מקדמה מאובטח דרך Bit</div>
+    <a href="${paymentUrl}" class="payment-btn">לתשלום מאובטח →</a>
+    <div class="payment-secure">🔒 תשלום מאובטח באמצעות Bit</div>
+  </div>`
+    : '';
 
   const html = `<!DOCTYPE html>
 <html lang="he" dir="rtl">
@@ -395,6 +407,54 @@ body {
   font-weight: 700;
 }
 
+/* ── Payment CTA ── */
+.payment-cta {
+  background: linear-gradient(135deg, var(--p), var(--s));
+  border-radius: 16px;
+  padding: 24px;
+  text-align: center;
+  margin-bottom: 20px;
+  position: relative;
+  overflow: hidden;
+}
+.payment-cta::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 30% 50%, rgba(255,255,255,0.1), transparent 60%);
+}
+.payment-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: white;
+  margin-bottom: 8px;
+  position: relative;
+}
+.payment-subtitle {
+  font-size: 13px;
+  color: rgba(255,255,255,0.8);
+  margin-bottom: 16px;
+  position: relative;
+}
+.payment-btn {
+  display: inline-block;
+  background: white;
+  color: #1a1a2e;
+  padding: 12px 40px;
+  border-radius: 30px;
+  font-size: 16px;
+  font-weight: 700;
+  text-decoration: none;
+  position: relative;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+}
+.payment-secure {
+  font-size: 11px;
+  color: rgba(255,255,255,0.6);
+  margin-top: 10px;
+  position: relative;
+}
+
 /* ── Footer ── */
 .footer {
   margin-top: 30px;
@@ -504,6 +564,8 @@ ${heroHtml}
       <li>כולל עד 2 סבבי תיקונים</li>
     </ul>
   </div>
+
+  ${paymentHtml}
 
   <!-- Footer -->
   <div class="footer">
