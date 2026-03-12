@@ -34,6 +34,7 @@ describe('fetchMondayItem', () => {
       name: 'Test Lead',
       phone: '054-630-0783',
       interest: 'Website Development',
+      source: '',
     });
 
     expect(globalThis.fetch).toHaveBeenCalledWith(

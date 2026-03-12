@@ -34,6 +34,16 @@ export async function scrapeWebsite(url: string): Promise<ScrapedBranding> {
     url = 'https://' + url;
   }
 
+  // SSRF protection: block internal/private IPs and non-http protocols
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only http/https URLs are allowed');
+  }
+  const blocked = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|::1|\[::1\])/i;
+  if (blocked.test(parsed.hostname)) {
+    throw new Error('Internal URLs are not allowed');
+  }
+
   // Known domain aliases → actual URLs
   const domainMap: Record<string, string> = {
     'https://alon.dev': 'https://alon-dev.vercel.app',

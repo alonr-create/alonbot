@@ -4,6 +4,18 @@ import type { MondayItem, LeadStatus } from './types.js';
 
 const log = createLogger('monday-api');
 
+/** Sanitize text for GraphQL string interpolation. */
+function sanitizeGraphQL(text: string): string {
+  return text.replace(/[\\"]/g, '').replace(/[{}()\[\]]/g, '').slice(0, 200);
+}
+
+/** Validate numeric ID to prevent injection. */
+function validateId(id: number | string): number {
+  const num = typeof id === 'string' ? parseInt(id, 10) : id;
+  if (!Number.isFinite(num) || num < 0) throw new Error(`Invalid ID: ${id}`);
+  return num;
+}
+
 // ── Helper: run a Monday.com GraphQL query ──
 async function mondayQuery(query: string): Promise<any> {
   const res = await fetch('https://api.monday.com/v2', {
@@ -22,8 +34,9 @@ async function mondayQuery(query: string): Promise<any> {
  * Extracts name, phone, and service interest from column values.
  */
 export async function fetchMondayItem(itemId: number): Promise<MondayItem> {
+  const safeId = validateId(itemId);
   const query = `query {
-    items(ids: [${itemId}]) {
+    items(ids: [${safeId}]) {
       name
       column_values {
         id
@@ -75,12 +88,14 @@ export async function updateMondayStatus(
   status: LeadStatus,
 ): Promise<void> {
   try {
+    const safeItemId = validateId(itemId);
+    const safeBoardId = validateId(boardId);
     const mutation = `mutation {
       change_simple_column_value(
-        item_id: ${itemId},
-        board_id: ${boardId},
-        column_id: "${config.mondayStatusColumnId}",
-        value: "${status}"
+        item_id: ${safeItemId},
+        board_id: ${safeBoardId},
+        column_id: "${sanitizeGraphQL(config.mondayStatusColumnId)}",
+        value: "${sanitizeGraphQL(status)}"
       ) {
         id
       }
@@ -127,9 +142,11 @@ export async function searchBoardItems(searchText: string): Promise<MondayBoardI
   const allItems: MondayBoardItem[] = [];
 
   for (const board of boards) {
+    const safeBoardId = validateId(board.id);
+    const safeSearch = sanitizeGraphQL(searchText);
     const query = `query {
-      boards(ids: [${board.id}]) {
-        items_page(limit: 10, query_params: { rules: [{ column_id: "name", compare_value: ["${searchText.replace(/"/g, '\\"')}"] }], operator: any_of }) {
+      boards(ids: [${safeBoardId}]) {
+        items_page(limit: 10, query_params: { rules: [{ column_id: "name", compare_value: ["${safeSearch}"] }], operator: any_of }) {
           items {
             id
             name
@@ -177,8 +194,9 @@ export async function getBoardStats(boardId?: string): Promise<BoardStats> {
   const targetBoardId = boardId || config.mondayBoardId;
   if (!targetBoardId) return { total: 0, byStatus: {}, byGroup: {}, recentItems: [] };
 
+  const safeBoardId = validateId(targetBoardId);
   const query = `query {
-    boards(ids: [${targetBoardId}]) {
+    boards(ids: [${safeBoardId}]) {
       items_page(limit: 200) {
         items {
           id
@@ -254,9 +272,10 @@ export async function getAllBoardsStats(): Promise<Record<string, BoardStats>> {
 // ── Add an update (note/comment) to a Monday.com item ──
 export async function addItemUpdate(itemId: number, body: string): Promise<boolean> {
   try {
+    const safeId = validateId(itemId);
     const escaped = body.replace(/"/g, '\\"').replace(/\n/g, '\\n');
     const mutation = `mutation {
-      create_update(item_id: ${itemId}, body: "${escaped}") {
+      create_update(item_id: ${safeId}, body: "${escaped}") {
         id
       }
     }`;
@@ -284,8 +303,9 @@ export async function createBoardItem(
       colValuesStr = `, column_values: ${escaped}`;
     }
 
+    const safeBoardId = validateId(boardId);
     const mutation = `mutation {
-      create_item(board_id: ${boardId}, item_name: "${name.replace(/"/g, '\\"')}"${colValuesStr}) {
+      create_item(board_id: ${safeBoardId}, item_name: "${sanitizeGraphQL(name)}"${colValuesStr}) {
         id
       }
     }`;
@@ -306,9 +326,11 @@ export async function createBoardItem(
 // ── Get updates (notes) for an item ──
 export async function getItemUpdates(itemId: number, limit = 5): Promise<Array<{ text: string; createdAt: string }>> {
   try {
+    const safeId = validateId(itemId);
+    const safeLimit = Math.min(Math.max(1, limit), 50);
     const query = `query {
-      items(ids: [${itemId}]) {
-        updates(limit: ${limit}) {
+      items(ids: [${safeId}]) {
+        updates(limit: ${safeLimit}) {
           text_body
           created_at
         }
@@ -330,8 +352,9 @@ export async function getItemUpdates(itemId: number, limit = 5): Promise<Array<{
 // ── Move item to a different group ──
 export async function moveItemToGroup(itemId: number, groupId: string): Promise<boolean> {
   try {
+    const safeId = validateId(itemId);
     const mutation = `mutation {
-      move_item_to_group(item_id: ${itemId}, group_id: "${groupId}") {
+      move_item_to_group(item_id: ${safeId}, group_id: "${sanitizeGraphQL(groupId)}") {
         id
       }
     }`;
@@ -350,8 +373,9 @@ export async function getBoardGroups(): Promise<Array<{ id: string; title: strin
   if (!boardId) return [];
 
   try {
+    const safeBoardId = validateId(boardId);
     const query = `query {
-      boards(ids: [${boardId}]) {
+      boards(ids: [${safeBoardId}]) {
         groups {
           id
           title
@@ -375,12 +399,14 @@ export async function updateColumnValue(
   value: string,
 ): Promise<boolean> {
   try {
+    const safeItemId = validateId(itemId);
+    const safeBoardId = validateId(boardId);
     const mutation = `mutation {
       change_simple_column_value(
-        item_id: ${itemId},
-        board_id: ${boardId},
-        column_id: "${columnId}",
-        value: "${value.replace(/"/g, '\\"')}"
+        item_id: ${safeItemId},
+        board_id: ${safeBoardId},
+        column_id: "${sanitizeGraphQL(columnId)}",
+        value: "${sanitizeGraphQL(value)}"
       ) {
         id
       }
@@ -396,8 +422,9 @@ export async function updateColumnValue(
 // ── Delete an item ──
 export async function deleteItem(itemId: number): Promise<boolean> {
   try {
+    const safeId = validateId(itemId);
     const mutation = `mutation {
-      delete_item(item_id: ${itemId}) {
+      delete_item(item_id: ${safeId}) {
         id
       }
     }`;

@@ -15,6 +15,16 @@ vi.mock('../../escalation/summary.js', () => ({
   generateEscalationSummary: vi.fn().mockResolvedValue('1. Wants a website\n2. Budget ~5000 NIS\n3. Worried about timeline'),
 }));
 
+vi.mock('../../whatsapp/rate-limiter.js', () => ({
+  sendWithTyping: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('../../db/tenant-config.js', () => ({
+  getAdminPhone: vi.fn().mockReturnValue('972546300783'),
+  getOwnerName: vi.fn().mockReturnValue('אלון'),
+  getEscalationMessage: vi.fn().mockReturnValue('תודה על הסבלנות! אלון יחזור אליך בהקדם.'),
+}));
+
 vi.mock('../../db/index.js', () => {
   let mockDb: Database.Database;
   return {

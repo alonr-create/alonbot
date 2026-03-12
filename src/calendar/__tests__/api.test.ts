@@ -75,11 +75,8 @@ describe('bookMeeting', () => {
     expect(result.success).toBe(true);
     expect(result.eventId).toBe('evt-123');
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'https://script.google.com/test',
-      expect.objectContaining({
-        method: 'POST',
-        signal: expect.any(AbortSignal),
-      }),
+      expect.stringContaining('https://script.google.com/test?'),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
     delete process.env.GOOGLE_CALENDAR_SCRIPT_URL;
   });

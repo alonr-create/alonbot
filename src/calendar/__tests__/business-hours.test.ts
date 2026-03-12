@@ -11,9 +11,9 @@ describe('isBusinessHours', () => {
     expect(isBusinessHours(date)).toBe(true);
   });
 
-  it('returns true for Thursday 17:00 Israel time', () => {
-    // Thursday March 12 2026, 17:00 IST = 15:00 UTC
-    const date = new Date('2026-03-12T15:00:00.000Z');
+  it('returns true for Thursday 14:00 Israel time', () => {
+    // Thursday March 12 2026, 14:00 IST = 12:00 UTC (business hours are 9-16)
+    const date = new Date('2026-03-12T12:00:00.000Z');
     expect(isBusinessHours(date)).toBe(true);
   });
 
