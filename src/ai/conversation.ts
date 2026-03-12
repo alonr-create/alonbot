@@ -1,6 +1,6 @@
 import type { BotAdapter } from '../whatsapp/connection.js';
 import { getDb } from '../db/index.js';
-import { generateResponse } from './claude-client.js';
+import { generateResponse, generateWithSearch } from './claude-client.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import {
@@ -145,8 +145,17 @@ export async function handleConversation(
 
   messages.push({ role: 'user', content: batchedText });
 
-  // Call Claude
-  const response = await generateResponse(messages, systemPrompt);
+  // Call Claude — boss gets web search, leads get regular response
+  let response: string;
+  if (isAdminPhone(phone)) {
+    const result = await generateWithSearch(messages, systemPrompt);
+    response = result.text;
+    if (result.searchUsed) {
+      log.info({ phone }, 'web search was used for boss response');
+    }
+  } else {
+    response = await generateResponse(messages, systemPrompt);
+  }
 
   const jid = phone + '@s.whatsapp.net';
   const insertMsg = db.prepare(
@@ -641,6 +650,60 @@ async function processBossMarkers(
       log.error({ err, campaignId, budgetInAgorot }, 'Failed to update budget');
       cleaned += `\n\n❌ שגיאה בעדכון תקציב קמפיין ${campaignId}.`;
     }
+  }
+
+  // ── [BROWSE:task] — computer use agent (browse + screenshot + analyze) ──
+  const browseMatch = cleaned.match(/\[BROWSE:([^\]]+)\]/);
+  if (browseMatch) {
+    const task = browseMatch[1].trim();
+    cleaned = cleaned.replace(/\[BROWSE:[^\]]+\]/, '').trim();
+
+    // Extract URL from task if present
+    const urlMatch = task.match(/https?:\/\/[^\s]+/);
+    const startUrl = urlMatch ? urlMatch[0] : undefined;
+
+    // Fire-and-forget: acknowledge immediately, run in background
+    import('../browser/computer-use.js').then(({ runComputerUse }) => {
+      sendWithTyping(sock, jid, '🖥️ מתחיל לגלוש...').catch(() => {});
+
+      runComputerUse({
+        task,
+        startUrl,
+        maxSteps: 10,
+        timeoutMs: 90_000,
+        onScreenshot: async (screenshot, desc) => {
+          try {
+            await sock.sendImage(jid, screenshot, `🖥️ ${desc}`);
+          } catch (err) {
+            log.error({ err }, 'failed to send progress screenshot');
+          }
+        },
+      }).then(async (result) => {
+        const summaryMsg = `✅ סיימתי (${result.steps} צעדים):\n\n${result.summary}`;
+        await sendWithTyping(sock, jid, summaryMsg);
+
+        // Send final screenshots (last 2)
+        for (const screenshot of result.screenshots.slice(-2)) {
+          try {
+            await sock.sendImage(jid, screenshot);
+          } catch (err) {
+            log.error({ err }, 'failed to send final screenshot');
+          }
+        }
+
+        // Store in conversation history
+        const bossPhone = jid.split('@')[0];
+        const insertBrowse = db.prepare(
+          'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+        );
+        insertBrowse.run(bossPhone, null, 'out', `[BROWSE completed: ${task}]\n${result.summary}`);
+
+        log.info({ task, steps: result.steps, tokens: result.tokensUsed }, 'browse task completed');
+      }).catch(async (err) => {
+        log.error({ err, task }, 'browse task failed');
+        await sendWithTyping(sock, jid, `❌ הגלישה נכשלה: ${err.message}`);
+      });
+    });
   }
 
   // ── [RULE:content] — boss teaches the bot a new rule ──
