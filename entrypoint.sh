@@ -10,5 +10,7 @@ find /data -name "SingletonCookie" -exec rm -f {} + 2>/dev/null
 # Remove any leftover lock files (symlinks)
 find /data -name "Singleton*" -type l -exec rm -f {} + 2>/dev/null
 find /data -name "Singleton*" -type f -exec rm -f {} + 2>/dev/null
+# Ensure reliable DNS (Google DNS as fallback)
+echo "nameserver 8.8.8.8" >> /etc/resolv.conf 2>/dev/null || true
 echo "Lock cleanup done, starting bot..."
 exec node dist/index.js
