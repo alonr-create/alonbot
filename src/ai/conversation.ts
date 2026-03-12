@@ -7,7 +7,6 @@ import {
   updateMondayStatus,
   addItemUpdate,
   createBoardItem,
-  getBoardStats,
 } from '../monday/api.js';
 import { bookMeeting } from '../calendar/api.js';
 import {
@@ -305,10 +304,7 @@ async function processBossMarkers(
     const query = searchMatch[1];
     cleaned = cleaned.replace(/\[SEARCH:[^\]]+\]/, '').trim();
     const result = searchLeadContext(query);
-    setTimeout(async () => {
-      try { await sendWithTyping(sock, jid, `🔍 תוצאות חיפוש "${query}":\n\n${result}`); }
-      catch (err) { log.error({ err }, 'Failed to send search results'); }
-    }, 2000);
+    cleaned += `\n\n🔍 תוצאות חיפוש "${query}":\n\n${result}`;
   }
 
   // ── [PREP:phone] ──
@@ -317,10 +313,7 @@ async function processBossMarkers(
     const targetPhone = prepMatch[1];
     cleaned = cleaned.replace(/\[PREP:[^\]]+\]/, '').trim();
     const result = getLeadConversation(targetPhone);
-    setTimeout(async () => {
-      try { await sendWithTyping(sock, jid, `📋 הכנה לפגישה:\n\n${result}`); }
-      catch (err) { log.error({ err }, 'Failed to send prep data'); }
-    }, 2000);
+    cleaned += `\n\n📋 הכנה לפגישה:\n\n${result}`;
   }
 
   // ── [NOTE:identifier:content] — save note to DB + Monday.com ──
@@ -381,28 +374,31 @@ async function processBossMarkers(
   if (cleaned.includes('[MONDAY_STATS]')) {
     cleaned = cleaned.replace(/\[MONDAY_STATS\]/, '').trim();
     try {
-      const stats = await getBoardStats();
-      const statusLines = Object.entries(stats.byStatus)
-        .map(([s, c]) => `  • ${s}: ${c}`)
-        .join('\n');
-      const groupLines = Object.entries(stats.byGroup)
-        .map(([g, c]) => `  • ${g}: ${c}`)
-        .join('\n');
-      const recentLines = stats.recentItems
-        .map((i) => `  • ${i.name} — ${i.status}`)
-        .join('\n');
+      const { getAllBoardsStats, getAllBoardIds } = await import('../monday/api.js');
+      const boards = getAllBoardIds();
+      const allStats = await getAllBoardsStats();
 
-      const statsMsg = [
-        `📊 סטטיסטיקות Monday.com (${stats.total} פריטים):`,
-        '', 'לפי סטטוס:', statusLines,
-        '', 'לפי קבוצה:', groupLines,
-        '', 'עודכנו לאחרונה:', recentLines,
-      ].join('\n');
+      const statsParts: string[] = [];
+      for (const [boardName, stats] of Object.entries(allStats)) {
+        const statusLines = Object.entries(stats.byStatus)
+          .map(([s, c]) => `  • ${s}: ${c}`)
+          .join('\n');
+        const groupLines = Object.entries(stats.byGroup)
+          .map(([g, c]) => `  • ${g}: ${c}`)
+          .join('\n');
+        const recentLines = stats.recentItems
+          .map((i) => `  • ${i.name} — ${i.status}`)
+          .join('\n');
 
-      setTimeout(async () => {
-        try { await sendWithTyping(sock, jid, statsMsg); }
-        catch (err) { log.error({ err }, 'Failed to send stats'); }
-      }, 2000);
+        statsParts.push([
+          `━━━ ${boardName} (${stats.total} פריטים) ━━━`,
+          'לפי סטטוס:', statusLines,
+          '', 'לפי קבוצה:', groupLines,
+          '', 'עודכנו לאחרונה:', recentLines,
+        ].join('\n'));
+      }
+
+      cleaned += `\n\n📊 סטטיסטיקות Monday.com:\n\n${statsParts.join('\n\n')}`;
     } catch (err) {
       log.error({ err }, 'Failed to get Monday stats');
     }
@@ -506,13 +502,7 @@ async function processBossMarkers(
           log.error({ err }, 'Failed to generate quote PDF');
         });
     } else {
-      setTimeout(async () => {
-        try {
-          await sendWithTyping(sock, jid, `❌ לא מצאתי ליד בשם "${quoteName.trim()}" במערכת`);
-        } catch (err) {
-          log.error({ err }, 'Failed to send quote error');
-        }
-      }, 1000);
+      cleaned += `\n\n❌ לא מצאתי ליד בשם "${quoteName.trim()}" במערכת`;
     }
   }
 
@@ -551,60 +541,58 @@ async function processBossMarkers(
     };
     const label = dateLabels[dateRange] || dateRange;
 
-    (async () => {
-      try {
-        const accounts = getAllAdAccountIds();
-        const [allInsights, campaigns, ...perAccountInsights] = await Promise.all([
-          getAccountInsights(dateRange),
-          getActiveCampaigns(),
-          ...accounts.map((a) => getAccountInsights(dateRange, a.id)),
-        ]);
+    try {
+      const accounts = getAllAdAccountIds();
+      const [allInsights, campaigns, ...perAccountInsights] = await Promise.all([
+        getAccountInsights(dateRange),
+        getActiveCampaigns(),
+        ...accounts.map((a) => getAccountInsights(dateRange, a.id)),
+      ]);
 
-        const lines: string[] = [
-          `📊 דוח פרסום פייסבוק — ${label}:`,
-        ];
+      const lines: string[] = [
+        `📊 דוח פרסום פייסבוק — ${label}:`,
+      ];
 
-        // Per-account breakdown
-        for (let i = 0; i < accounts.length; i++) {
-          const acct = accounts[i];
-          const ins = perAccountInsights[i];
-          const acctCampaigns = campaigns.filter((c: any) => c.accountName === acct.name);
-          lines.push(
-            '',
-            `━━━ ${acct.name} ━━━`,
-            `💰 הוצאה: ₪${ins.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
-            `👁️ חשיפות: ${ins.impressions.toLocaleString('he-IL')}`,
-            `👆 קליקים: ${ins.clicks.toLocaleString('he-IL')}`,
-            `🎯 לידים: ${ins.leads}`,
-            `💵 עלות לקליק: ${ins.clicks > 0 ? '₪' + ins.cpc.toFixed(2) : '—'}`,
-            `📈 עלות לליד: ${ins.leads > 0 ? '₪' + ins.cpl.toFixed(2) : '—'}`,
-          );
-          if (acctCampaigns.length > 0) {
-            lines.push(`🎯 קמפיינים (${acctCampaigns.length}):`);
-            for (const c of acctCampaigns) {
-              const budget = c.daily_budget
-                ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
-                : 'ללא תקציב יומי';
-              lines.push(`  • ${c.name} — ${budget}`);
-            }
-          }
-        }
-
-        // Total summary
+      // Per-account breakdown
+      for (let i = 0; i < accounts.length; i++) {
+        const acct = accounts[i];
+        const ins = perAccountInsights[i];
+        const acctCampaigns = campaigns.filter((c: any) => c.accountName === acct.name);
         lines.push(
           '',
-          `━━━ סה״כ כל החשבונות ━━━`,
-          `💰 הוצאה כוללת: ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
-          `🎯 לידים: ${allInsights.leads} | 👆 קליקים: ${allInsights.clicks.toLocaleString('he-IL')}`,
-          `💵 CPC: ${allInsights.clicks > 0 ? '₪' + allInsights.cpc.toFixed(2) : '—'} | 📈 CPL: ${allInsights.leads > 0 ? '₪' + allInsights.cpl.toFixed(2) : '—'}`,
+          `━━━ ${acct.name} ━━━`,
+          `💰 הוצאה: ₪${ins.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+          `👁️ חשיפות: ${ins.impressions.toLocaleString('he-IL')}`,
+          `👆 קליקים: ${ins.clicks.toLocaleString('he-IL')}`,
+          `🎯 לידים: ${ins.leads}`,
+          `💵 עלות לקליק: ${ins.clicks > 0 ? '₪' + ins.cpc.toFixed(2) : '—'}`,
+          `📈 עלות לליד: ${ins.leads > 0 ? '₪' + ins.cpl.toFixed(2) : '—'}`,
         );
-
-        await sendWithTyping(sock, jid, lines.join('\n'));
-      } catch (err) {
-        log.error({ err, dateRange }, 'Failed to get Facebook report');
-        await sendWithTyping(sock, jid, '❌ שגיאה בשליפת נתוני פייסבוק. בדוק שה-Access Token תקין.');
+        if (acctCampaigns.length > 0) {
+          lines.push(`🎯 קמפיינים (${acctCampaigns.length}):`);
+          for (const c of acctCampaigns) {
+            const budget = c.daily_budget
+              ? `₪${(parseInt(c.daily_budget, 10) / 100).toFixed(0)}/יום`
+              : 'ללא תקציב יומי';
+            lines.push(`  • ${c.name} — ${budget}`);
+          }
+        }
       }
-    })();
+
+      // Total summary
+      lines.push(
+        '',
+        `━━━ סה״כ כל החשבונות ━━━`,
+        `💰 הוצאה כוללת: ₪${allInsights.spend.toLocaleString('he-IL', { minimumFractionDigits: 2 })}`,
+        `🎯 לידים: ${allInsights.leads} | 👆 קליקים: ${allInsights.clicks.toLocaleString('he-IL')}`,
+        `💵 CPC: ${allInsights.clicks > 0 ? '₪' + allInsights.cpc.toFixed(2) : '—'} | 📈 CPL: ${allInsights.leads > 0 ? '₪' + allInsights.cpl.toFixed(2) : '—'}`,
+      );
+
+      cleaned += `\n\n${lines.join('\n')}`;
+    } catch (err) {
+      log.error({ err, dateRange }, 'Failed to get Facebook report');
+      cleaned += '\n\n❌ שגיאה בשליפת נתוני פייסבוק. בדוק שה-Access Token תקין.';
+    }
   }
 
   // ── [FB_PAUSE:campaign_id] — Pause a Facebook campaign ──
@@ -613,15 +601,13 @@ async function processBossMarkers(
     const campaignId = fbPauseMatch[1];
     cleaned = cleaned.replace(/\[FB_PAUSE:[^\]]+\]/, '').trim();
 
-    (async () => {
-      try {
-        await pauseCampaign(campaignId);
-        await sendWithTyping(sock, jid, `⏸️ קמפיין ${campaignId} הושהה בהצלחה.`);
-      } catch (err) {
-        log.error({ err, campaignId }, 'Failed to pause campaign');
-        await sendWithTyping(sock, jid, `❌ שגיאה בהשהיית קמפיין ${campaignId}.`);
-      }
-    })();
+    try {
+      await pauseCampaign(campaignId);
+      cleaned += `\n\n⏸️ קמפיין ${campaignId} הושהה בהצלחה.`;
+    } catch (err) {
+      log.error({ err, campaignId }, 'Failed to pause campaign');
+      cleaned += `\n\n❌ שגיאה בהשהיית קמפיין ${campaignId}.`;
+    }
   }
 
   // ── [FB_RESUME:campaign_id] — Resume a Facebook campaign ──
@@ -630,15 +616,13 @@ async function processBossMarkers(
     const campaignId = fbResumeMatch[1];
     cleaned = cleaned.replace(/\[FB_RESUME:[^\]]+\]/, '').trim();
 
-    (async () => {
-      try {
-        await resumeCampaign(campaignId);
-        await sendWithTyping(sock, jid, `▶️ קמפיין ${campaignId} הופעל מחדש בהצלחה.`);
-      } catch (err) {
-        log.error({ err, campaignId }, 'Failed to resume campaign');
-        await sendWithTyping(sock, jid, `❌ שגיאה בהפעלת קמפיין ${campaignId}.`);
-      }
-    })();
+    try {
+      await resumeCampaign(campaignId);
+      cleaned += `\n\n▶️ קמפיין ${campaignId} הופעל מחדש בהצלחה.`;
+    } catch (err) {
+      log.error({ err, campaignId }, 'Failed to resume campaign');
+      cleaned += `\n\n❌ שגיאה בהפעלת קמפיין ${campaignId}.`;
+    }
   }
 
   // ── [FB_BUDGET:campaign_id:amount] — Update daily budget (amount in shekels) ──
@@ -650,15 +634,13 @@ async function processBossMarkers(
 
     const budgetInAgorot = Math.round(amountShekels * 100);
 
-    (async () => {
-      try {
-        await updateDailyBudget(campaignId, budgetInAgorot);
-        await sendWithTyping(sock, jid, `💰 תקציב קמפיין ${campaignId} עודכן ל-₪${amountShekels}/יום.`);
-      } catch (err) {
-        log.error({ err, campaignId, budgetInAgorot }, 'Failed to update budget');
-        await sendWithTyping(sock, jid, `❌ שגיאה בעדכון תקציב קמפיין ${campaignId}.`);
-      }
-    })();
+    try {
+      await updateDailyBudget(campaignId, budgetInAgorot);
+      cleaned += `\n\n💰 תקציב קמפיין ${campaignId} עודכן ל-₪${amountShekels}/יום.`;
+    } catch (err) {
+      log.error({ err, campaignId, budgetInAgorot }, 'Failed to update budget');
+      cleaned += `\n\n❌ שגיאה בעדכון תקציב קמפיין ${campaignId}.`;
+    }
   }
 
   // ── [RULE:content] — boss teaches the bot a new rule ──
@@ -684,16 +666,10 @@ async function processBossMarkers(
     cleaned = cleaned.replace(/\[LIST_RULES\]/, '').trim();
     const rules = getActiveRules();
     if (rules.length === 0) {
-      setTimeout(async () => {
-        try { await sendWithTyping(sock, jid, '📋 אין כללים שמורים עדיין. תלמד אותי!'); }
-        catch (err) { log.error({ err }, 'Failed to send rules list'); }
-      }, 1500);
+      cleaned += '\n\n📋 אין כללים שמורים עדיין. תלמד אותי!';
     } else {
       const rulesList = rules.map((r) => `  ${r.id}. ${r.rule}`).join('\n');
-      setTimeout(async () => {
-        try { await sendWithTyping(sock, jid, `📋 כללים שלמדתי (${rules.length}):\n\n${rulesList}\n\nלמחיקה: "תמחק כלל [מספר]"`); }
-        catch (err) { log.error({ err }, 'Failed to send rules list'); }
-      }, 1500);
+      cleaned += `\n\n📋 כללים שלמדתי (${rules.length}):\n\n${rulesList}\n\nלמחיקה: "תמחק כלל [מספר]"`;
     }
   }
 

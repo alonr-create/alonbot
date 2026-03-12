@@ -4,7 +4,7 @@
  * and recent activity — all injected into the system prompt.
  */
 import { getDb } from '../db/index.js';
-import { getBoardStats } from '../monday/api.js';
+import { getBoardStats, getAllBoardsStats, getAllBoardIds } from '../monday/api.js';
 import { getAvailableSlots } from '../calendar/api.js';
 import { formatIsraelTime } from '../calendar/business-hours.js';
 import { calculateLeadScore } from './lead-scoring.js';

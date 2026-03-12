@@ -92,6 +92,23 @@ export async function updateMondayStatus(
   }
 }
 
+// ── Get all configured board IDs ──
+export interface BoardConfig {
+  name: string;
+  id: string;
+}
+
+export function getAllBoardIds(): BoardConfig[] {
+  const boards: BoardConfig[] = [];
+  if (config.mondayBoardId) {
+    boards.push({ name: 'Alon.dev', id: config.mondayBoardId });
+  }
+  if (config.mondayBoardIdDprisha) {
+    boards.push({ name: 'דקל לפרישה', id: config.mondayBoardIdDprisha });
+  }
+  return boards;
+}
+
 // ── Search items by text (name or phone) ──
 export interface MondayBoardItem {
   id: string;
@@ -99,42 +116,53 @@ export interface MondayBoardItem {
   group: { title: string };
   columns: Record<string, string>;
   updatesCount: number;
+  boardName?: string;
+  boardId?: string;
 }
 
 export async function searchBoardItems(searchText: string): Promise<MondayBoardItem[]> {
-  const boardId = config.mondayBoardId;
-  if (!boardId) return [];
+  const boards = getAllBoardIds();
+  if (boards.length === 0) return [];
 
-  const query = `query {
-    boards(ids: [${boardId}]) {
-      items_page(limit: 10, query_params: { rules: [{ column_id: "name", compare_value: ["${searchText.replace(/"/g, '\\"')}"] }], operator: any_of }) {
-        items {
-          id
-          name
-          group { title }
-          column_values { id text }
-          updates(limit: 1) { id }
+  const allItems: MondayBoardItem[] = [];
+
+  for (const board of boards) {
+    const query = `query {
+      boards(ids: [${board.id}]) {
+        items_page(limit: 10, query_params: { rules: [{ column_id: "name", compare_value: ["${searchText.replace(/"/g, '\\"')}"] }], operator: any_of }) {
+          items {
+            id
+            name
+            group { title }
+            column_values { id text }
+            updates(limit: 1) { id }
+          }
         }
       }
-    }
-  }`;
+    }`;
 
-  try {
-    const data = await mondayQuery(query);
-    const items = data?.data?.boards?.[0]?.items_page?.items || [];
-    return items.map((item: any) => ({
-      id: item.id,
-      name: item.name,
-      group: { title: item.group?.title || '' },
-      columns: Object.fromEntries(
-        (item.column_values || []).map((c: any) => [c.id, c.text || '']),
-      ),
-      updatesCount: item.updates?.length || 0,
-    }));
-  } catch (err) {
-    log.error({ err, searchText }, 'Monday search failed');
-    return [];
+    try {
+      const data = await mondayQuery(query);
+      const items = data?.data?.boards?.[0]?.items_page?.items || [];
+      for (const item of items) {
+        allItems.push({
+          id: item.id,
+          name: item.name,
+          group: { title: item.group?.title || '' },
+          columns: Object.fromEntries(
+            (item.column_values || []).map((c: any) => [c.id, c.text || '']),
+          ),
+          updatesCount: item.updates?.length || 0,
+          boardName: board.name,
+          boardId: board.id,
+        });
+      }
+    } catch (err) {
+      log.error({ err, searchText, boardId: board.id }, 'Monday search failed');
+    }
   }
+
+  return allItems;
 }
 
 // ── Get all board items with status ──
@@ -145,12 +173,12 @@ export interface BoardStats {
   recentItems: Array<{ name: string; status: string; updated: string }>;
 }
 
-export async function getBoardStats(): Promise<BoardStats> {
-  const boardId = config.mondayBoardId;
-  if (!boardId) return { total: 0, byStatus: {}, byGroup: {}, recentItems: [] };
+export async function getBoardStats(boardId?: string): Promise<BoardStats> {
+  const targetBoardId = boardId || config.mondayBoardId;
+  if (!targetBoardId) return { total: 0, byStatus: {}, byGroup: {}, recentItems: [] };
 
   const query = `query {
-    boards(ids: [${boardId}]) {
+    boards(ids: [${targetBoardId}]) {
       items_page(limit: 200) {
         items {
           id
@@ -201,6 +229,26 @@ export async function getBoardStats(): Promise<BoardStats> {
     log.error({ err }, 'Failed to get board stats');
     return { total: 0, byStatus: {}, byGroup: {}, recentItems: [] };
   }
+}
+
+/** Get stats for ALL configured boards. */
+export async function getAllBoardsStats(): Promise<Record<string, BoardStats>> {
+  const boards = getAllBoardIds();
+  const results: Record<string, BoardStats> = {};
+
+  const statsPromises = boards.map(async (board) => {
+    const stats = await getBoardStats(board.id);
+    return { name: board.name, stats };
+  });
+
+  const settled = await Promise.allSettled(statsPromises);
+  for (const r of settled) {
+    if (r.status === 'fulfilled') {
+      results[r.value.name] = r.value.stats;
+    }
+  }
+
+  return results;
 }
 
 // ── Add an update (note/comment) to a Monday.com item ──

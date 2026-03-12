@@ -17,6 +17,7 @@ export const config = {
   anthropicApiKey: process.env.ANTHROPIC_API_KEY || '',
   mondayApiToken: process.env.MONDAY_API_TOKEN || '',
   mondayBoardId: process.env.MONDAY_BOARD_ID || '',
+  mondayBoardIdDprisha: process.env.MONDAY_BOARD_ID_DPRISHA || '',
   mondayStatusColumnId: process.env.MONDAY_STATUS_COLUMN_ID || 'status',
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
   openaiApiKey: process.env.OPENAI_API_KEY || '',
