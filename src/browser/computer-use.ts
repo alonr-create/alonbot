@@ -85,6 +85,7 @@ export async function runComputerUse(options: BrowseOptions): Promise<BrowseResu
       '--disable-dev-shm-usage',
       '--single-process',
       '--no-zygote',
+      '--dns-prefetch-disable',
     ],
     ...(execPath ? { executablePath: execPath } : {}),
   });
@@ -111,7 +112,19 @@ export async function runComputerUse(options: BrowseOptions): Promise<BrowseResu
 
     // Navigate to start URL or about:blank
     if (startUrl) {
-      await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      try {
+        await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+      } catch (navErr) {
+        // Retry with www. prefix if DNS fails on bare domain
+        const parsed = new URL(startUrl);
+        if (!parsed.hostname.startsWith('www.')) {
+          const wwwUrl = `${parsed.protocol}//www.${parsed.hostname}${parsed.pathname}${parsed.search}`;
+          log.info({ original: startUrl, retry: wwwUrl }, 'retrying with www prefix');
+          await page.goto(wwwUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        } else {
+          throw navErr;
+        }
+      }
       await new Promise((r) => setTimeout(r, 1500));
     }
 
