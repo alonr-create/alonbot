@@ -5,11 +5,56 @@
  */
 import puppeteer from 'puppeteer';
 import Anthropic from '@anthropic-ai/sdk';
+import { Resolver } from 'node:dns/promises';
 import { executeAction } from './puppeteer-actions.js';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('computer-use');
+
+/** Resolve a hostname using Google DNS (8.8.8.8) as fallback. */
+async function resolveHostname(hostname: string): Promise<string | null> {
+  const resolver = new Resolver();
+  resolver.setServers(['8.8.8.8', '8.8.4.4']);
+  try {
+    const addresses = await resolver.resolve4(hostname);
+    return addresses[0] || null;
+  } catch {
+    return null;
+  }
+}
+
+/** Ensure a URL resolves — try www. prefix and Google DNS as fallbacks. */
+async function ensureResolvableUrl(url: string): Promise<{ url: string; hostRewriteRule?: string }> {
+  const parsed = new URL(url);
+
+  // Try resolving the hostname via Google DNS
+  const ip = await resolveHostname(parsed.hostname);
+  if (ip) {
+    return {
+      url,
+      hostRewriteRule: `MAP ${parsed.hostname} ${ip}`,
+    };
+  }
+
+  // Try with www. prefix
+  if (!parsed.hostname.startsWith('www.')) {
+    const wwwHost = `www.${parsed.hostname}`;
+    const wwwIp = await resolveHostname(wwwHost);
+    if (wwwIp) {
+      const wwwUrl = `${parsed.protocol}//${wwwHost}${parsed.pathname}${parsed.search}`;
+      log.info({ original: url, resolved: wwwUrl }, 'using www prefix (bare domain unresolvable)');
+      return {
+        url: wwwUrl,
+        hostRewriteRule: `MAP ${wwwHost} ${wwwIp}`,
+      };
+    }
+  }
+
+  // Nothing resolved — let Puppeteer try (will fail with clear error)
+  log.warn({ hostname: parsed.hostname }, 'could not resolve hostname via Google DNS');
+  return { url };
+}
 
 const DISPLAY_WIDTH = 1280;
 const DISPLAY_HEIGHT = 800;
@@ -76,17 +121,31 @@ export async function runComputerUse(options: BrowseOptions): Promise<BrowseResu
   const client = new Anthropic({ apiKey: config.anthropicApiKey });
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
+  // Pre-resolve DNS via Google DNS (Railway container DNS can be unreliable)
+  let resolvedStartUrl = startUrl;
+  let hostRewriteRule: string | undefined;
+  if (startUrl) {
+    const resolved = await ensureResolvableUrl(startUrl);
+    resolvedStartUrl = resolved.url;
+    hostRewriteRule = resolved.hostRewriteRule;
+    log.info({ startUrl, resolvedUrl: resolvedStartUrl, hostRewriteRule }, 'DNS pre-resolved');
+  }
+
+  const chromiumArgs = [
+    '--no-sandbox',
+    '--disable-setuid-sandbox',
+    '--disable-gpu',
+    '--disable-dev-shm-usage',
+    '--single-process',
+    '--no-zygote',
+  ];
+  if (hostRewriteRule) {
+    chromiumArgs.push(`--host-resolver-rules=${hostRewriteRule}`);
+  }
+
   const browser = await puppeteer.launch({
     headless: true,
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-gpu',
-      '--disable-dev-shm-usage',
-      '--single-process',
-      '--no-zygote',
-      '--dns-prefetch-disable',
-    ],
+    args: chromiumArgs,
     ...(execPath ? { executablePath: execPath } : {}),
   });
 
@@ -111,20 +170,8 @@ export async function runComputerUse(options: BrowseOptions): Promise<BrowseResu
     await page.setRequestInterception(true);
 
     // Navigate to start URL or about:blank
-    if (startUrl) {
-      try {
-        await page.goto(startUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      } catch (navErr) {
-        // Retry with www. prefix if DNS fails on bare domain
-        const parsed = new URL(startUrl);
-        if (!parsed.hostname.startsWith('www.')) {
-          const wwwUrl = `${parsed.protocol}//www.${parsed.hostname}${parsed.pathname}${parsed.search}`;
-          log.info({ original: startUrl, retry: wwwUrl }, 'retrying with www prefix');
-          await page.goto(wwwUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
-        } else {
-          throw navErr;
-        }
-      }
+    if (resolvedStartUrl) {
+      await page.goto(resolvedStartUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
       await new Promise((r) => setTimeout(r, 1500));
     }
 

@@ -26,9 +26,6 @@ RUN npm prune --production
 # Create data directory (Railway volume mount)
 RUN mkdir -p /data
 
-# Ensure reliable DNS resolution in container
-RUN echo "nameserver 8.8.8.8\nnameserver 8.8.4.4" > /etc/resolv.conf
-
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
