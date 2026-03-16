@@ -21,6 +21,20 @@ async function main() {
   const db = initDb();
   log.info('database initialized');
 
+  // 1b. Clean up any lead records for admin phone (test data)
+  const adminPhone = config.alonPhone;
+  if (adminPhone) {
+    const delLeads = db.prepare('DELETE FROM leads WHERE phone = ?').run(adminPhone);
+    const delMsgs = db.prepare('DELETE FROM messages WHERE phone = ?').run(adminPhone);
+    const delFollowUps = db.prepare('DELETE FROM follow_ups WHERE phone = ?').run(adminPhone);
+    if (delLeads.changes || delMsgs.changes || delFollowUps.changes) {
+      log.info(
+        { adminPhone, leads: delLeads.changes, messages: delMsgs.changes, followUps: delFollowUps.changes },
+        'cleaned up admin phone records from DB'
+      );
+    }
+  }
+
   // 2. Start HTTP server (health + QR endpoints)
   const server = createServer(config.port);
   log.info({ port: config.port }, 'HTTP server started');
