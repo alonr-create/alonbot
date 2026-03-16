@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getDb } from '../db/index.js';
 import { fetchMondayItem } from './api.js';
 import { createLogger } from '../utils/logger.js';
+import { isAdminPhone } from '../db/tenant-config.js';
 import type { MondayWebhookPayload } from './types.js';
 
 const log = createLogger('monday-webhook');
@@ -78,6 +79,13 @@ async function processWebhookEvent(
   }
 
   const phone = cleanPhone(item.phone);
+
+  // Skip admin/test numbers — never treat as lead
+  if (isAdminPhone(phone)) {
+    log.info({ phone, pulseId }, 'Admin phone detected, skipping lead processing');
+    return;
+  }
+
   const db = getDb();
 
   // Check if lead already exists by phone
