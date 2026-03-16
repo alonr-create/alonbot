@@ -4,6 +4,7 @@ import { healthRouter } from './routes/health.js';
 import { qrRouter } from './routes/qr.js';
 import { chatRouter } from './routes/chat.js';
 import { mondayWebhookRouter } from '../monday/webhook-handler.js';
+import { sendWhatsappRouter } from './routes/send-whatsapp.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('http');
@@ -40,6 +41,7 @@ export function createServer(port: number): http.Server {
   app.use('/', healthRouter);
   app.use('/', qrRouter);
   app.use('/', chatRouter);
+  app.use('/', sendWhatsappRouter);
   app.use('/webhook', mondayWebhookRouter);
 
   const server = app.listen(port, () => {
