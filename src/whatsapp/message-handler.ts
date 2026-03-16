@@ -7,6 +7,7 @@ import { setOnNewLeadCallback } from '../monday/webhook-handler.js';
 import { cancelFollowUps } from '../follow-up/follow-up-db.js';
 import { transcribeAudio } from '../ai/voice-transcribe.js';
 import { analyzeImage } from '../ai/image-analysis.js';
+import { isAdminPhone } from '../db/tenant-config.js';
 import type { BotAdapter } from './connection.js';
 import { registerChat } from './connection.js';
 
@@ -108,13 +109,15 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
             const analysisResult = await analyzeImage(media.data, media.mimetype, leadContext);
 
             // Route through normal conversation flow (add as message to batch)
-            // Create lead if not exists
-            const existingLead = db
-              .prepare('SELECT id FROM leads WHERE phone = ?')
-              .get(phone) as { id: number } | undefined;
-            if (!existingLead) {
-              db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
-              log.info({ phone }, 'new lead created from image');
+            // Create lead if not exists (skip for admin — boss is not a lead)
+            if (!isAdminPhone(phone)) {
+              const existingLead = db
+                .prepare('SELECT id FROM leads WHERE phone = ?')
+                .get(phone) as { id: number } | undefined;
+              if (!existingLead) {
+                db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
+                log.info({ phone }, 'new lead created from image');
+              }
             }
 
             addMessageToBatch(
@@ -157,14 +160,16 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
 
     const db = getDb();
 
-    // Create lead if not exists
-    const existingLead = db
-      .prepare('SELECT id FROM leads WHERE phone = ?')
-      .get(phone) as { id: number } | undefined;
+    // Create lead if not exists (skip for admin — boss is not a lead)
+    if (!isAdminPhone(phone)) {
+      const existingLead = db
+        .prepare('SELECT id FROM leads WHERE phone = ?')
+        .get(phone) as { id: number } | undefined;
 
-    if (!existingLead) {
-      db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
-      log.info({ phone }, 'new lead created');
+      if (!existingLead) {
+        db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
+        log.info({ phone }, 'new lead created');
+      }
     }
 
     // Route to batcher -> AI conversation
