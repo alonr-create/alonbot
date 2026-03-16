@@ -23,4 +23,6 @@ export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY || '',
   elevenLabsApiKey: process.env.ELEVENLABS_API_KEY || '',
   elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'jUBxo582xuRbgYNI6JJ2',
+  voiceAgentUrl: process.env.VOICE_AGENT_URL || '',
+  voiceAgentSecret: process.env.VOICE_AGENT_SECRET || '',
 } as const;

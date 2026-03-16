@@ -173,21 +173,56 @@ export async function handleConversation(
 
     await sendWithTyping(sock, jid, cleanResponse);
 
-    const result = await bookMeeting(date, time, leadName, phone, leadInterest, 'Discovery call');
-    if (result.success) {
-      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${getOwnerName()} יתקשר אליך`);
+    // Check if this is a Dekel lead — route to Voice Agent for booking
+    const leadSource = lead ? (db.prepare('SELECT source_detail FROM leads WHERE phone = ?').get(phone) as { source_detail: string | null } | undefined)?.source_detail : null;
+    const isDekel = leadSource === 'dekel' || leadSource === 'dekel-voice-agent';
+
+    let bookResult: { success: boolean };
+    if (isDekel && config.voiceAgentUrl) {
+      // Book via Voice Agent (has Zoom + Google Calendar of Dekel)
+      try {
+        const vaRes = await fetch(`${config.voiceAgentUrl}/tools/book-meeting`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            args: { date, time, name: leadName, phone, meeting_type: 'הכרות' },
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const vaData = await vaRes.text();
+        bookResult = { success: !vaData.includes('Cannot') && !vaData.includes('Error') && !vaData.includes('error') };
+        log.info({ phone, date, time, result: vaData }, 'Dekel booking via Voice Agent');
+      } catch (err) {
+        log.error({ err }, 'Voice Agent booking failed');
+        bookResult = { success: false };
+      }
+    } else {
+      // Regular booking via AalonBot calendar (Alon.dev)
+      bookResult = await bookMeeting(date, time, leadName, phone, leadInterest, 'Discovery call');
+    }
+
+    if (bookResult.success) {
+      const ownerLabel = isDekel ? 'אלון מדקל לפרישה' : getOwnerName();
+      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${ownerLabel} יתקשר אליך ✅`);
       newStatus = 'meeting-scheduled';
       cancelFollowUps(phone);
+
+      // Update Monday.com — use Dekel board for Dekel leads
+      if (isDekel && config.mondayBoardIdDprisha && lead?.monday_item_id) {
+        updateMondayStatus(lead.monday_item_id, parseInt(config.mondayBoardIdDprisha), 'meeting-scheduled').catch(
+          (err) => { log.error({ err, phone }, 'Dekel Monday status sync failed'); },
+        );
+      }
     } else {
       await sendWithTyping(
         sock, jid,
-        `סליחה, הייתה בעיה עם קביעת הפגישה. ${getOwnerName()} יחזור אליך עם זמנים מעודכנים.`,
+        `סליחה, הייתה בעיה עם קביעת הפגישה. ניצור איתך קשר עם זמנים מעודכנים.`,
       );
     }
 
     storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse);
     updateLeadTimestamp(db, phone, lead, newStatus);
-    log.info({ phone, date, time, success: result.success }, 'booking flow completed');
+    log.info({ phone, date, time, success: bookResult.success, isDekel }, 'booking flow completed');
     return;
   }
 

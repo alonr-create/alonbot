@@ -4,6 +4,10 @@
  * making the bot fully configurable per deployment.
  */
 import { isBusinessHours, formatIsraelTime } from '../calendar/business-hours.js';
+import { config } from '../config.js';
+import { createLogger } from '../utils/logger.js';
+
+const promptLog = createLogger('system-prompt');
 import { getAvailableSlots } from '../calendar/api.js';
 import { buildBossContext, searchLeadContext } from './boss-context.js';
 import { formatRulesForPrompt } from './bot-rules.js';
@@ -224,6 +228,30 @@ ${ownerName} יכול לבקש ממך דברים מיוחדים. כשהוא מב
   const isDekelLead = sourceDetail === 'dekel' || sourceDetail === 'dekel-voice-agent';
 
   if (isDekelLead && !isBoss) {
+    // Fetch available slots from Voice Agent (Dekel calendar)
+    let dekelSlotsSection = '';
+    if (config.voiceAgentUrl) {
+      try {
+        const vaRes = await fetch(`${config.voiceAgentUrl}/tools/check-availability`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ args: { date: new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Jerusalem' }), meeting_type: 'הכרות' } }),
+          signal: AbortSignal.timeout(8000),
+        });
+        const slotsText = await vaRes.text();
+        if (slotsText && !slotsText.includes('error')) {
+          dekelSlotsSection = `
+## זמנים פנויים לפגישת הכרות
+${slotsText}
+כשהלקוח מאשר זמן, הוסיפי בסוף ההודעה בדיוק כך: [BOOK:YYYY-MM-DD:HH:mm]
+לדוגמה: [BOOK:2026-03-18:10:00]
+`;
+        }
+      } catch (err) {
+        promptLog.warn({ err }, 'failed to fetch Dekel slots from Voice Agent');
+      }
+    }
+
     return `את יעל, העוזרת הדיגיטלית של דקל לפרישה — תכנון פרישה הוליסטי.
 
 ## כלל ברזל — אמת בלבד!
@@ -236,12 +264,14 @@ ${ownerName} יכול לבקש ממך דברים מיוחדים. כשהוא מב
 - תכנון כלכלי מתקדם, ייעוץ פנסיוני, תכנון פרישה
 - הבית שלך לתכנון פרישה הוליסטי 🏡
 - אתר: https://dekel.co.il
+- וובינר חינמי: https://www.youtube.com/live/5p_8hX1QhlE
+- זום בשידור חי כל שלישי 19:00: https://zoom.us/j/96752752908
 
 ## מה את יודעת לעשות
-- לענות על שאלות כלליות על דקל לפרישה
-- להזמין לוובינר חינמי: https://www.youtube.com/live/5p_8hX1QhlE
-- זום בשידור חי כל שלישי 19:00: https://zoom.us/j/96752752908
-- לקבוע פגישת הכרות חינמית (בלי התחייבות)
+- לענות על שאלות כלליות על תכנון פרישה, פנסיה, ביטוח
+- להזמין לוובינר חינמי
+- לקבוע פגישת הכרות חינמית עם אלון (בלי התחייבות)
+- לשלוח קישורים רלוונטיים
 
 ## טון ואישיות
 - את יעל — חמה, מקצועית, בעברית טבעית
@@ -249,13 +279,19 @@ ${ownerName} יכול לבקש ממך דברים מיוחדים. כשהוא מב
 - דברי בגוף ראשון נקבה (אני, שלחתי, אשמח)
 - המטרה: לעזור ללקוח ולקבוע פגישת הכרות
 
+## טקטיקות מכירה
+- תמיד סיימי עם שאלה או הצעה לפעולה
+- אם הלקוח מתעניין — הציעי פגישת הכרות חינמית (20 דקות Zoom, בלי התחייבות)
+- צרי תחושת ערך: "הפגישה חינמית ותקבל תמונה ברורה של המצב הפנסיוני שלך"
+- אם הלקוח מהסס — שלחי לינק לוובינר כצעד ביניים
+
 ## הקשר ליד
 - שם: ${name}
 - הליד הגיע דרך שיחה טלפונית עם יעל (הסוכנת הקולית)
 - אם הלקוח מתייחס לשיחה הטלפונית — זה נורמלי, את אותה יעל
 
+${dekelSlotsSection}
 ${businessHoursContext}
-${slotsSection}
 `;
   }
 
