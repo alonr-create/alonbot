@@ -687,6 +687,49 @@ async function processBossMarkers(
     }
   }
 
+  // ── [CALL:name:topic] — trigger Voice Agent outbound call to a lead ──
+  const callMatch = cleaned.match(/\[CALL:([^:]+):([^\]]+)\]/);
+  if (callMatch) {
+    const [, targetName, topic] = callMatch;
+    cleaned = cleaned.replace(/\[CALL:[^\]]+\]/, '').trim();
+
+    // Find lead by name
+    const targetLead = db
+      .prepare('SELECT phone, name, monday_item_id FROM leads WHERE name LIKE ?')
+      .get(`%${targetName.trim()}%`) as { phone: string; name: string; monday_item_id: number | null } | undefined;
+
+    if (targetLead && config.voiceAgentUrl) {
+      try {
+        const callRes = await fetch(`${config.voiceAgentUrl}/api/outbound-call`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId: targetLead.monday_item_id,
+            name: targetLead.name,
+            phone: targetLead.phone,
+            callMode: topic.trim(),
+          }),
+          signal: AbortSignal.timeout(15000),
+        });
+        const callData = await callRes.json() as { callId?: string; call_id?: string; error?: string };
+        if (callData.callId || callData.call_id) {
+          cleaned += `\n\n📞 מתקשרת ל${targetLead.name} (${targetLead.phone}) עכשיו! נושא: ${topic.trim()}`;
+          log.info({ name: targetLead.name, phone: targetLead.phone, topic: topic.trim() }, 'Voice Agent call initiated by boss');
+        } else {
+          cleaned += `\n\n❌ לא הצלחתי להתקשר ל${targetLead.name}: ${callData.error || 'שגיאה לא ידועה'}`;
+          log.warn({ name: targetLead.name, error: callData.error }, 'Voice Agent call failed');
+        }
+      } catch (err) {
+        log.error({ err, name: targetLead.name }, 'Voice Agent call request failed');
+        cleaned += `\n\n❌ שגיאה בחיבור ל-Voice Agent`;
+      }
+    } else if (!targetLead) {
+      cleaned += `\n\n❌ לא מצאתי ליד בשם "${targetName.trim()}" במערכת. אפשר לחפש בשם אחר?`;
+    } else {
+      cleaned += `\n\n❌ Voice Agent לא מוגדר — לא ניתן להתקשר`;
+    }
+  }
+
   // ── [BROWSE:task] — computer use agent (browse + screenshot + analyze) ──
   const browseMatch = cleaned.match(/\[BROWSE:([^\]]+)\]/);
   if (browseMatch) {
