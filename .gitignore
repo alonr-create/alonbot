@@ -7,6 +7,9 @@ data/*.db
 data/*.db-wal
 data/*.db-shm
 data/whatsapp-session/
+data/whatsapp-wwjs-session/
+.wwebjs_cache/
+data/*.log
 .DS_Store
 *.pdf
 alonbot-status.html
