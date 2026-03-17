@@ -254,6 +254,16 @@ cron.schedule('0 3 * * *', () => {
 
 log.info('ready');
 
+// Handle uncaught errors gracefully (don't crash on transient issues)
+process.on('uncaughtException', (err) => {
+  log.error({ err: err.message }, 'uncaughtException');
+  // Don't exit — let the bot recover
+});
+process.on('unhandledRejection', (err: any) => {
+  log.error({ err: err?.message || String(err) }, 'unhandledRejection');
+  // Don't exit — let the bot recover
+});
+
 // Graceful shutdown
 process.on('SIGINT', async () => {
   log.info('shutting down');

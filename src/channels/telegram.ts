@@ -627,7 +627,20 @@ export function createTelegramAdapter(): ChannelAdapter {
         log.warn({ err: e.message }, 'failed to set menu button');
       }
 
-      bot.start();
+      // Catch polling errors (e.g. 409 conflict when another instance polls)
+      bot.catch((err) => {
+        const msg = err.message || String(err);
+        if (msg.includes('409') || msg.includes('Conflict')) {
+          log.warn('Telegram 409 conflict — another instance may be polling. Retrying in 10s...');
+        } else {
+          log.error({ err: msg }, 'Telegram bot error');
+        }
+      });
+
+      bot.start({
+        onStart: () => log.info('Telegram polling started'),
+        drop_pending_updates: true,
+      });
       log.info('bot running');
     },
 
