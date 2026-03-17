@@ -17,8 +17,6 @@ RUN npx tsc
 # Copy non-TS assets that tsc doesn't emit
 COPY src/views/ dist/views/
 
-# Install Claude Code CLI globally (for code_agent tool)
-RUN npm install -g @anthropic-ai/claude-code
 
 # Remove dev dependencies
 RUN npm prune --production
