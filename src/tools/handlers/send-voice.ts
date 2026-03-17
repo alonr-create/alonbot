@@ -2,13 +2,14 @@ import type { ToolHandler } from '../types.js';
 import { withRetry } from '../../utils/retry.js';
 
 // Voice presets — ElevenLabs voice IDs
-export const VOICE_PRESETS: Record<string, { id: string; name: string; model?: string; settings: { stability: number; similarity_boost: number; style: number } }> = {
-  alon:    { id: 'afovcnSM12xH5rD4hdwt', name: 'אלון (ברירת מחדל)', model: 'eleven_turbo_v2_5', settings: { stability: 0.7, similarity_boost: 0.9, style: 0.4 } },
-  robot:   { id: 'onwK4e9ZLuTAKqWW03F9', name: 'רובוט 🤖',           model: 'eleven_turbo_v2_5', settings: { stability: 0.85, similarity_boost: 0.75, style: 0.0 } },
-  monster: { id: 'SOYHLrjzK2X1ezoPC6cr', name: 'מפלצת 👹',           model: 'eleven_turbo_v2_5', settings: { stability: 0.3, similarity_boost: 0.7, style: 0.8 } },
-  wizard:  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'קוסם 🧙',            model: 'eleven_turbo_v2_5', settings: { stability: 0.5, similarity_boost: 0.8, style: 0.6 } },
-  santa:   { id: 'pqHfZKP75CvOlQylNhV4', name: 'סנטה 🎅',            model: 'eleven_turbo_v2_5', settings: { stability: 0.65, similarity_boost: 0.8, style: 0.5 } },
-  english: { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian (English)',     model: 'eleven_turbo_v2_5', settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } },
+// IMPORTANT: Always use eleven_v3 for Hebrew voices. Do NOT change to turbo/multilingual — they break Hebrew.
+export const VOICE_PRESETS: Record<string, { id: string; name: string; model: string; settings: { stability: number; similarity_boost: number; style: number } }> = {
+  alon:    { id: 'afovcnSM12xH5rD4hdwt', name: 'אלון (ברירת מחדל)', model: 'eleven_v3', settings: { stability: 0.7, similarity_boost: 0.9, style: 0.4 } },
+  robot:   { id: 'afovcnSM12xH5rD4hdwt', name: 'רובוט 🤖',           model: 'eleven_v3', settings: { stability: 0.95, similarity_boost: 0.5,  style: 0.0 } },
+  monster: { id: 'YdE0xzlplwGVh5IqepPl', name: 'מפלצת 👹',           model: 'eleven_v3', settings: { stability: 0.2,  similarity_boost: 0.6,  style: 1.0 } },
+  wizard:  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'קוסם 🧙',            model: 'eleven_v3', settings: { stability: 0.5, similarity_boost: 0.8, style: 0.6 } },
+  santa:   { id: 'pqHfZKP75CvOlQylNhV4', name: 'סנטה 🎅',            model: 'eleven_v3', settings: { stability: 0.65, similarity_boost: 0.8, style: 0.5 } },
+  english: { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian (English)',     model: 'eleven_v3', settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } },
 };
 
 const handler: ToolHandler = {
@@ -35,7 +36,7 @@ const handler: ToolHandler = {
         preset = isHebrew ? VOICE_PRESETS.alon : VOICE_PRESETS.english;
       }
 
-      const modelId = preset.model || 'eleven_turbo_v2_5';
+      const modelId = preset.model || 'eleven_v3';
 
       const res = await withRetry(() => fetch(
         `https://api.elevenlabs.io/v1/text-to-speech/${preset.id}`,
