@@ -64,18 +64,23 @@ if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
 // Start cron jobs from DB
 startAllCronJobs(sendToChannel);
 
-// Daily brief — 08:00 Israel time
+// Smart daily brief — 08:00 Israel time
+// Only reports things that actually changed, not static questions
 cron.schedule('0 8 * * *', async () => {
   const targetId = config.allowedTelegram[0];
   if (!targetId) return;
-  log.info('daily brief firing');
-  const briefMsg = `סיכום בוקר יומי:
-1. מה התאריך היום (עברי ולועזי)?
-2. מה מזג האוויר בתל אביב?
-3. תן 3 כותרות חדשות מהבוקר (חדשות ישראל).
-4. יש לידים חדשים בדקל לפרישה?
-5. מה התזכורות הפעילות שלי?
-6. תן ציטוט השראה קצר.`;
+  log.info('smart daily brief firing');
+  const briefMsg = `סיכום בוקר חכם — בדוק מה באמת השתנה ודווח רק על הרלוונטי:
+
+1. תאריך היום (עברי + לועזי) + יום בשבוע.
+2. בדוק ב-Monday.com (monday_api) אם יש לידים חדשים מאתמול בדקל לפרישה (board 1443236269, group new_group28956). אם יש — תפרט שם + מקור. אם אין — תגיד "אין לידים חדשים".
+3. בדוק אם יש פגישות היום ביומן (calendar_list, days=1).
+4. בדוק תזכורות פעילות (list_reminders).
+5. בדוק משימות שעבר הזמן שלהן (list_tasks).
+6. בדוק סטטוס קמפיינים בפייסבוק (fb_ads: account_overview לdekel ולalon.dev) — תדווח הוצאה ולידים מ-7 ימים אחרונים.
+7. ציטוט השראה קצר.
+
+**חוקים**: אם אין שינוי בקטגוריה — תדלג עליה. תן סיכום קצר ותכליתי, לא רשימות ארוכות.`;
   await sendAgentMessage('telegram', targetId, briefMsg);
 }, { timezone: 'Asia/Jerusalem' });
 

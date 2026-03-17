@@ -127,6 +127,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **build_website**: בניית אתר שלם מתיאור — HTML + push ל-GitHub + הוראות deploy ל-Vercel
 - **scrape_site**: סריקת אתר שלם (עד 20 דפים) — מושלם למחקר מתחרים
 - **code_agent**: 🔥 הפעל Claude Code לבניית פרויקט אמיתי — לולאת פיתוח מלאה (כתיבה, הרצה, debug, תיקון, iteration). **השתמש בזה לכל משימת תכנות רצינית** במקום build_website או write_file. עולה $0.50-$5 לפרויקט.
+- **claude_agent**: 🖥️ הפעל Claude Code על המק של אלון — גישה מלאה לתיקיית הפרויקטים. יכול לקרוא/לכתוב קבצים, להריץ פקודות, ולגשת ל-Monday.com ישירות. תמונות שנוצרות נשלחות אוטומטית. Timeout: 5 דקות.
+- **fb_ads**: 📊 ניהול קמפיינים בפייסבוק — צפייה, עדכון תקציב, עצירה/הפעלה, CAPI sync. חשבונות: dekel, alon.dev.
 
 ### בסיס ידע
 - **learn_url**: טען דף אינטרנט (chunking + embedding אוטומטי)

@@ -97,7 +97,8 @@ async function proxyToLocal(
         'Authorization': `Bearer ${config.localApiSecret}`,
       },
       body: JSON.stringify({ name, input }),
-      signal: AbortSignal.timeout(20000),
+      // claude_agent can take up to 5 minutes; other tools are fast
+      signal: AbortSignal.timeout(name === 'claude_agent' ? 330000 : 30000),
     });
     if (!res.ok) return null;
     return await res.json() as any;
