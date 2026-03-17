@@ -14,6 +14,7 @@ const autoImproveSchema = z.object({
 
 const AUTO_IMPROVE_ALLOWED_PATHS = [
   /^src\/agent\/system-prompt\.ts$/,
+  /^src\/tools\/handlers\/send-voice\.ts$/,
   /^skills\//,
 ];
 const AUTO_IMPROVE_BLOCKED_PATHS = [
