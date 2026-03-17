@@ -3,6 +3,7 @@ import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
 import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
+import { VOICE_PRESETS } from '../tools/handlers/send-voice.js';
 import { searchKnowledge } from './knowledge.js';
 import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
@@ -386,11 +387,11 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       const ttsText = replyText.replace(/\n\n_\u200E.*_$/, '').trim();
       if (ttsText.length > 0 && ttsText.length < 3000) {
         const isHebrew = /[\u0590-\u05FF]/.test(ttsText);
-        const voiceId = isHebrew ? config.elevenlabsVoiceId : 'nPczCjzI2devNBz1zQrb';
-        const ttsRes = await withRetry(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        const preset = isHebrew ? VOICE_PRESETS.alon : VOICE_PRESETS.english;
+        const ttsRes = await withRetry(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${preset.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'xi-api-key': config.elevenlabsApiKey },
-          body: JSON.stringify({ text: ttsText, model_id: 'eleven_v3', voice_settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } }),
+          body: JSON.stringify({ text: ttsText, model_id: 'eleven_v3', voice_settings: preset.settings }),
         }));
         if (ttsRes.ok) {
           reply.voice = Buffer.from(await ttsRes.arrayBuffer());

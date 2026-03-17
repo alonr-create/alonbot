@@ -2,6 +2,7 @@ import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, MessageMedia } = pkg;
 import { config } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
+import { withRetry } from '../utils/retry.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
 import { existsSync } from 'fs';
 
@@ -145,14 +146,41 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
               documentName = media.filename || 'document';
             } else if (media.mimetype.startsWith('audio/') && msg.type === 'ptt') {
               isVoice = true;
-              // Voice messages — use the caption/body as text if available
+              // Transcribe voice message with Groq Whisper STT
+              if (config.groqApiKey) {
+                try {
+                  const audioBuffer = Buffer.from(media.data, 'base64');
+                  const formData = new FormData();
+                  formData.append('file', new Blob([audioBuffer], { type: 'audio/ogg' }), 'voice.ogg');
+                  formData.append('model', 'whisper-large-v3');
+                  formData.append('language', 'he');
+
+                  const sttRes = await withRetry(() => fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${config.groqApiKey}` },
+                    body: formData,
+                  }));
+
+                  if (sttRes.ok) {
+                    const sttData = await sttRes.json() as { text: string };
+                    if (sttData.text) {
+                      text = sttData.text;
+                      log.info({ text: text.slice(0, 80) }, 'WA voice transcribed');
+                    }
+                  } else {
+                    log.warn({ status: sttRes.status }, 'WA voice STT failed');
+                  }
+                } catch (sttErr: any) {
+                  log.error({ err: sttErr.message }, 'WA voice STT error');
+                }
+              }
             }
           }
         }
 
         // If it's a voice message with no text, set a placeholder
         if (isVoice && !text) {
-          text = '[הודעה קולית]';
+          text = '[הודעה קולית — לא הצלחתי לתמלל]';
         }
 
         // Skip if no content at all
