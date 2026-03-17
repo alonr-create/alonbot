@@ -1,30 +1,130 @@
-{"level":40,"time":1773128472009,"pid":1026,"hostname":"MacBookAir.lan","module":"git-auth","msg":"GITHUB_TOKEN not set — GIT_ASKPASS not configured"}
-{"level":30,"time":1773128472013,"pid":1026,"hostname":"MacBookAir.lan","module":"registry","toolCount":0,"fileCount":0,"msg":"tools loaded"}
-{"level":30,"time":1773128472072,"pid":1026,"hostname":"MacBookAir.lan","module":"main","mode":"local","startedAt":"10.3.2026, 9:41:12","msg":"AlonBot starting"}
-{"level":30,"time":1773128472075,"pid":1026,"hostname":"MacBookAir.lan","module":"main","msg":"local mode — Telegram send-only"}
-{"level":30,"time":1773128472075,"pid":1026,"hostname":"MacBookAir.lan","module":"whatsapp","msg":"starting"}
-{"level":30,"time":1773128472076,"pid":1026,"hostname":"MacBookAir.lan","module":"server","port":3700,"msg":"health check server started"}
-{"level":30,"time":1773128472076,"pid":1026,"hostname":"MacBookAir.lan","module":"server","url":"http://localhost:3700/chat?token=alonbot-secret-2026","msg":"chat URL"}
-{"level":30,"time":1773128472076,"pid":1026,"hostname":"MacBookAir.lan","module":"server","url":"http://localhost:3700/dashboard?token=alonbot-secret-2026","msg":"dashboard URL"}
-{"level":30,"time":1773128472076,"pid":1026,"hostname":"MacBookAir.lan","module":"server","url":"http://localhost:3700/api/tool","msg":"tool API URL"}
-{"level":30,"time":1773128472099,"pid":1026,"hostname":"MacBookAir.lan","module":"main","msg":"WhatsApp adapter started"}
-{"level":30,"time":1773128472099,"pid":1026,"hostname":"MacBookAir.lan","module":"cron","count":2,"msg":"loading cron jobs"}
-{"level":30,"time":1773128472104,"pid":1026,"hostname":"MacBookAir.lan","module":"cron","name":"בוקר טוב יומי לאלון","cronExpr":"0 7 * * *","msg":"scheduled cron job"}
-{"level":30,"time":1773128472105,"pid":1026,"hostname":"MacBookAir.lan","module":"cron","name":"בוקר טוב יומי לאלון","cronExpr":"0 7 * * *","msg":"scheduled cron job"}
-{"level":30,"time":1773128472117,"pid":1026,"hostname":"MacBookAir.lan","module":"main","msg":"ready"}
-{"level":30,"time":"2026-03-10T07:41:12.332Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","browser":["AlonBot","Chrome","22.0"],"helloMsg":{"clientHello":{"ephemeral":"PZtvSON/lAGtRDbvns3Tdx/ElgdGJpKVgONAIzWO7Ss="}},"msg":"connected to WA"}
-{"level":30,"time":"2026-03-10T07:41:12.465Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","node":{"username":"972546300783","passive":false,"userAgent":{"platform":"WEB","appVersion":{"primary":2,"secondary":3000,"tertiary":1023223821},"mcc":"000","mnc":"000","osVersion":"0.1","device":"Desktop","osBuildNumber":"0.1","releaseChannel":"RELEASE","localeLanguageIso6391":"en","localeCountryIso31661Alpha2":"US"},"webInfo":{"webSubPlatform":"WEB_BROWSER"},"connectType":"WIFI_UNKNOWN","connectReason":"USER_ACTIVATED","pull":true},"msg":"logging in..."}
-{"level":30,"time":"2026-03-10T07:41:13.478Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","trace":"Error: Connection Failure\n    at WebSocketClient.<anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:653:7)\n    at WebSocketClient.emit (node:events:508:28)\n    at <anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:327:23)\n    at Object.decodeFrame (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Utils/noise-handler.ts:187:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","msg":"connection errored"}
-{"level":30,"time":1773128473479,"pid":1026,"hostname":"MacBookAir.lan","module":"whatsapp","retryCount":1,"maxRetries":3,"msg":"reconnecting"}
-{"level":30,"time":"2026-03-10T07:41:18.845Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","browser":["AlonBot","Chrome","22.0"],"helloMsg":{"clientHello":{"ephemeral":"yZDDI0wZgHFS9ttVQXqPjifjPQZBDhd49d9p+YyihB4="}},"msg":"connected to WA"}
-{"level":30,"time":"2026-03-10T07:41:19.041Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","node":{"username":"972546300783","passive":false,"userAgent":{"platform":"WEB","appVersion":{"primary":2,"secondary":3000,"tertiary":1023223821},"mcc":"000","mnc":"000","osVersion":"0.1","device":"Desktop","osBuildNumber":"0.1","releaseChannel":"RELEASE","localeLanguageIso6391":"en","localeCountryIso31661Alpha2":"US"},"webInfo":{"webSubPlatform":"WEB_BROWSER"},"connectType":"WIFI_UNKNOWN","connectReason":"USER_ACTIVATED","pull":true},"msg":"logging in..."}
-{"level":30,"time":"2026-03-10T07:41:21.571Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","trace":"Error: Connection Failure\n    at WebSocketClient.<anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:653:7)\n    at WebSocketClient.emit (node:events:508:28)\n    at <anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:327:23)\n    at Object.decodeFrame (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Utils/noise-handler.ts:187:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","msg":"connection errored"}
-{"level":30,"time":1773128481572,"pid":1026,"hostname":"MacBookAir.lan","module":"whatsapp","retryCount":2,"maxRetries":3,"msg":"reconnecting"}
-{"level":30,"time":"2026-03-10T07:41:27.236Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","browser":["AlonBot","Chrome","22.0"],"helloMsg":{"clientHello":{"ephemeral":"Tj52yTmiZ/qWZwiZWtHO/4VxlcvOQTNqhvVoYJ6WeCg="}},"msg":"connected to WA"}
-{"level":30,"time":"2026-03-10T07:41:27.469Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","node":{"username":"972546300783","passive":false,"userAgent":{"platform":"WEB","appVersion":{"primary":2,"secondary":3000,"tertiary":1023223821},"mcc":"000","mnc":"000","osVersion":"0.1","device":"Desktop","osBuildNumber":"0.1","releaseChannel":"RELEASE","localeLanguageIso6391":"en","localeCountryIso31661Alpha2":"US"},"webInfo":{"webSubPlatform":"WEB_BROWSER"},"connectType":"WIFI_UNKNOWN","connectReason":"USER_ACTIVATED","pull":true},"msg":"logging in..."}
-{"level":30,"time":"2026-03-10T07:41:30.598Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","trace":"Error: Connection Failure\n    at WebSocketClient.<anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:653:7)\n    at WebSocketClient.emit (node:events:508:28)\n    at <anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:327:23)\n    at Object.decodeFrame (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Utils/noise-handler.ts:187:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","msg":"connection errored"}
-{"level":30,"time":1773128490620,"pid":1026,"hostname":"MacBookAir.lan","module":"whatsapp","retryCount":3,"maxRetries":3,"msg":"reconnecting"}
-{"level":30,"time":"2026-03-10T07:41:36.234Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","browser":["AlonBot","Chrome","22.0"],"helloMsg":{"clientHello":{"ephemeral":"NQL72T/7gl+tFVlmULxiAcDwTFmceYE30q6mBf97Pgo="}},"msg":"connected to WA"}
-{"level":30,"time":"2026-03-10T07:41:36.348Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","node":{"username":"972546300783","passive":false,"userAgent":{"platform":"WEB","appVersion":{"primary":2,"secondary":3000,"tertiary":1023223821},"mcc":"000","mnc":"000","osVersion":"0.1","device":"Desktop","osBuildNumber":"0.1","releaseChannel":"RELEASE","localeLanguageIso6391":"en","localeCountryIso31661Alpha2":"US"},"webInfo":{"webSubPlatform":"WEB_BROWSER"},"connectType":"WIFI_UNKNOWN","connectReason":"USER_ACTIVATED","pull":true},"msg":"logging in..."}
-{"level":30,"time":"2026-03-10T07:41:38.983Z","pid":1026,"hostname":"MacBookAir.lan","class":"baileys","trace":"Error: Connection Failure\n    at WebSocketClient.<anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:653:7)\n    at WebSocketClient.emit (node:events:508:28)\n    at <anonymous> (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Socket/socket.ts:327:23)\n    at Object.decodeFrame (/Users/oakhome/קלוד עבודות/alonbot/node_modules/@whiskeysockets/baileys/src/Utils/noise-handler.ts:187:5)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)","msg":"connection errored"}
-{"level":50,"time":1773128498990,"pid":1026,"hostname":"MacBookAir.lan","module":"whatsapp","msg":"max retries reached — WhatsApp disabled"}
+{"level":40,"time":1773747803371,"pid":60233,"hostname":"Alons-Air.lan","module":"git-auth","msg":"GITHUB_TOKEN not set — GIT_ASKPASS not configured"}
+{"level":30,"time":1773747803533,"pid":60233,"hostname":"Alons-Air.lan","module":"registry","toolCount":43,"fileCount":29,"msg":"tools loaded"}
+{"level":30,"time":1773747803570,"pid":60233,"hostname":"Alons-Air.lan","module":"main","mode":"local","startedAt":"17.3.2026, 13:43:23","msg":"AlonBot starting"}
+{"level":30,"time":1773747803572,"pid":60233,"hostname":"Alons-Air.lan","module":"main","msg":"local mode — Telegram send-only"}
+{"level":30,"time":1773747803572,"pid":60233,"hostname":"Alons-Air.lan","module":"whatsapp","msg":"starting"}
+{"level":30,"time":1773747803573,"pid":60233,"hostname":"Alons-Air.lan","module":"whatsapp","msg":"initializing (Puppeteer loading)..."}
+{"level":30,"time":1773747803577,"pid":60233,"hostname":"Alons-Air.lan","module":"server","port":3700,"msg":"health check server started"}
+{"level":30,"time":1773747803577,"pid":60233,"hostname":"Alons-Air.lan","module":"server","url":"http://localhost:3700/chat?token=alonbot-secret-2026","msg":"chat URL"}
+{"level":30,"time":1773747803577,"pid":60233,"hostname":"Alons-Air.lan","module":"server","url":"http://localhost:3700/dashboard?token=alonbot-secret-2026","msg":"dashboard URL"}
+{"level":30,"time":1773747803577,"pid":60233,"hostname":"Alons-Air.lan","module":"server","url":"http://localhost:3700/api/tool","msg":"tool API URL"}
+{"level":30,"time":1773747809607,"pid":60233,"hostname":"Alons-Air.lan","module":"main","msg":"WhatsApp adapter started"}
+{"level":30,"time":1773747809615,"pid":60233,"hostname":"Alons-Air.lan","module":"cron","count":2,"msg":"loading cron jobs"}
+{"level":30,"time":1773747809662,"pid":60233,"hostname":"Alons-Air.lan","module":"cron","name":"בוקר טוב יומי לאלון","cronExpr":"0 7 * * *","msg":"scheduled cron job"}
+{"level":30,"time":1773747809665,"pid":60233,"hostname":"Alons-Air.lan","module":"cron","name":"בוקר טוב יומי לאלון","cronExpr":"0 7 * * *","msg":"scheduled cron job"}
+{"level":30,"time":1773747809697,"pid":60233,"hostname":"Alons-Air.lan","module":"main","msg":"ready"}
+{"level":30,"time":1773747810753,"pid":60233,"hostname":"Alons-Air.lan","module":"whatsapp","msg":"connected"}
+{"level":30,"time":1773747969311,"pid":60233,"hostname":"Alons-Air.lan","module":"whatsapp","lid":"31495095873775","phone":"972546300783","msg":"resolved LID to phone"}
+{"level":30,"time":1773747969582,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"צלם מסך","msg":"incoming message"}
+{"level":30,"time":1773747971080,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":10237,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773747974730,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":10225,"msg":"cache created"}
+{"level":30,"time":1773747974731,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"screenshot","input":"{}","msg":"tool call"}
+{"level":30,"time":1773747975063,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"screenshot","result":"Screenshot taken and sent.","durationMs":332,"msg":"tool result"}
+{"level":30,"time":1773747980552,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":82,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748159175,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"יכול לצלם את המסך השני גם?","msg":"incoming message"}
+{"level":30,"time":1773748160284,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":10237,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748163339,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748163339,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":2252,"msg":"cache created"}
+{"level":30,"time":1773748163339,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -x /tmp/screen2.png -D 2 && echo \\\"success\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748163849,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"success","durationMs":510,"msg":"tool result"}
+{"level":30,"time":1773748165723,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/tmp/screen2.png\"}","msg":"tool call"}
+{"level":30,"time":1773748165731,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"Error: Access denied.","durationMs":7,"msg":"tool result"}
+{"level":30,"time":1773748168339,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -x /tmp/screen2.jpg -D 2 -t jpg && echo \\\"done\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748168677,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"done","durationMs":338,"msg":"tool result"}
+{"level":30,"time":1773748171046,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/tmp/screen2.jpg\"}","msg":"tool call"}
+{"level":30,"time":1773748171050,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"Error: Access denied.","durationMs":4,"msg":"tool result"}
+{"level":30,"time":1773748178426,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":298,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748190035,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"פתח לי פה","msg":"incoming message"}
+{"level":30,"time":1773748191247,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":10100,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748194497,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748194497,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":2124,"msg":"cache created"}
+{"level":30,"time":1773748194497,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -x /tmp/screen2.png && echo \\\"done\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748194756,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"done","durationMs":259,"msg":"tool result"}
+{"level":30,"time":1773748197302,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/tmp/screen2.png\"}","msg":"tool call"}
+{"level":30,"time":1773748197304,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"Error: Access denied.","durationMs":2,"msg":"tool result"}
+{"level":30,"time":1773748201535,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -x ~/Desktop/screen2.png && echo \\\"done\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748202307,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"done","durationMs":772,"msg":"tool result"}
+{"level":30,"time":1773748204840,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/Users/oakhome/Desktop/screen2.png\"}","msg":"tool call"}
+{"level":30,"time":1773748204842,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"Error: Access denied.","durationMs":1,"msg":"tool result"}
+{"level":30,"time":1773748210691,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":268,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748258910,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"שמור אז בתיקיה שיש לך גישה אליה","msg":"incoming message"}
+{"level":30,"time":1773748260168,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":10113,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748263894,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748263894,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":2122,"msg":"cache created"}
+{"level":30,"time":1773748263894,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -x /Users/oakhome/קלוד\\\\ עבודות/screen2.png && echo \\\"נשמר\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748264311,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"נשמר","durationMs":417,"msg":"tool result"}
+{"level":30,"time":1773748267164,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/Users/oakhome/קלוד עבודות/screen2.png\"}","msg":"tool call"}
+{"level":30,"time":1773748267169,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"File sent: /Users/oakhome/קלוד עבודות/screen2.png","durationMs":5,"msg":"tool result"}
+{"level":30,"time":1773748271405,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":82,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748281199,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"רק אחד","msg":"incoming message"}
+{"level":30,"time":1773748282370,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":10076,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748287191,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748287191,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":2102,"msg":"cache created"}
+{"level":30,"time":1773748287191,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"screencapture -D 2 \\\"/Users/oakhome/קלוד עבודות/screen2.png\\\" && echo \\\"done\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748287536,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"done","durationMs":345,"msg":"tool result"}
+{"level":30,"time":1773748289759,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/Users/oakhome/קלוד עבודות/screen2.png\"}","msg":"tool call"}
+{"level":30,"time":1773748289761,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"File sent: /Users/oakhome/קלוד עבודות/screen2.png","durationMs":2,"msg":"tool result"}
+{"level":30,"time":1773748294258,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":85,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748303086,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"תותח על של אבא","msg":"incoming message"}
+{"level":30,"time":1773748304239,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":9991,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748308909,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748308909,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":2014,"msg":"cache created"}
+{"level":30,"time":1773748308909,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"screenshot","input":"{}","msg":"tool call"}
+{"level":30,"time":1773748309230,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"screenshot","result":"Screenshot taken and sent.","durationMs":321,"msg":"tool result"}
+{"level":30,"time":1773748314327,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":198,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748381514,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"לצלם מהמצלמה אתה יכול?","msg":"incoming message"}
+{"level":30,"time":1773748382798,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":9850,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748389701,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748389701,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":1863,"msg":"cache created"}
+{"level":30,"time":1773748389890,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":327,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748421719,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"כן","msg":"incoming message"}
+{"level":30,"time":1773748422090,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":9815,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748424798,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748424798,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":1844,"msg":"cache created"}
+{"level":30,"time":1773748424798,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"which imagesnap || echo \\\"not installed\\\"\"}","msg":"tool call"}
+{"level":30,"time":1773748424829,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"imagesnap not found\nnot installed","durationMs":31,"msg":"tool result"}
+{"level":30,"time":1773748427956,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"which ffmpeg && ffmpeg -f avfoundation -i \\\"0\\\" -vframes 1 \\\"/Users/oakhome/קלוד עבודות/","msg":"tool call"}
+{"level":30,"time":1773748429315,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"/opt/homebrew/bin/ffmpeg\nffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers\n  built ","durationMs":1359,"msg":"tool result"}
+{"level":30,"time":1773748434365,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"ffmpeg -f avfoundation -list_devices true -i \\\"\\\" 2>&1\"}","msg":"tool call"}
+{"level":30,"time":1773748434630,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"Error: Command failed with exit code 251","durationMs":264,"msg":"tool result"}
+{"level":30,"time":1773748437135,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"ffmpeg -f avfoundation -list_devices true -i \\\"\\\" 2>&1 || true\"}","msg":"tool call"}
+{"level":30,"time":1773748437433,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"ffmpeg version 8.0.1 Copyright (c) 2000-2025 the FFmpeg developers\n  built with Apple clang version ","durationMs":298,"msg":"tool result"}
+{"level":30,"time":1773748443201,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i \\\"0:none\\\" -vframes 1 \\\"/Us","msg":"tool call"}
+{"level":30,"time":1773748445431,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"cpb: bitrate max/min/avg: 0/0/200000 buffer size: 0 vbv_delay: N/A\n[image2 @ 0xa5500d400] The specif","durationMs":2229,"msg":"tool result"}
+{"level":30,"time":1773748447733,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","input":"{\"command\":\"ffmpeg -f avfoundation -framerate 30 -video_size 1280x720 -i \\\"0:none\\\" -vframes 1 -upda","msg":"tool call"}
+{"level":30,"time":1773748448733,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"shell","result":"cpb: bitrate max/min/avg: 0/0/200000 buffer size: 0 vbv_delay: N/A\n[out#0/image2 @ 0xc12df0780] vide","durationMs":1000,"msg":"tool result"}
+{"level":30,"time":1773748451756,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","input":"{\"path\":\"/Users/oakhome/קלוד עבודות/camera.jpg\"}","msg":"tool call"}
+{"level":30,"time":1773748451758,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"send_file","result":"File sent: /Users/oakhome/קלוד עבודות/camera.jpg","durationMs":2,"msg":"tool result"}
+{"level":30,"time":1773748455582,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_011NhB2ronWGmr2fwY4qsuS7","jobType":"summarize","requestCount":1,"msg":"batch submitted"}
+{"level":30,"time":1773748455582,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","batchId":"msgbatch_011NhB2ronWGmr2fwY4qsuS7","channel":"whatsapp","senderId":"972546300783","messageCount":40,"msg":"submitted summarize batch"}
+{"level":30,"time":1773748456377,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":139,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748576662,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"תותחי","msg":"incoming message"}
+{"level":30,"time":1773748577691,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":9646,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748581600,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748581600,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":1673,"msg":"cache created"}
+{"level":30,"time":1773748581789,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":116,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748581969,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_01StyHp3QN9ZLWMxGJ9ir96m","jobType":"summarize","requestCount":1,"msg":"batch submitted"}
+{"level":30,"time":1773748581969,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","batchId":"msgbatch_01StyHp3QN9ZLWMxGJ9ir96m","channel":"whatsapp","senderId":"972546300783","messageCount":42,"msg":"submitted summarize batch"}
+{"level":30,"time":1773748592077,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","sender":"Alon","text":"אתה יכול לזכור את כל זה? שפעם הבאה ישר תדע","msg":"incoming message"}
+{"level":30,"time":1773748593038,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","inputTokens":9581,"contextLimit":200000,"msg":"token count"}
+{"level":30,"time":1773748604345,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheReadTokens":7963,"msg":"cache hit"}
+{"level":30,"time":1773748604346,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","cacheCreatedTokens":1582,"msg":"cache created"}
+{"level":30,"time":1773748604346,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"remember","input":"{\"content\":\"צילום מסך שני: לצלם עם shell ולשמור בתיקיית הפרויקטים (קלוד עבודות) כדי שיהיה גישה לשליח","msg":"tool call"}
+{"level":30,"time":1773748604351,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"remember","input":"{\"content\":\"צילום ממצלמה: להשתמש ב-shell עם imagesnap. המצלמות הזמינות: FaceTime HD Camera (ברירת מח","msg":"tool call"}
+{"level":30,"time":1773748604360,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"remember","result":"Remembered (id=29, type=fact): צילום מסך שני: לצלם עם shell ולשמור בתיקיית הפרויקטים (קלוד עבודות) כ","durationMs":14,"msg":"tool result"}
+{"level":30,"time":1773748604361,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","tool":"remember","result":"Remembered (id=30, type=fact): צילום ממצלמה: להשתמש ב-shell עם imagesnap. המצלמות הזמינות: FaceTime ","durationMs":10,"msg":"tool result"}
+{"level":30,"time":1773748604783,"pid":60233,"hostname":"Alons-Air.lan","module":"memory","memoryId":30,"dims":768,"msg":"memory embedded"}
+{"level":30,"time":1773748604787,"pid":60233,"hostname":"Alons-Air.lan","module":"memory","memoryId":29,"dims":768,"msg":"memory embedded"}
+{"level":30,"time":1773748607579,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_01EpynmGMs1Gm8hp1Pd2h6eo","jobType":"summarize","requestCount":1,"msg":"batch submitted"}
+{"level":30,"time":1773748607579,"pid":60233,"hostname":"Alons-Air.lan","module":"agent","batchId":"msgbatch_01EpynmGMs1Gm8hp1Pd2h6eo","channel":"whatsapp","senderId":"972546300783","messageCount":44,"msg":"submitted summarize batch"}
+{"level":30,"time":1773748607613,"pid":60233,"hostname":"Alons-Air.lan","module":"router","channel":"whatsapp","chars":105,"streamed":false,"msg":"reply sent"}
+{"level":30,"time":1773748800853,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","channel":"whatsapp","senderId":"972546300783","msg":"saved summary"}
+{"level":30,"time":1773748800854,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_011NhB2ronWGmr2fwY4qsuS7","resultCount":1,"msg":"batch completed"}
+{"level":30,"time":1773748800854,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","succeeded":1,"errored":0,"expired":0,"msg":"batch stats"}
+{"level":30,"time":1773748801508,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","channel":"whatsapp","senderId":"972546300783","msg":"saved summary"}
+{"level":30,"time":1773748801509,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_01StyHp3QN9ZLWMxGJ9ir96m","resultCount":1,"msg":"batch completed"}
+{"level":30,"time":1773748801509,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","succeeded":1,"errored":0,"expired":0,"msg":"batch stats"}
+{"level":30,"time":1773748802148,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","channel":"whatsapp","senderId":"972546300783","msg":"saved summary"}
+{"level":30,"time":1773748802149,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","batchId":"msgbatch_01EpynmGMs1Gm8hp1Pd2h6eo","resultCount":1,"msg":"batch completed"}
+{"level":30,"time":1773748802149,"pid":60233,"hostname":"Alons-Air.lan","module":"batch","succeeded":1,"errored":0,"expired":0,"msg":"batch stats"}
+{"level":30,"time":1773748802149,"pid":60233,"hostname":"Alons-Air.lan","module":"main","processed":3,"msg":"processed completed batches"}

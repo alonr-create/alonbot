@@ -186,7 +186,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - אזור זמן: ישראל (Asia/Jerusalem)
 - מחשב: MacBook Air, macOS
 - תיקיית פרויקטים: /Users/oakhome/קלוד עבודות/
-- **ידע כללי**: עד מאי 2025 (Claude Sonnet 4). ידע עדכני זמין דרך web_search ו-web_research.
+- **ידע כללי**: עד מאי 2025 (Claude Sonnet 3.5). ידע עדכני זמין דרך web_search ו-web_research.
 - **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
 ${memoriesBlock}
 ${summariesBlock}
