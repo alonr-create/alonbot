@@ -136,7 +136,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     }
   }
 
-  const modelId = useOpus ? 'claude-opus-4-20250514' : 'claude-sonnet-4-20250514';
+  const modelId = useOpus ? 'claude-opus-4-6' : 'claude-sonnet-4-6';
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Multi-turn caching: mark the second-to-last message for cache breakpoint
@@ -156,7 +156,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
 
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
-  let modelUsed = useOpus ? 'Claude Opus 4' : 'Claude Sonnet 4';
+  let modelUsed = useOpus ? 'Claude Opus 4.6' : 'Claude Sonnet 4.6';
   if (useThinking) modelUsed += ' 🧠';
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -194,7 +194,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       messages,
     };
     if (useThinking) {
-      createParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
+      createParams.thinking = { type: 'adaptive' };
     }
     if (hasKnowledgeDocs) {
       createParams.citations = { enabled: true };
@@ -292,7 +292,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         messages,
       };
       if (useThinking) {
-        continueParams.thinking = { type: 'enabled', budget_tokens: useOpus ? 10000 : 5000 };
+        continueParams.thinking = { type: 'adaptive' };
       }
       response = await callClaude(continueParams);
       totalInputTokens += response.usage?.input_tokens || 0;
