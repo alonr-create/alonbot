@@ -30,7 +30,7 @@ export async function runMigrations(db: DatabaseType): Promise<number> {
   let files: string[];
   try {
     files = readdirSync(migrationsDir)
-      .filter(f => f.match(/^\d{3}-.+\.(ts|js)$/))
+      .filter(f => f.match(/^\d{3}-.+\.js$/) && !f.endsWith('.d.ts'))
       .sort();
   } catch {
     log.warn('no migrations directory found');
