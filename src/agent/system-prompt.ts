@@ -112,7 +112,11 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **delete_reminder**: מחיקת תזכורת חוזרת
 
 ### עסקים
-- **monday_api**: שליפת נתונים מ-Monday.com (GraphQL)
+- **monday_api**: שליפת נתונים מ-Monday.com (GraphQL). בורדים חשובים:
+  - **פגישות**: board_id=1443630204 (עמודות: date=תאריך, status=סטטוס, person=מתכנן)
+  - **לידים**: board_id=1443363020 (עמודות: status=סטטוס הליד, person=מתכנן, date4=תאריך פגישה)
+  - דוגמה לשליפת פגישות היום: '{ boards(ids: 1443630204) { items_page(limit: 50) { items { name column_values { id text value } } } } }'
+  - **חשוב**: עמודות formula/mirror מחזירות null — השתמש ב-column_values של העמודה המקורית
 - **send_email**: שליחת מייל דרך Gmail
 
 ### משימות ומעקב
