@@ -1,26 +1,26 @@
 /**
  * Gather live business context when Alon (the boss) messages the bot.
- * Provides pipeline stats, today's meetings, pending follow-ups,
- * and recent activity — all injected into the system prompt.
+ * Pipeline stats & hot leads come from Monday.com (source of truth).
+ * Activity & follow-ups come from local SQLite (message history).
  */
 import { getDb } from '../db/index.js';
-import { getBoardStats, getAllBoardsStats, getAllBoardIds } from '../monday/api.js';
+import { getAllBoardsStats } from '../monday/api.js';
 import { getAvailableSlots } from '../calendar/api.js';
-import { formatIsraelTime } from '../calendar/business-hours.js';
 import { calculateLeadScore } from './lead-scoring.js';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('boss-context');
 
-interface LeadSummary {
-  phone: string;
-  name: string;
-  status: string;
-  interest: string;
-  lastMessage: string;
-  lastMessageTime: string;
-  mondayItemId: number | null;
-}
+/** Hot statuses — leads we want to highlight to the boss. */
+const HOT_STATUSES = new Set([
+  'בשיחה', 'נוצר קשר', 'הצעה נשלחה', 'נשלחה הצעה',
+  'שיחה ראשונה', 'ליד חם', 'פגישה נקבעה',
+]);
+
+/** Closed / inactive statuses — not shown in pipeline count. */
+const CLOSED_STATUSES = new Set([
+  'סירוב', 'לא רלוונטי', 'נסגר', 'closed-won', 'closed-lost',
+]);
 
 export async function buildBossContext(): Promise<string> {
   const sections: string[] = [];
@@ -28,64 +28,34 @@ export async function buildBossContext(): Promise<string> {
   try {
     const db = getDb();
 
-    // ── 1. Pipeline Overview (from local DB) ──
-    const statusCounts = db
-      .prepare(
-        `SELECT status, COUNT(*) as count FROM leads
-         GROUP BY status ORDER BY count DESC`,
-      )
-      .all() as Array<{ status: string; count: number }>;
-
-    if (statusCounts.length > 0) {
-      const total = statusCounts.reduce((sum, r) => sum + r.count, 0);
-      const statusLines = statusCounts
-        .map((r) => `  • ${translateStatus(r.status)}: ${r.count}`)
+    // ── 1. Pipeline Overview (from Monday.com — source of truth) ──
+    const allStats = await getAllBoardsStats();
+    for (const [boardName, stats] of Object.entries(allStats)) {
+      if (stats.total === 0) continue;
+      const activeCount = Object.entries(stats.byStatus)
+        .filter(([status]) => !CLOSED_STATUSES.has(status))
+        .reduce((sum, [, count]) => sum + count, 0);
+      const statusLines = Object.entries(stats.byStatus)
+        .sort(([, a], [, b]) => b - a)
+        .map(([status, count]) => `  • ${status}: ${count}`)
         .join('\n');
-      sections.push(`📊 סיכום Pipeline (${total} לידים סה"כ):\n${statusLines}`);
+      sections.push(`📊 Pipeline ${boardName} (${activeCount} פעילים מתוך ${stats.total}):\n${statusLines}`);
     }
 
-    // ── 2. Hot leads: in-conversation or quote-sent ──
-    const hotLeads = db
-      .prepare(
-        `SELECT l.phone, l.name, l.status, l.interest, l.notes, l.monday_item_id,
-                m.content as last_msg, m.created_at as last_msg_time
-         FROM leads l
-         LEFT JOIN (
-           SELECT phone, content, created_at,
-                  ROW_NUMBER() OVER (PARTITION BY phone ORDER BY created_at DESC) as rn
-           FROM messages WHERE direction = 'in'
-         ) m ON l.phone = m.phone AND m.rn = 1
-         WHERE l.status IN ('in-conversation', 'quote-sent', 'contacted')
-         ORDER BY l.updated_at DESC
-         LIMIT 10`,
-      )
-      .all() as Array<{
-      phone: string;
-      name: string | null;
-      status: string;
-      interest: string | null;
-      notes: string | null;
-      monday_item_id: number | null;
-      last_msg: string | null;
-      last_msg_time: string | null;
-    }>;
-
+    // ── 2. Hot leads from Monday.com ──
+    const hotLeads: string[] = [];
+    for (const [boardName, stats] of Object.entries(allStats)) {
+      for (const item of stats.recentItems) {
+        if (HOT_STATUSES.has(item.status)) {
+          hotLeads.push(`  • ${item.name} — ${item.status} (${boardName})`);
+        }
+      }
+    }
     if (hotLeads.length > 0) {
-      const leadLines = hotLeads
-        .map((l) => {
-          const name = l.name || 'לא ידוע';
-          const status = translateStatus(l.status);
-          const interest = l.interest || '?';
-          const lastMsg = l.last_msg ? `"${l.last_msg.slice(0, 40)}${l.last_msg.length > 40 ? '...' : ''}"` : '';
-          const notes = l.notes ? ` 📝${l.notes.split('\n').pop()}` : '';
-          const { score } = calculateLeadScore(l.phone);
-          return `  • ${name} [${score}] — ${status} | ${interest} ${lastMsg}${notes}`;
-        })
-        .join('\n');
-      sections.push(`🔥 לידים חמים:\n${leadLines}`);
+      sections.push(`🔥 לידים חמים:\n${hotLeads.join('\n')}`);
     }
 
-    // ── 3. Today's activity ──
+    // ── 3. Today's activity (from local DB — message history) ──
     const todayMessages = db
       .prepare(
         `SELECT COUNT(*) as count FROM messages
@@ -104,7 +74,7 @@ export async function buildBossContext(): Promise<string> {
       `📈 פעילות היום:\n  • הודעות: ${todayMessages.count}\n  • לידים חדשים: ${todayNewLeads.count}`,
     );
 
-    // ── 4. Pending follow-ups ──
+    // ── 4. Pending follow-ups (from local DB) ──
     const pendingFollowUps = db
       .prepare(
         `SELECT f.phone, f.message_number, f.scheduled_at, l.name
@@ -128,18 +98,17 @@ export async function buildBossContext(): Promise<string> {
       sections.push(`⏰ פולואפים ממתינים:\n${fuLines}`);
     }
 
-    // ── 5. Upcoming meetings (from calendar) ──
+    // ── 5. Calendar availability ──
     try {
       const slots = await getAvailableSlots(3);
       if (slots.length > 0) {
-        // Show booked meetings by showing which slots are NOT available
-        sections.push(`📅 זמנים פנויים קרובים: ${slots.length} slots ב-3 ימים הקרובים`);
+        sections.push(`📅 ${slots.length} זמנים פנויים ב-3 ימים הקרובים`);
       }
     } catch {
       // Calendar not configured or error
     }
 
-    // ── 6. Leads needing attention ──
+    // ── 6. Escalated leads (from local DB — escalation is a bot action) ──
     const escalated = db
       .prepare(
         `SELECT l.name, l.phone, l.updated_at

@@ -32,6 +32,55 @@ healthRouter.post('/admin/clear-history/:phone', (req, res) => {
   res.json({ ok: true, deleted: result.changes, phone });
 });
 
+// Admin: purge stale leads (no messages in N days, not on Monday.com)
+healthRouter.post('/admin/purge-stale-leads', (req, res) => {
+  const token = req.headers['x-admin-token'] || req.query.token;
+  const expected = process.env.ADMIN_TOKEN;
+  if (!expected || token !== expected) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+
+  const daysInactive = parseInt(String(req.query.days || '30'), 10);
+  const db = getDb();
+
+  // Find leads with no messages in N days AND no monday_item_id
+  const stale = db.prepare(`
+    SELECT l.id, l.phone, l.name, l.status FROM leads l
+    WHERE l.monday_item_id IS NULL
+    AND l.updated_at < datetime('now', ? || ' days')
+    AND NOT EXISTS (
+      SELECT 1 FROM messages m WHERE m.phone = l.phone
+      AND m.created_at >= datetime('now', ? || ' days')
+    )
+  `).all(`-${daysInactive}`, `-${daysInactive}`) as Array<{
+    id: number; phone: string; name: string | null; status: string;
+  }>;
+
+  if (stale.length === 0) {
+    res.json({ ok: true, purged: 0, message: 'No stale leads found' });
+    return;
+  }
+
+  const purgeStmt = db.prepare('DELETE FROM leads WHERE id = ?');
+  const purgeMessages = db.prepare('DELETE FROM messages WHERE phone = ?');
+  const purgeFollowUps = db.prepare('DELETE FROM follow_ups WHERE phone = ?');
+
+  let purged = 0;
+  for (const lead of stale) {
+    purgeMessages.run(lead.phone);
+    purgeFollowUps.run(lead.phone);
+    purgeStmt.run(lead.id);
+    purged++;
+  }
+
+  res.json({
+    ok: true,
+    purged,
+    leads: stale.map((l) => `${l.name || l.phone} (${l.status})`),
+  });
+});
+
 healthRouter.get('/health', (_req, res) => {
   const db = getDb();
   const waStatus = getConnectionStatus();

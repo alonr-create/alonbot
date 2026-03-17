@@ -1,18 +1,30 @@
 /**
  * Daily morning summary — sends Alon a WhatsApp recap every morning at 09:00 Israel time.
- * Includes: pipeline overview, hot leads, pending follow-ups, yesterday's activity.
+ * Pipeline data from Monday.com (source of truth). Activity from local SQLite.
  */
 import { getDb } from '../db/index.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { getAdminPhone, getTimezone } from '../db/tenant-config.js';
 import { createLogger } from '../utils/logger.js';
 import { getAccountInsights, getActiveCampaigns, getAllAdAccountIds } from '../facebook/api.js';
+import { getAllBoardsStats } from '../monday/api.js';
 import type { BotAdapter } from '../whatsapp/connection.js';
 
 const log = createLogger('daily-summary');
 
 const DAILY_CHECK_INTERVAL_MS = 60 * 60 * 1000; // Check every hour
 let lastSentDate = '';
+
+/** Closed / inactive statuses — not counted as "active" pipeline. */
+const CLOSED_STATUSES = new Set([
+  'סירוב', 'לא רלוונטי', 'נסגר', 'closed-won', 'closed-lost',
+]);
+
+/** Hot statuses worth highlighting. */
+const HOT_STATUSES = new Set([
+  'בשיחה', 'נוצר קשר', 'הצעה נשלחה', 'נשלחה הצעה',
+  'שיחה ראשונה', 'ליד חם', 'פגישה נקבעה',
+]);
 
 function getTz(): string {
   return getTimezone();
@@ -49,27 +61,36 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
     const db = getDb();
     const jid = getAdminPhone() + '@s.whatsapp.net';
 
-    // Pipeline
-    const statusCounts = db
-      .prepare('SELECT status, COUNT(*) as count FROM leads GROUP BY status')
-      .all() as Array<{ status: string; count: number }>;
+    // ── Pipeline from Monday.com (source of truth) ──
+    const allStats = await getAllBoardsStats();
+    const pipelineLines: string[] = [];
+    for (const [boardName, stats] of Object.entries(allStats)) {
+      if (stats.total === 0) continue;
+      const activeCount = Object.entries(stats.byStatus)
+        .filter(([status]) => !CLOSED_STATUSES.has(status))
+        .reduce((sum, [, count]) => sum + count, 0);
+      const statusLines = Object.entries(stats.byStatus)
+        .sort(([, a], [, b]) => b - a)
+        .map(([status, count]) => `  ${status}: ${count}`)
+        .join('\n');
+      pipelineLines.push(`📊 ${boardName} (${activeCount} פעילים מתוך ${stats.total}):`);
+      pipelineLines.push(statusLines);
+    }
 
-    const total = statusCounts.reduce((sum, r) => sum + r.count, 0);
-    const active = statusCounts
-      .filter((r) => !['closed-won', 'closed-lost'].includes(r.status))
-      .reduce((sum, r) => sum + r.count, 0);
+    // ── Hot leads from Monday.com ──
+    const hotLeads: string[] = [];
+    for (const [boardName, stats] of Object.entries(allStats)) {
+      for (const item of stats.recentItems) {
+        if (HOT_STATUSES.has(item.status)) {
+          hotLeads.push(`  🔥 ${item.name} — ${item.status}`);
+        }
+      }
+    }
+    const hotLines = hotLeads.length > 0
+      ? hotLeads.join('\n')
+      : '  אין לידים חמים כרגע';
 
-    const statusMap: Record<string, string> = {
-      new: 'חדש', contacted: 'נוצר קשר', 'in-conversation': 'בשיחה',
-      'quote-sent': 'הצעה נשלחה', 'meeting-scheduled': 'פגישה נקבעה',
-      escalated: 'מחכה לך', 'closed-won': 'נסגר ✅', 'closed-lost': 'נסגר ❌',
-    };
-
-    const statusLines = statusCounts
-      .map((r) => `  ${statusMap[r.status] || r.status}: ${r.count}`)
-      .join('\n');
-
-    // Yesterday's activity
+    // ── Yesterday's activity (from local DB) ──
     const yesterday = db
       .prepare(
         `SELECT COUNT(*) as msgs FROM messages
@@ -104,24 +125,10 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
       ? escalated.map((l) => `  ⚠️ ${l.name || l.phone}`).join('\n')
       : '  אין — הכל מטופל! 👏';
 
-    // Hot leads
-    const hot = db
-      .prepare(
-        `SELECT name, status, interest FROM leads
-         WHERE status IN ('in-conversation', 'quote-sent')
-         ORDER BY updated_at DESC LIMIT 5`,
-      )
-      .all() as Array<{ name: string | null; status: string; interest: string | null }>;
-
-    const hotLines = hot.length > 0
-      ? hot.map((l) => `  🔥 ${l.name || '?'} — ${statusMap[l.status] || l.status}${l.interest ? ` (${l.interest})` : ''}`).join('\n')
-      : '  אין לידים חמים כרגע';
-
     const message = [
       `☀️ בוקר טוב בוס! הנה הסיכום שלך:`,
       '',
-      `📊 Pipeline (${active} פעילים מתוך ${total}):`,
-      statusLines,
+      ...pipelineLines,
       '',
       `📈 אתמול:`,
       `  ${yesterday.msgs} הודעות | ${newLeadsYesterday.count} לידים חדשים`,
