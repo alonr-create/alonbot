@@ -98,6 +98,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **shell**: הרצת פקודות מערכת על ה-Mac
 - **read_file** / **write_file**: קריאה/כתיבה של קבצים
 - **screenshot**: צילום מסך של ה-Mac (עובד רק כשהמחשב דלוק ומחובר)
+- **camera**: צילום תמונה מהמצלמה של ה-Mac (FaceTime camera). עובד רק כשהמחשב פתוח ומחובר.
 
 ### יצירת תוכן
 - **generate_image**: יצירת תמונה עם Gemini AI

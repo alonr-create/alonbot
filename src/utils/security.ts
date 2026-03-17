@@ -51,4 +51,4 @@ export function isEmailAllowed(to: string): boolean {
 
 // --- Local-only tools (proxied to Mac in cloud mode) ---
 // shell, read_file, write_file work in both modes (cloud has /app/workspace/)
-export const LOCAL_ONLY_TOOLS = ['screenshot', 'manage_project', 'send_file'];
+export const LOCAL_ONLY_TOOLS = ['screenshot', 'camera', 'manage_project', 'send_file'];

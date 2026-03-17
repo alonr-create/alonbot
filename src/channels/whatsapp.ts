@@ -33,7 +33,19 @@ export function createWhatsAppAdapter(): ChannelAdapter {
       authStrategy: new LocalAuth({ dataPath: SESSION_DIR }),
       puppeteer: {
         headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
+        args: [
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-gpu',
+          '--disable-extensions',
+          '--disable-background-networking',
+          '--disable-default-apps',
+          '--disable-sync',
+          '--disable-translate',
+          '--no-first-run',
+          '--js-flags=--max-old-space-size=128',
+        ],
       },
       webVersionCache: {
         type: 'remote',

@@ -36,6 +36,7 @@ const TOOL_LABELS: Record<string, string> = {
   calendar_list: '📆 בודק יומן...',
   calendar_add: '📆 מוסיף אירוע...',
   screenshot: '📸 מצלם מסך...',
+  camera: '📷 מצלם מהמצלמה...',
   api_costs: '💰 מחשב עלויות...',
   manage_project: '📂 בודק פרויקט...',
   send_file: '📎 שולח קובץ...',

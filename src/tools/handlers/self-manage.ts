@@ -45,7 +45,7 @@ const handlers: ToolHandler[] = [
 
         // Check if there are changes to commit
         const status = await execAsync('git status --porcelain', { timeout: 5000 });
-        if (!status.stdout.trim()) {
+        if (!status.trim()) {
           return 'No changes to commit. Use restart_self if you just need to reload.';
         }
 
