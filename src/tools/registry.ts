@@ -15,7 +15,7 @@ const handlers = new Map<string, ToolHandler>();
 /** Auto-discover and load all tool handlers from handlers/ directory */
 export async function loadTools(): Promise<void> {
   const handlersDir = join(import.meta.dirname, 'handlers');
-  const files = readdirSync(handlersDir).filter(f => f.endsWith('.js'));
+  const files = readdirSync(handlersDir).filter(f => (f.endsWith('.js') || f.endsWith('.ts')) && !f.endsWith('.d.ts'));
 
   for (const file of files) {
     const mod = await import(pathToFileURL(join(handlersDir, file)).href);
