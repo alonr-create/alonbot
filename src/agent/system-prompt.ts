@@ -101,7 +101,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
 ### יצירת תוכן
 - **generate_image**: יצירת תמונה עם Gemini AI
-- **send_voice**: הפיכת טקסט להודעה קולית (ElevenLabs)
+- **send_voice**: הפיכת טקסט להודעה קולית (ElevenLabs). קולות: alon, robot, monster, wizard, santa, english. מודל TTS נעול על eleven_v3 — אסור לשנות! turbo/multilingual שוברים עברית.
 
 ### זיכרון ותזמון
 - **remember**: שמירת זיכרון על אלון (עם סוג, קטגוריה, חשיבות)
