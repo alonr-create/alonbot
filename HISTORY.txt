@@ -1,0 +1,221 @@
+AlonBot — היסטוריית פיתוח מלאה
+================================
+
+AlonBot הוא עוזר אישי ועסקי מבוסס AI, בנוי ב-TypeScript + Node.js עם Claude API, SQLite, ו-Telegram.
+פותח על ידי אלון עם Claude Code. נפרס על Render (ענן) עם auto-deploy מ-GitHub.
+GitHub: alonr-create/alonbot
+
+---
+
+שלב 1: בניית הבסיס
+--------------------
+- Commit: Initial commit — AlonBot personal AI assistant
+- תשתית: TypeScript ESM, Express server, Telegram adapter (grammY), SQLite (better-sqlite3)
+- Agent loop בסיסי: Claude API + system prompt בעברית + כלים ראשוניים
+
+שלב 2: 15 כלים + קול
+---------------------
+- Commit: Add 15 tools, typing indicator, voice I/O, inline buttons, and LaunchAgent
+- כלים: web_search, shell, remember, generate_image, send_voice, monday_api, send_email ועוד
+- Voice I/O עם ElevenLabs (text-to-speech)
+- Typing indicator ב-Telegram
+- LaunchAgent למק (cron מקומי)
+
+שלב 3: Markdown + מסמכים + Daily Brief
+--------------------------------------
+- Commit: Add Markdown replies, document handling, URL auto-summary, /export, daily brief cron
+- תמיכה ב-Markdown responses
+- העלאת מסמכים ועיבוד
+- סיכום אוטומטי של URLs
+- Daily brief ב-08:00 כל בוקר
+
+שלב 4: דוקר + ענן (Render)
+--------------------------
+- Commit: Add Dockerfile and Render.com blueprint for cloud deployment
+- Dockerfile + render.yaml
+- Deploy אוטומטי מ-GitHub
+
+שלב 5: אבטחה
+-------------
+- Commit: Security hardening: fix 10 critical/high vulnerabilities
+- Shell whitelist — רק פקודות מאושרות
+- Path restrictions — אסור לגשת ל-.env או credentials
+- SSRF prevention — חסימת IPv6, decimal IPs
+- Email whitelist
+- Input sanitization
+
+שלב 6: Cloud/Local Split
+-------------------------
+- Commit: Add cloud/local mode split — cloud runs Telegram bot, local runs cron only
+- Cloud mode: Telegram polling + cron (Render)
+- Local mode: cron only + send-only Telegram (Mac)
+- נמנע מקונפליקט טוקן בין שני instances
+
+שלב 7: Proxy למק
+-----------------
+- Commit: Add cloud-to-local proxy for Mac tools via Cloudflare tunnel
+- Cloudflare tunnel מאפשר לענן לגשת לכלי Mac (screenshot, shell)
+- כלים ספציפיים למק: screenshot, manage_project
+
+שלב 8: ElevenLabs v3
+---------------------
+- Commit: Update ElevenLabs to v3 model with Hebrew/English voice auto-detect
+- מודל eleven_v3 — איכות גבוהה
+- זיהוי אוטומטי עברית/אנגלית לבחירת קול
+
+שלב 9: זיכרון סמנטי
+--------------------
+- Commit: Upgrade memory architecture: structured types, smart retrieval, auto-summarize
+- Commit: Add vector semantic search (Phase 2) and memory maintenance (Phase 3)
+- סוגי זיכרון: fact, preference, event, pattern, relationship
+- חשיבות 1-10, קטגוריות (personal, work_dekel, work_mazpen...)
+- Vector embeddings עם Gemini (768-dim) + sqlite-vec
+- Cosine distance search
+- Auto-summarize ב-40+ הודעות
+- Memory maintenance: decay, consolidation, cleanup
+
+שלב 10: מודלים נוספים
+---------------------
+- Commit: Fix image generation: use NB2 model
+- Commit: Add web_research (Gemini + Google Search) and analyze_image (Gemini Vision) tools
+- web_research: Gemini 2.5 Flash עם Google Search (מקורות!)
+- analyze_image: Gemini Vision לניתוח תמונות
+- NB2 model ליצירת תמונות
+
+שלב 11: PDF + Error Handling
+-----------------------------
+- Commit: Add PDF document support — send PDFs directly to Claude API
+- Commit: Add detailed error messages for debugging
+- שליחת PDF ישירות ל-Claude (Base64 document blocks)
+- הודעות שגיאה מפורטות יותר
+
+שלב 12: אופטימיזציה + Fallback
+-------------------------------
+- Commit: Optimize token usage + add Gemini fallback for rate limits
+- Commit: Add Gemini 2.5 Pro as primary fallback, 2.0 Flash as secondary
+- Gemini fallback על 429 (rate limit), 529 (overload), 400/401 (billing/auth)
+- Footer עם מודל, tokens, עלות, סביבה
+
+שלב 13: Voice-to-Voice + Cost Tracking + Tasks
+-----------------------------------------------
+- Commit: Add 6 new features: voice-to-voice, cost tracking, tasks, file transfer, quiet mode, proactive alerts
+- Voice-to-voice: הודעה קולית נכנסת → תשובה קולית
+- api_costs tool: דוח עלויות יומי/שבועי/חודשי
+- מערכת משימות (add_task, list_tasks, complete_task)
+- send_file: שליחת קבצים מהמק
+- Quiet mode (DND 23:00-07:00)
+- Proactive alerts: overdue tasks, cost alerts
+
+שלב 14: Knowledge Base + Workflows + Dashboard + WhatsApp
+----------------------------------------------------------
+- Commit: Add 4 major features: Knowledge Base, Workflows, Dashboard, WhatsApp
+- RAG: learn_url, learn_text, search_knowledge → chunking + vector embeddings
+- Workflow engine: trigger (keyword/cron) → actions (message, tool, API)
+- Web dashboard עם סטטיסטיקות
+- WhatsApp adapter (בנוסף לטלגרם)
+
+שלב 15: Telegram Menu + Bug Fixes
+----------------------------------
+- Commit: Fix double footer bug + full Telegram menu system
+- Commit: Fix system prompt + photo media type + Gemini model names
+- תפריט פקודות Telegram מלא
+- תיקון footer כפול
+- תיקון media types לתמונות
+
+שלב 16: PDF Ingestion + Commands
+---------------------------------
+- Commit: Add PDF ingestion, Telegram commands, cost alert
+- PDF ingestion ל-knowledge base (Gemini Vision OCR)
+- Cost alert אוטומטי ב-21:00
+
+שלב 17: פיצ'רים מתקדמים
+------------------------
+- Commit: Add 9 features: stickers, audio, backup, opus, groups, scheduling, tools dashboard, web chat
+- תמיכה בסטיקרים ואודיו
+- גיבוי DB אוטומטי ב-02:00 לטלגרם
+- מודל Opus 4 דרך [OPUS] prefix
+- תמיכה בקבוצות טלגרם
+- schedule_message — תזכורות חד-פעמיות
+- Web chat interface
+
+שלב 18: Chat History + Workflow Engine + Calendar
+--------------------------------------------------
+- Commit: Add 5 features: chat history, workflow engine, DND, Mini App, Calendar
+- היסטוריית צ'אט בדשבורד
+- מנוע workflows משופר
+- Google Calendar integration (calendar_list, calendar_add)
+- Telegram Mini App
+
+שלב 19: אבטחה + QA (סשן אחרון)
+---------------------------------
+- Commit: Security hardening + QA fixes across all modules
+- Security headers (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection)
+- XSS prevention (escapeJsString)
+- SSRF check ב-learn_url
+- Memory optimization (COUNT(*) במקום fetch all)
+- Per-request media isolation
+- Rate limit cleanup interval
+- Graceful shutdown (db.close on SIGINT)
+
+שלב 20: Claude API — Phase 1
+-----------------------------
+- Commit: Add streaming, extended thinking, prompt caching, parallel tools
+- Streaming: client.messages.stream() + Telegram editMessage כל 1.5 שניות
+- Extended Thinking: thinking parameter + keyword detection (נתח, השווה, תכנן...)
+- Prompt Caching: system prompt split to static (cached) + dynamic
+- Parallel Tool Execution: Promise.all() לכלים במקביל
+- Tool labels בזמן streaming (מחפש באינטרנט..., יוצר תמונה...)
+
+שלב 21: Claude API — Phase 2
+-----------------------------
+- Commit: Add multi-turn caching, token counting, citations, SDK upgrade to 0.78
+- SDK: @anthropic-ai/sdk 0.39.0 -> 0.78.0
+- Multi-turn caching: cache_control על היסטוריית שיחה (50-70% חיסכון נוסף)
+- Token counting: countTokens() לפני כל בקשה + auto-trim ב-85%
+- Citations: knowledge base כ-document blocks + ציטוט מקורות בתשובה
+
+שלב 22: Claude API — Phase 3 (Batch API)
+-----------------------------------------
+- Commit: Add Batch API for 50% cost savings on background tasks
+- טבלת batch_jobs ב-SQLite
+- מודול batch.ts: submit, poll, process
+- סיכום שיחות עובר ל-Batch API (50% זול)
+- Polling כל 5 דקות לבדיקת batches שהושלמו
+
+---
+
+מצב נוכחי (מרץ 2026)
+======================
+
+Stack: TypeScript + Node.js ESM + SQLite + sqlite-vec + Claude API + Gemini API
+Deploy: Render (Docker, auto-deploy from GitHub main)
+GitHub: alonr-create/alonbot
+
+32 כלים פעילים:
+- מידע: web_search, web_research, browse_url, analyze_image
+- יצירה: generate_image, send_voice
+- זיכרון: remember, search_knowledge, learn_url, learn_text
+- מערכת: shell, read_file, write_file, screenshot, manage_project, send_file
+- עסקים: monday_api, send_email
+- משימות: add_task, list_tasks, complete_task, api_costs
+- יומן: calendar_list, calendar_add
+- תזמון: schedule_message, set_reminder, list_reminders, delete_reminder
+- אוטומציה: create_workflow, list_workflows, delete_workflow, toggle_workflow
+
+Claude API Features (הכל מומש):
+- Streaming Responses
+- Extended Thinking (Sonnet 4 / Opus 4)
+- Prompt Caching (system + multi-turn)
+- Parallel Tool Execution
+- Token Counting + Auto-Trim
+- Citations (knowledge base)
+- Batch API (50% savings)
+- Vision (images + PDFs)
+- Model Switching (Sonnet/Opus)
+- Gemini Fallback
+- Agentic Loop (15 iterations max)
+
+DB Tables: messages, memories, memory_vectors, conversation_summaries,
+  cron_jobs, api_usage, tasks, scheduled_messages, tool_usage,
+  knowledge_docs, knowledge_chunks, knowledge_vectors,
+  workflows, batch_jobs

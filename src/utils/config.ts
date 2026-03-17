@@ -18,6 +18,7 @@ export const config = {
   localApiSecret: process.env.LOCAL_API_SECRET || 'alonbot-secret-2026',
   dashboardSecret: process.env.DASHBOARD_SECRET || process.env.LOCAL_API_SECRET || 'alonbot-dash-2026',
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
+  fbAccessToken: process.env.FB_ACCESS_TOKEN || '',
   dataDir: new URL('../../data/', import.meta.url).pathname,
   skillsDir: new URL('../../skills/', import.meta.url).pathname,
 };
