@@ -327,13 +327,19 @@ app.get('/api/chat/history', dashAuth, (req, res) => {
   res.json(rows.reverse());
 });
 
-// Web Chat API — send message and get response
+// Web Chat API — streaming response via SSE
 app.post('/api/chat', dashAuth, async (req, res) => {
   const { text } = req.body;
   if (!text || typeof text !== 'string') {
     res.status(400).json({ error: 'Missing text' });
     return;
   }
+
+  // Set up SSE
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
 
   try {
     const { handleMessage } = await import('../agent/agent.js');
@@ -346,10 +352,20 @@ app.post('/api/chat', dashAuth, async (req, res) => {
       timestamp: Date.now(),
       raw: null,
     };
-    const reply = await handleMessage(msg);
-    res.json({ text: reply.text });
+
+    const reply = await handleMessage(msg, (chunk, toolName) => {
+      if (toolName) {
+        res.write(`data: ${JSON.stringify({ tool: toolName })}\n\n`);
+      } else if (chunk) {
+        res.write(`data: ${JSON.stringify({ text: chunk })}\n\n`);
+      }
+    });
+
+    res.write(`data: ${JSON.stringify({ done: true, text: reply.text })}\n\n`);
+    res.end();
   } catch (e: any) {
-    res.status(500).json({ error: 'Internal server error' });
+    res.write(`data: ${JSON.stringify({ error: 'Internal server error' })}\n\n`);
+    res.end();
   }
 });
 

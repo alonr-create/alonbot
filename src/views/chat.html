@@ -78,20 +78,61 @@ async function send() {
   sendBtn.disabled = true;
   typingEl.classList.add('show');
 
+  // Create bot message div for streaming
+  const botDiv = document.createElement('div');
+  botDiv.className = 'msg msg-bot';
+  botDiv.textContent = '';
+  msgEl.appendChild(botDiv);
+  let fullText = '';
+
   try {
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
     });
-    const data = await res.json();
-    addMsg(data.text || data.error || 'Error', 'bot');
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const data = JSON.parse(line.slice(6));
+          if (data.text) {
+            fullText += data.text;
+            botDiv.textContent = fullText;
+            msgEl.scrollTop = msgEl.scrollHeight;
+          } else if (data.tool) {
+            typingEl.textContent = '🔧 ' + data.tool + '...';
+          } else if (data.done) {
+            // Final message — render with footer support
+            const parts = data.text.split(/\n\n_\u200E/);
+            let main = parts[0];
+            let footer = parts.length > 1 ? parts[1].replace(/_$/, '') : '';
+            botDiv.innerHTML = esc(main) + (footer ? '<div class="footer">' + esc(footer) + '</div>' : '');
+          } else if (data.error) {
+            botDiv.textContent = data.error;
+          }
+        } catch {}
+      }
+    }
   } catch (e) {
-    addMsg('Connection error: ' + e.message, 'bot');
+    botDiv.textContent = fullText || ('Connection error: ' + e.message);
   }
 
   sendBtn.disabled = false;
   typingEl.classList.remove('show');
+  typingEl.textContent = 'AlonBot חושב...';
 }
 
 inputEl.addEventListener('keydown', e => {
