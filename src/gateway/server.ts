@@ -354,7 +354,7 @@ function externalAuth(req: any, res: any, next: any) {
 }
 
 app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
-  const { phone, message, leadName } = req.body;
+  const { phone, message, leadName, leadContext } = req.body;
   if (!phone || !message) {
     res.status(400).json({ success: false, error: 'Missing phone or message' });
     return;
@@ -371,6 +371,36 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
     const chatId = `${chatPhone}@c.us`;
+
+    // Register/update lead in DB for sales follow-up
+    if (leadContext || leadName) {
+      try {
+        const { db } = await import('../utils/db.js');
+        const ctx = leadContext || {};
+        db.prepare(`
+          INSERT INTO leads (phone, name, source, monday_item_id, last_call_summary, last_call_sentiment, last_call_duration_sec, was_booked, call_mode, lead_status, updated_at)
+          VALUES (?, ?, 'voice_agent', ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(phone) DO UPDATE SET
+            name = COALESCE(excluded.name, leads.name),
+            last_call_summary = COALESCE(excluded.last_call_summary, leads.last_call_summary),
+            last_call_sentiment = COALESCE(excluded.last_call_sentiment, leads.last_call_sentiment),
+            last_call_duration_sec = COALESCE(excluded.last_call_duration_sec, leads.last_call_duration_sec),
+            was_booked = excluded.was_booked,
+            call_mode = COALESCE(excluded.call_mode, leads.call_mode),
+            lead_status = COALESCE(excluded.lead_status, leads.lead_status),
+            monday_item_id = COALESCE(excluded.monday_item_id, leads.monday_item_id),
+            updated_at = datetime('now')
+        `).run(
+          chatPhone, leadName || null, ctx.mondayItemId || null,
+          ctx.callSummary || null, ctx.sentiment || null,
+          ctx.callDurationSec || null, ctx.wasBooked ? 1 : 0,
+          ctx.callMode || null, ctx.leadStatus || null
+        );
+        log.info({ phone: chatPhone, leadName }, 'lead registered/updated in DB');
+      } catch (dbErr: any) {
+        log.warn({ err: dbErr.message }, 'failed to register lead in DB — continuing');
+      }
+    }
 
     await wa.sendReply(
       { id: 'ext', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
@@ -402,6 +432,17 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
     const chatId = `${chatPhone}@c.us`;
+
+    // Register lead if not already tracked
+    if (leadName) {
+      try {
+        const { db } = await import('../utils/db.js');
+        db.prepare(`
+          INSERT INTO leads (phone, name, source) VALUES (?, ?, 'voice_agent')
+          ON CONFLICT(phone) DO UPDATE SET name = COALESCE(excluded.name, leads.name), updated_at = datetime('now')
+        `).run(chatPhone, leadName);
+      } catch { /* lead may already exist — ok */ }
+    }
 
     const voiceBuffer = Buffer.from(audio, 'base64');
     await wa.sendReply(

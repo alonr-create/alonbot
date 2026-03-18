@@ -1,6 +1,7 @@
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth, MessageMedia } = pkg;
 import { config } from '../utils/config.js';
+import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
@@ -131,9 +132,17 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
           } catch { /* fallback to rawId */ }
         }
 
-        // Security: only allowed numbers
-        if (config.allowedWhatsApp.length > 0 && !config.allowedWhatsApp.includes(senderId)) {
-          log.debug({ senderId, allowed: config.allowedWhatsApp }, 'blocked — not in allowed list');
+        // Security: allowed numbers OR registered leads from voice agent
+        const isAllowed = config.allowedWhatsApp.length === 0 || config.allowedWhatsApp.includes(senderId);
+        let isLead = false;
+        if (!isAllowed) {
+          try {
+            const lead = db.prepare('SELECT phone FROM leads WHERE phone = ?').get(senderId) as any;
+            isLead = !!lead;
+          } catch { /* DB error — treat as not a lead */ }
+        }
+        if (!isAllowed && !isLead) {
+          log.debug({ senderId }, 'blocked — not in allowed list and not a registered lead');
           return;
         }
 
@@ -247,7 +256,12 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
         await client.sendMessage(chatId, media, { sendAudioAsVoice: true });
       }
 
-      if (reply.image) {
+      if (reply.document) {
+        const mime = reply.documentMimetype || 'text/html';
+        const filename = reply.documentName || 'file';
+        const media = new MessageMedia(mime, reply.document.toString('base64'), filename);
+        await client.sendMessage(chatId, media, { sendMediaAsDocument: true, caption: reply.text || '' });
+      } else if (reply.image) {
         const media = new MessageMedia('image/png', reply.image.toString('base64'));
         await client.sendMessage(chatId, media, { caption: reply.text || '' });
       } else if (reply.text) {

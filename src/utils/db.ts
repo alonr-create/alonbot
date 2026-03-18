@@ -151,6 +151,24 @@ db.exec(`
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  CREATE TABLE IF NOT EXISTS leads (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL UNIQUE,
+    name TEXT,
+    source TEXT NOT NULL DEFAULT 'voice_agent',
+    monday_item_id TEXT,
+    last_call_summary TEXT,
+    last_call_sentiment TEXT,
+    last_call_duration_sec INTEGER,
+    was_booked INTEGER NOT NULL DEFAULT 0,
+    call_mode TEXT,
+    lead_status TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
 `);
 
 // Vector table for semantic memory search (768-dim Gemini embedding)
