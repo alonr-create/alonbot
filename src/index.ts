@@ -38,15 +38,19 @@ startServer();
 let telegram: ReturnType<typeof createTelegramAdapter> | null = null;
 
 // --- Telegram ---
-telegram = createTelegramAdapter();
-registerAdapter(telegram);
+if (config.telegramBotToken) {
+  telegram = createTelegramAdapter();
+  registerAdapter(telegram);
 
-if (config.mode === 'cloud') {
-  // Cloud mode: full Telegram polling
-  await telegram.start();
+  if (config.mode === 'cloud') {
+    // Cloud mode: full Telegram polling
+    await telegram.start();
+  } else {
+    // Local mode: send-only (no polling — avoids token conflict with cloud)
+    log.info('local mode — Telegram send-only');
+  }
 } else {
-  // Local mode: send-only (no polling — avoids token conflict with cloud)
-  log.info('local mode — Telegram send-only');
+  log.warn('TELEGRAM_BOT_TOKEN not set — Telegram disabled');
 }
 
 // --- WhatsApp (optional, local mode only) ---
