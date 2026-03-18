@@ -343,6 +343,79 @@ app.get('/chat', dashAuth, (_req, res) => {
   res.send(chatHTML);
 });
 
+// === External API: Send WhatsApp message (used by voice-agent) ===
+function externalAuth(req: any, res: any, next: any) {
+  const secret = req.headers['x-api-secret'];
+  if (secret !== config.localApiSecret) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
+
+app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
+  const { phone, message, leadName } = req.body;
+  if (!phone || !message) {
+    res.status(400).json({ success: false, error: 'Missing phone or message' });
+    return;
+  }
+  try {
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (!wa) {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+    // Normalize phone: 05X → 972X (whatsapp-web.js needs international format without +)
+    let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
+    chatPhone = chatPhone.replace(/^\+/, '');
+    const chatId = `${chatPhone}@c.us`;
+
+    await wa.sendReply(
+      { id: 'ext', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+      { text: message }
+    );
+    log.info({ phone, leadName }, 'external WhatsApp text sent');
+    res.json({ success: true });
+  } catch (e: any) {
+    log.error({ err: e.message }, 'external WhatsApp send failed');
+    res.json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
+  const { phone, audio, leadName } = req.body;
+  if (!phone || !audio) {
+    res.status(400).json({ success: false, error: 'Missing phone or audio' });
+    return;
+  }
+  try {
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (!wa) {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+    // Normalize phone
+    let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
+    chatPhone = chatPhone.replace(/^\+/, '');
+    const chatId = `${chatPhone}@c.us`;
+
+    const voiceBuffer = Buffer.from(audio, 'base64');
+    await wa.sendReply(
+      { id: 'ext-voice', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+      { text: '', voice: voiceBuffer }
+    );
+    log.info({ phone, leadName, bytes: voiceBuffer.length }, 'external WhatsApp voice sent');
+    res.json({ success: true });
+  } catch (e: any) {
+    log.error({ err: e.message }, 'external WhatsApp voice send failed');
+    res.json({ success: false, error: e.message });
+  }
+});
+
 export function startServer() {
   app.listen(config.port, () => {
     log.info({ port: config.port }, 'health check server started');
