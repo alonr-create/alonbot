@@ -12,6 +12,9 @@ const log = createLogger('server');
 // Cache HTML at startup (no server-side variables needed)
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
+const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
+const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
+const iconSVG = readFileSync(join(import.meta.dirname, '../views/icon.svg'), 'utf-8');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -23,6 +26,25 @@ app.use((_req, res, next) => {
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-XSS-Protection', '1; mode=block');
   next();
+});
+
+// PWA static assets (no auth needed)
+app.get('/manifest.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.send(manifestJSON);
+});
+app.get('/sw.js', (_req, res) => {
+  res.setHeader('Content-Type', 'application/javascript');
+  res.setHeader('Service-Worker-Allowed', '/');
+  res.send(swJS);
+});
+app.get('/icon-192.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send(iconSVG);
+});
+app.get('/icon-512.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/svg+xml');
+  res.send(iconSVG);
 });
 
 app.get('/health', (_req, res) => {
