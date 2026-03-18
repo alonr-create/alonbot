@@ -375,7 +375,6 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
     // Register/update lead in DB for sales follow-up
     if (leadContext || leadName) {
       try {
-        const { db } = await import('../utils/db.js');
         const ctx = leadContext || {};
         db.prepare(`
           INSERT INTO leads (phone, name, source, monday_item_id, last_call_summary, last_call_sentiment, last_call_duration_sec, was_booked, call_mode, lead_status, updated_at)
@@ -436,7 +435,6 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     // Register lead if not already tracked
     if (leadName) {
       try {
-        const { db } = await import('../utils/db.js');
         db.prepare(`
           INSERT INTO leads (phone, name, source) VALUES (?, ?, 'voice_agent')
           ON CONFLICT(phone) DO UPDATE SET name = COALESCE(excluded.name, leads.name), updated_at = datetime('now')
@@ -453,6 +451,16 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     res.json({ success: true });
   } catch (e: any) {
     log.error({ err: e.message }, 'external WhatsApp voice send failed');
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// Debug: check registered leads
+app.get('/api/leads', externalAuth, (_req, res) => {
+  try {
+    const leads = db.prepare('SELECT phone, name, lead_status, last_call_sentiment, was_booked, updated_at FROM leads ORDER BY updated_at DESC LIMIT 50').all();
+    res.json({ success: true, count: leads.length, leads });
+  } catch (e: any) {
     res.json({ success: false, error: e.message });
   }
 });
