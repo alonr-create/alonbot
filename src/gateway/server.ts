@@ -321,9 +321,9 @@ app.get('/api/chat/history', dashAuth, (req, res) => {
   const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
   const rows = db.prepare(
     `SELECT role, content, created_at FROM messages
-     WHERE channel = 'telegram' AND sender_id = ?
+     WHERE channel = 'web' AND sender_id = 'web'
      ORDER BY id DESC LIMIT ?`
-  ).all(config.allowedTelegram[0] || '', limit) as any[];
+  ).all(limit) as any[];
   res.json(rows.reverse());
 });
 
@@ -339,8 +339,8 @@ app.post('/api/chat', dashAuth, async (req, res) => {
     const { handleMessage } = await import('../agent/agent.js');
     const msg = {
       id: `web-${Date.now()}`,
-      channel: 'telegram' as const,
-      senderId: config.allowedTelegram[0] || 'web',
+      channel: 'web' as const,
+      senderId: 'web',
       senderName: 'Alon (Web)',
       text: text.slice(0, 4000),
       timestamp: Date.now(),

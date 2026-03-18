@@ -1,4 +1,4 @@
-export type ChannelType = 'whatsapp' | 'telegram';
+export type ChannelType = 'whatsapp' | 'telegram' | 'web';
 
 export interface UnifiedMessage {
   id: string;
@@ -25,6 +25,9 @@ export interface UnifiedReply {
   text: string;
   image?: Buffer;
   voice?: Buffer;
+  document?: Buffer;
+  documentName?: string;
+  documentMimetype?: string;
 }
 
 export interface ChannelAdapter {
