@@ -14,7 +14,7 @@ const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
-const iconSVG = readFileSync(join(import.meta.dirname, '../views/icon.svg'), 'utf-8');
+const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -39,12 +39,12 @@ app.get('/sw.js', (_req, res) => {
   res.send(swJS);
 });
 app.get('/icon-192.png', (_req, res) => {
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.send(iconSVG);
+  res.setHeader('Content-Type', 'image/png');
+  res.send(iconPNG);
 });
 app.get('/icon-512.png', (_req, res) => {
-  res.setHeader('Content-Type', 'image/svg+xml');
-  res.send(iconSVG);
+  res.setHeader('Content-Type', 'image/png');
+  res.send(iconPNG);
 });
 
 app.get('/health', (_req, res) => {
