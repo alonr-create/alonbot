@@ -24,9 +24,13 @@ const handlers: ToolHandler[] = [
         if (!res.ok) return `Error: Calendar API returned ${res.status}`;
         const data = await res.json() as any;
         if (!data.events || data.events.length === 0) return `אין אירועים בקלנדר ב-${days} הימים הקרובים.`;
-        return data.events.map((e: any, i: number) =>
-          `${i + 1}. ${e.title} — ${e.date}${e.time ? ' ' + e.time : ''} ${e.description ? '(' + e.description + ')' : ''}`
-        ).join('\n');
+        return data.events.map((e: any, i: number) => {
+          const cal = e.calendar ? ` [${e.calendar}]` : '';
+          const loc = e.location ? ` | ${e.location}` : '';
+          // Strip HTML from description and truncate
+          const desc = e.description ? e.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
+          return `${i + 1}. ${e.title}${cal} — ${e.date}${e.time ? ' ' + e.time : ''}${e.allDay ? ' (כל היום)' : ''}${loc}${desc ? ' | ' + desc : ''}`;
+        }).join('\n');
       } catch (e: any) {
         return `Error: Calendar request failed.`;
       }

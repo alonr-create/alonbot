@@ -1,4 +1,4 @@
-import { startServer } from './gateway/server.js';
+import { startServer, registerWebhook } from './gateway/server.js';
 import { registerAdapter, sendToChannel, sendAgentMessage } from './gateway/router.js';
 import { createTelegramAdapter } from './channels/telegram.js';
 import { createWhatsAppAdapter } from './channels/whatsapp.js';
@@ -32,9 +32,6 @@ function isDND(): boolean {
 
 log.info({ mode: config.mode, startedAt: new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }) }, 'AlonBot starting');
 
-// Start health check server (both modes)
-startServer();
-
 let telegram: ReturnType<typeof createTelegramAdapter> | null = null;
 
 // --- Telegram ---
@@ -43,7 +40,8 @@ if (config.telegramBotToken) {
   registerAdapter(telegram);
 
   if (config.mode === 'cloud') {
-    // Cloud mode: full Telegram polling
+    // Cloud mode: webhook (avoids 409 conflicts during deploys)
+    registerWebhook('/telegram-webhook', telegram.getWebhookHandler!());
     await telegram.start();
   } else {
     // Local mode: send-only (no polling — avoids token conflict with cloud)
@@ -52,6 +50,9 @@ if (config.telegramBotToken) {
 } else {
   log.warn('TELEGRAM_BOT_TOKEN not set — Telegram disabled');
 }
+
+// Start server AFTER webhook is registered
+startServer();
 
 // --- WhatsApp (optional, local mode only) ---
 if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
@@ -68,9 +69,10 @@ if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
 // Start cron jobs from DB
 startAllCronJobs(sendToChannel);
 
-// Smart daily brief — 08:00 Israel time
+// Smart daily brief — 08:00 Israel time (cloud only to prevent duplicates)
 // Only reports things that actually changed, not static questions
 cron.schedule('0 8 * * *', async () => {
+  if (config.mode !== 'cloud') return;
   const targetId = config.allowedTelegram[0];
   if (!targetId) return;
   log.info('smart daily brief firing');
@@ -93,8 +95,9 @@ embedUnembeddedMemories().catch(err =>
   log.error({ err: err.message }, 'startup embed failed')
 );
 
-// Proactive: overdue tasks check — 18:00 daily
+// Proactive: overdue tasks check — 18:00 daily (cloud only)
 cron.schedule('0 18 * * *', async () => {
+  if (config.mode !== 'cloud') return;
   const targetId = config.allowedTelegram[0];
   if (!targetId || isDND()) return;
   try {
@@ -110,8 +113,9 @@ cron.schedule('0 18 * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
-// Proactive: weekly summary — Sunday 09:00
+// Proactive: weekly summary — Sunday 09:00 (cloud only)
 cron.schedule('0 9 * * 0', async () => {
+  if (config.mode !== 'cloud') return;
   const targetId = config.allowedTelegram[0];
   if (!targetId) return;
   await sendAgentMessage('telegram', targetId,
@@ -119,8 +123,9 @@ cron.schedule('0 9 * * 0', async () => {
   );
 }, { timezone: 'Asia/Jerusalem' });
 
-// Cost alert — check at 21:00 if daily spend exceeded $0.50
+// Cost alert — check at 21:00 if daily spend exceeded $0.50 (cloud only)
 cron.schedule('0 21 * * *', async () => {
+  if (config.mode !== 'cloud') return;
   const targetId = config.allowedTelegram[0];
   if (!targetId || isDND()) return;
   try {
@@ -137,8 +142,9 @@ cron.schedule('0 21 * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
-// Scheduled messages check — every minute
+// Scheduled messages check — every minute (cloud only)
 cron.schedule('* * * * *', async () => {
+  if (config.mode !== 'cloud') return;
   try {
     // Use Israel time (sv-SE locale gives YYYY-MM-DD HH:mm format)
     const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 16);

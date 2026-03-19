@@ -10,6 +10,7 @@ export const VOICE_PRESETS: Record<string, { id: string; name: string; settings:
   wizard:  { id: 'JBFqnCBsd6RMkjVDRZzb', name: 'קוסם 🧙',            settings: { stability: 0.5, similarity_boost: 0.8, style: 0.6 } },
   santa:   { id: 'pqHfZKP75CvOlQylNhV4', name: 'סנטה 🎅',            settings: { stability: 0.65, similarity_boost: 0.8, style: 0.5 } },
   english: { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian (English)',     settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } },
+  woman:   { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (Woman)',        settings: { stability: 0.55, similarity_boost: 0.8, style: 0.4 } },
 };
 
 // LOCKED — do not let auto_improve change this. turbo/multilingual break Hebrew pronunciation.

@@ -1,4 +1,6 @@
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, readFileSync } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { redactSecrets } from '../../utils/git-auth.js';
 import { ensureGitHubRepo, gitPushToRepo } from '../../utils/github.js';
 import type { ToolHandler } from '../types.js';
@@ -7,7 +9,7 @@ const handler: ToolHandler = {
   name: 'build_website',
   definition: {
     name: 'build_website',
-    description: 'Build a complete website from a description, push to GitHub, and deploy to Vercel. Returns live URL.',
+    description: 'Build a complete website from a description, push to GitHub, deploy to Vercel, and send the HTML file to the user. Returns live URL.',
     input_schema: {
       type: 'object' as const,
       properties: {
@@ -20,9 +22,9 @@ const handler: ToolHandler = {
       required: ['name', 'description', 'html'],
     },
   },
-  async execute(input) {
+  async execute(input, ctx) {
     const siteName = input.name.replace(/[^a-zA-Z0-9-]/g, '-').toLowerCase();
-    const siteDir = `/app/workspace/${siteName}`;
+    const siteDir = join(tmpdir(), 'alonbot-sites', siteName);
 
     try {
       // Create project directory
@@ -33,11 +35,21 @@ const handler: ToolHandler = {
       if (input.css) writeFileSync(`${siteDir}/style.css`, input.css);
       if (input.js) writeFileSync(`${siteDir}/script.js`, input.js);
 
-      // Create/push to GitHub using shared helper
-      const { cloneUrl } = await ensureGitHubRepo(siteName, { description: input.description });
-      await gitPushToRepo(siteDir, cloneUrl, `Build website: ${input.description.slice(0, 50)}`);
+      // Send the HTML file to the user via WhatsApp/Telegram
+      const htmlBuffer = Buffer.from(input.html, 'utf-8');
+      ctx.addPendingMedia({ type: 'document', data: htmlBuffer, filename: `${siteName}.html`, mimetype: 'text/html' });
 
-      return `Website built and pushed!\n\nGitHub: https://github.com/alonr-create/${siteName}\n\nTo deploy:\n• Vercel: https://vercel.com/new → import ${siteName}\n• Or connect at vercel.com for auto-deploy\n\nExpected URL: https://${siteName}.vercel.app`;
+      // Try to push to GitHub and deploy
+      let deployInfo = '';
+      try {
+        const { cloneUrl } = await ensureGitHubRepo(siteName, { description: input.description });
+        await gitPushToRepo(siteDir, cloneUrl, `Build website: ${input.description.slice(0, 50)}`);
+        deployInfo = `\n\nGitHub: https://github.com/alonr-create/${siteName}\nURL: https://${siteName}.vercel.app`;
+      } catch (e: any) {
+        deployInfo = `\n\nGitHub push failed: ${redactSecrets((e.message || '').slice(0, 200))}`;
+      }
+
+      return `Website built! HTML file sent.${deployInfo}`;
     } catch (e: any) {
       return `Error: ${redactSecrets((e.stderr || e.message || '').slice(0, 500))}`;
     }

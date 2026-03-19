@@ -32,27 +32,39 @@ function doPost(e) {
 }
 
 function listEvents(days) {
-  const cal = CalendarApp.getDefaultCalendar();
   const now = new Date();
   const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-  const events = cal.getEvents(now, end);
+  // Read from ALL calendars (own + shared)
+  const calendars = CalendarApp.getAllCalendars();
+  const allEvents = [];
 
-  const result = events.map(function(event) {
-    const start = event.getStartTime();
-    const isAllDay = event.isAllDayEvent();
-
-    return {
-      title: event.getTitle(),
-      date: Utilities.formatDate(start, 'Asia/Jerusalem', 'yyyy-MM-dd'),
-      time: isAllDay ? null : Utilities.formatDate(start, 'Asia/Jerusalem', 'HH:mm'),
-      description: event.getDescription() || '',
-      location: event.getLocation() || '',
-      allDay: isAllDay,
-    };
+  calendars.forEach(function(cal) {
+    const events = cal.getEvents(now, end);
+    const calName = cal.getName();
+    events.forEach(function(event) {
+      const start = event.getStartTime();
+      const isAllDay = event.isAllDayEvent();
+      allEvents.push({
+        title: event.getTitle(),
+        calendar: calName,
+        date: Utilities.formatDate(start, 'Asia/Jerusalem', 'yyyy-MM-dd'),
+        time: isAllDay ? null : Utilities.formatDate(start, 'Asia/Jerusalem', 'HH:mm'),
+        description: event.getDescription() || '',
+        location: event.getLocation() || '',
+        allDay: isAllDay,
+      });
+    });
   });
 
-  return jsonResponse({ events: result });
+  // Sort by date+time
+  allEvents.sort(function(a, b) {
+    var da = a.date + (a.time || '00:00');
+    var db = b.date + (b.time || '00:00');
+    return da < db ? -1 : da > db ? 1 : 0;
+  });
+
+  return jsonResponse({ events: allEvents });
 }
 
 function addEvent(data) {

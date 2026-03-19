@@ -5,9 +5,23 @@ export PATH="/opt/homebrew/bin:/Users/oakhome/.nvm/versions/node/v24.14.0/bin:$P
 # Limit Node memory to prevent OOM kills on 8GB Mac
 export NODE_OPTIONS="--max-old-space-size=512"
 
-# Kill any leftover bot processes before starting (SIGKILL to ensure they die)
+PIDFILE="/tmp/alonbot.pid"
+
+# Kill previous instance by PID file (most reliable)
+if [ -f "$PIDFILE" ]; then
+  OLD_PID=$(cat "$PIDFILE")
+  # Kill entire process group (parent + all children including Chrome)
+  kill -9 -$(ps -o pgid= -p "$OLD_PID" 2>/dev/null | tr -d ' ') 2>/dev/null
+  kill -9 "$OLD_PID" 2>/dev/null
+fi
+
+# Also kill by port — catches orphans
+kill -9 $(lsof -ti :3700) 2>/dev/null
+
+# Kill any leftover processes by name
 pkill -9 -f "tsx src/index.ts" 2>/dev/null
 pkill -9 -f "Google Chrome for Testing" 2>/dev/null
+pkill -9 -f "chrome_crashpad" 2>/dev/null
 sleep 2
 
 # Clean Chrome lock files
@@ -15,4 +29,6 @@ rm -f data/whatsapp-wwjs-session/session/SingletonLock 2>/dev/null
 rm -f data/whatsapp-wwjs-session/session/SingletonCookie 2>/dev/null
 rm -f data/whatsapp-wwjs-session/session/SingletonSocket 2>/dev/null
 
+# Save PID and exec
+echo $$ > "$PIDFILE"
 exec npx tsx src/index.ts

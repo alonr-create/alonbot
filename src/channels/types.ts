@@ -41,4 +41,6 @@ export interface ChannelAdapter {
   /** Edit a previously sent message (for streaming) */
   editStreamMessage?(original: UnifiedMessage, messageId: number, text: string): Promise<void>;
   onMessage(handler: (msg: UnifiedMessage) => void): void;
+  /** Get webhook handler (for cloud mode) */
+  getWebhookHandler?(): (req: any, res: any) => void;
 }

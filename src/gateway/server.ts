@@ -503,6 +503,12 @@ app.get('/api/leads', externalAuth, (_req, res) => {
   }
 });
 
+/** Register a webhook handler for Telegram (cloud mode) */
+export function registerWebhook(path: string, handler: (req: any, res: any) => void) {
+  app.post(path, handler);
+  log.info({ path }, 'webhook endpoint registered');
+}
+
 export function startServer() {
   app.listen(config.port, () => {
     log.info({ port: config.port }, 'health check server started');

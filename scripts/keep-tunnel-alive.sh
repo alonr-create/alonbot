@@ -1,12 +1,14 @@
 #!/bin/bash
-# Keep cloudflare tunnel alive and registered with Render
-# Runs as a loop — checks every 5 minutes, restarts tunnel if needed
+# Keep cloudflare tunnel alive — restarts if down, re-registers with cloud
+# Runs as a loop — checks every 5 minutes
 
-CLOUD_URL="${ALONBOT_CLOUD_URL:-https://alonbot.onrender.com}"
-SECRET="${LOCAL_API_SECRET:-alonbot-secret-2026}"
 LOCAL_PORT="${PORT:-3700}"
+RAILWAY_PROJECT_DIR="/Users/oakhome/קלוד עבודות/voice-agent"
+ALONBOT_CLOUD_URL="https://chic-forgiveness-production.up.railway.app"
+ALONBOT_SECRET="alonbot-secret-2026"
 CHECK_INTERVAL=300  # 5 minutes
 TUNNEL_LOG="/tmp/cf-tunnel-keepalive.log"
+export PATH="/opt/homebrew/bin:/Users/oakhome/.nvm/versions/node/v24.14.0/bin:$PATH"
 
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 
@@ -18,6 +20,7 @@ start_tunnel() {
   TUNNEL_PID=$!
 
   # Wait for URL (up to 15s)
+  TUNNEL_URL=""
   for i in $(seq 1 15); do
     TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TUNNEL_LOG" | head -1)
     [ -n "$TUNNEL_URL" ] && break
@@ -30,13 +33,19 @@ start_tunnel() {
   fi
 
   log "Tunnel URL: $TUNNEL_URL (PID: $TUNNEL_PID)"
+  echo "$TUNNEL_URL" > /tmp/alonbot-tunnel-url.txt
 
-  # Register with cloud
-  RESPONSE=$(curl -s -X POST "$CLOUD_URL/api/register-local" \
+  # Update Railway voice-agent
+  log "Updating Railway voice-agent..."
+  cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
+
+  # Register with AalonBot cloud (in-memory update, no redeploy needed)
+  log "Registering with AalonBot cloud..."
+  curl -s -X POST "$ALONBOT_CLOUD_URL/api/register-local" \
     -H "Content-Type: application/json" \
-    -H "Authorization: Bearer $SECRET" \
-    -d "{\"url\": \"$TUNNEL_URL\"}")
-  log "Registered: $RESPONSE"
+    -H "Authorization: Bearer $ALONBOT_SECRET" \
+    -d "{\"url\":\"$TUNNEL_URL\"}" 2>&1
+  log "Cloud registered"
   return 0
 }
 
@@ -57,16 +66,17 @@ while true; do
   # Check 2: Is the local server responding?
   LOCAL_OK=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:$LOCAL_PORT/health" 2>/dev/null)
   if [ "$LOCAL_OK" != "200" ]; then
-    log "Local server not responding ($LOCAL_OK) — skipping tunnel check"
+    log "Local server not responding ($LOCAL_OK) — skipping"
     continue
   fi
 
-  # Check 3: Can Render reach us? (check localConnected from cloud health)
-  CLOUD_HEALTH=$(curl -s "$CLOUD_URL/health" 2>/dev/null)
-  LOCAL_CONNECTED=$(echo "$CLOUD_HEALTH" | grep -o '"localConnected":[a-z]*' | cut -d: -f2)
-
-  if [ "$LOCAL_CONNECTED" != "true" ]; then
-    log "Cloud reports localConnected=$LOCAL_CONNECTED — restarting tunnel"
-    start_tunnel
+  # Check 3: Can the tunnel reach us?
+  SAVED_URL=$(cat /tmp/alonbot-tunnel-url.txt 2>/dev/null)
+  if [ -n "$SAVED_URL" ]; then
+    TUNNEL_OK=$(curl -s -o /dev/null -w "%{http_code}" "$SAVED_URL/health" --max-time 10 2>/dev/null)
+    if [ "$TUNNEL_OK" != "200" ]; then
+      log "Tunnel unreachable ($TUNNEL_OK) — restarting"
+      start_tunnel
+    fi
   fi
 done

@@ -40,6 +40,7 @@ const TOOL_LABELS: Record<string, string> = {
   api_costs: '💰 מחשב עלויות...',
   manage_project: '📂 בודק פרויקט...',
   send_file: '📎 שולח קובץ...',
+  send_document: '📎 שולח מסמך...',
   code_agent: '🤖 Claude Code עובד על הפרויקט...',
 };
 
@@ -108,7 +109,10 @@ export function registerAdapter(adapter: ChannelAdapter) {
         // Final edit with complete text (including footer)
         await adapter.editStreamMessage(msg, streamMessageId, reply.text).catch(() => {});
 
-        // Send media separately (image/voice can't be edited into text message)
+        // Send media separately (image/voice/document can't be edited into text message)
+        if (reply.document) {
+          await adapter.sendReply(msg, { text: '', document: reply.document, documentName: reply.documentName, documentMimetype: reply.documentMimetype });
+        }
         if (reply.image) {
           await adapter.sendReply(msg, { text: '', image: reply.image });
         }

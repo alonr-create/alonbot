@@ -1,10 +1,10 @@
 #!/bin/bash
-# Start Cloudflare tunnel and register with cloud AlonBot
+# Start Cloudflare quick tunnel and update Railway voice-agent with new URL
 # Usage: ./scripts/start-tunnel.sh
 
-CLOUD_URL="${ALONBOT_CLOUD_URL:-https://alonbot.onrender.com}"
-SECRET="${LOCAL_API_SECRET:-alonbot-secret-2026}"
 LOCAL_PORT="${PORT:-3700}"
+RAILWAY_PROJECT_DIR="/Users/oakhome/קלוד עבודות/voice-agent"
+export PATH="/opt/homebrew/bin:/Users/oakhome/.nvm/versions/node/v24.14.0/bin:$PATH"
 
 echo "[Tunnel] Starting cloudflared tunnel for localhost:$LOCAL_PORT..."
 
@@ -17,7 +17,8 @@ TMPLOG=$(mktemp)
 cloudflared tunnel --url "http://localhost:$LOCAL_PORT" --no-autoupdate > "$TMPLOG" 2>&1 &
 TUNNEL_PID=$!
 
-# Wait for URL to appear
+# Wait for URL to appear (up to 20s)
+TUNNEL_URL=""
 for i in $(seq 1 20); do
   TUNNEL_URL=$(grep -o 'https://[a-z0-9-]*\.trycloudflare\.com' "$TMPLOG" | head -1)
   if [ -n "$TUNNEL_URL" ]; then
@@ -36,16 +37,24 @@ fi
 
 echo "[Tunnel] URL: $TUNNEL_URL"
 
-# Register with cloud
-echo "[Tunnel] Registering with cloud ($CLOUD_URL)..."
-RESPONSE=$(curl -s -X POST "$CLOUD_URL/api/register-local" \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $SECRET" \
-  -d "{\"url\": \"$TUNNEL_URL\"}")
+# Save URL to file for other scripts to read
+echo "$TUNNEL_URL" > /tmp/alonbot-tunnel-url.txt
 
-echo "[Tunnel] Cloud response: $RESPONSE"
+# Update Railway voice-agent env var
+echo "[Tunnel] Updating Railway voice-agent AALONBOT_URL..."
+cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
+echo "[Tunnel] Railway updated"
+
+# Verify tunnel works
+sleep 2
+HEALTH=$(curl -s "$TUNNEL_URL/health" 2>/dev/null)
+if echo "$HEALTH" | grep -q '"status":"ok"'; then
+  echo "[Tunnel] ✅ Health check passed"
+else
+  echo "[Tunnel] ⚠️ Health check failed (bot may still be starting)"
+fi
+
 rm -f "$TMPLOG"
 
-# Keep running (tunnel stays alive as background process)
 echo "[Tunnel] Tunnel running (PID: $TUNNEL_PID). Press Ctrl+C to stop."
 wait $TUNNEL_PID

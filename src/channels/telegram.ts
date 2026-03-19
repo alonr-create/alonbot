@@ -1,4 +1,4 @@
-import { Bot, InputFile, InlineKeyboard } from 'grammy';
+import { Bot, InputFile, InlineKeyboard, webhookCallback } from 'grammy';
 import { config } from '../utils/config.js';
 import { withRetry } from '../utils/retry.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
@@ -613,39 +613,42 @@ export function createTelegramAdapter(): ChannelAdapter {
         log.warn({ err: e.message }, 'failed to set commands');
       }
 
-      // Set menu button to open Web App (Mini App)
+      // Set menu button to show commands (instead of WebApp)
       try {
         await bot.api.setChatMenuButton({
-          menu_button: {
-            type: 'web_app',
-            text: 'Dashboard',
-            web_app: { url: `https://alonbot.onrender.com/dashboard?token=${config.localApiSecret}` },
-          },
+          menu_button: { type: 'commands' },
         });
-        log.info('menu button set to Dashboard WebApp');
+        log.info('menu button set to commands');
       } catch (e: any) {
         log.warn({ err: e.message }, 'failed to set menu button');
       }
 
-      // Catch polling errors (e.g. 409 conflict when another instance polls)
       bot.catch((err) => {
-        const msg = err.message || String(err);
-        if (msg.includes('409') || msg.includes('Conflict')) {
-          log.warn('Telegram 409 conflict — another instance may be polling. Retrying in 10s...');
-        } else {
-          log.error({ err: msg }, 'Telegram bot error');
-        }
+        log.error({ err: err.message || String(err) }, 'Telegram bot error');
       });
 
-      bot.start({
-        onStart: () => log.info('Telegram polling started'),
-        drop_pending_updates: true,
-      });
+      if (config.mode === 'cloud') {
+        // Cloud: use webhook (avoids 409 conflicts during deploys)
+        await bot.api.deleteWebhook({ drop_pending_updates: true });
+        const webhookUrl = `https://chic-forgiveness-production.up.railway.app/telegram-webhook`;
+        await bot.api.setWebhook(webhookUrl, { secret_token: config.localApiSecret });
+        log.info({ webhookUrl }, 'Telegram webhook set');
+      } else {
+        // Local: polling
+        bot.start({
+          onStart: () => log.info('Telegram polling started'),
+          drop_pending_updates: true,
+        });
+      }
       log.info('bot running');
     },
 
     async stop() {
-      await bot.stop();
+      if (config.mode !== 'cloud') await bot.stop();
+    },
+
+    getWebhookHandler() {
+      return webhookCallback(bot, 'express', { secretToken: config.localApiSecret });
     },
 
     async sendTyping(original: UnifiedMessage) {

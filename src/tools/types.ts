@@ -5,7 +5,7 @@ import type Database from 'better-sqlite3';
 export interface ToolContext {
   config: typeof import('../utils/config.js').config;
   db: Database.Database;
-  addPendingMedia: (item: { type: 'image' | 'voice'; data: Buffer }) => void;
+  addPendingMedia: (item: { type: 'image' | 'voice' | 'document'; data: Buffer; filename?: string; mimetype?: string }) => void;
 }
 
 export interface ToolHandler {

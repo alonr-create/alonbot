@@ -378,6 +378,11 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   for (const m of media) {
     if (m.type === 'image') reply.image = m.data;
     if (m.type === 'voice') reply.voice = m.data;
+    if (m.type === 'document') {
+      reply.document = m.data;
+      reply.documentName = m.filename;
+      reply.documentMimetype = m.mimetype;
+    }
   }
 
   // Voice-to-voice: if user sent voice message, auto-generate TTS reply

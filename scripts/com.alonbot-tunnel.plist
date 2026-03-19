@@ -6,8 +6,8 @@
     <string>com.alonbot-tunnel</string>
     <key>ProgramArguments</key>
     <array>
-        <!-- EDIT THIS: path to start-tunnel.sh in your project -->
-        <string>/PATH/TO/alonbot/scripts/start-tunnel.sh</string>
+        <string>/bin/bash</string>
+        <string>/Users/oakhome/קלוד עבודות/alonbot/scripts/keep-tunnel-alive.sh</string>
     </array>
     <key>RunAtLoad</key>
     <true/>
@@ -15,12 +15,6 @@
     <true/>
     <key>ThrottleInterval</key>
     <integer>60</integer>
-    <key>EnvironmentVariables</key>
-    <dict>
-        <!-- EDIT THIS: your Render cloud URL -->
-        <key>ALONBOT_CLOUD_URL</key>
-        <string>https://YOUR-APP.onrender.com</string>
-    </dict>
     <key>StandardOutPath</key>
     <string>/tmp/alonbot-tunnel.log</string>
     <key>StandardErrorPath</key>
