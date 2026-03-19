@@ -122,7 +122,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   }
 
   // Detect [OPUS] tag for on-demand model upgrade
-  const useOpus = msg.text.startsWith('[OPUS] ');
+  const useOpus = msg.text.startsWith('[OPUS] ') || /אופוס/i.test(msg.text);
   if (useOpus) {
     const cleanText = msg.text.slice(7);
     // Update saved message to strip prefix (already saved above with prefix)
