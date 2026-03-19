@@ -360,9 +360,13 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
 
   // Append model/usage footer AFTER saving (display-only, not in history)
-  const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
-  const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
-  replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
+  // Only show footer to authorized users (not to leads)
+  const isAuthorizedUser = config.allowedWhatsApp.includes(msg.senderId) || config.allowedTelegram.includes(msg.senderId) || msg.channel === 'telegram';
+  if (isAuthorizedUser) {
+    const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
+    const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
+    replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
+  }
 
   // Auto-summarize old messages if threshold reached
   if (shouldSummarize(msg.channel, msg.senderId)) {
