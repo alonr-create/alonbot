@@ -8,6 +8,8 @@ import { cancelFollowUps } from '../follow-up/follow-up-db.js';
 import { transcribeAudio } from '../ai/voice-transcribe.js';
 import { analyzeImage } from '../ai/image-analysis.js';
 import { isAdminPhone } from '../db/tenant-config.js';
+import { createBoardItem, updateColumnValue } from '../monday/api.js';
+import { config } from '../config.js';
 import type { BotAdapter } from './connection.js';
 import { registerChat } from './connection.js';
 
@@ -17,6 +19,50 @@ const IMAGE_MEDIA_RESPONSE =
   'קיבלתי! כרגע אני עובד רק עם הודעות טקסט ואודיו, אבל אשמח לעזור - ספר לי במילים מה אתה מחפש';
 const VOICE_FAIL_RESPONSE =
   'קיבלתי את ההודעה הקולית אבל לא הצלחתי לתמלל אותה. אפשר לנסות שוב או לכתוב בטקסט?';
+
+/**
+ * Create a new lead in local DB + Monday.com board.
+ * Sets source_detail to 'facebook-ads' since all inbound WhatsApp leads
+ * from the bot number come from Facebook ad campaigns.
+ */
+async function createNewLead(phone: string, firstMessage?: string): Promise<void> {
+  const db = getDb();
+  db.prepare(
+    "INSERT INTO leads (phone, source, source_detail) VALUES (?, 'whatsapp', 'facebook-ads')"
+  ).run(phone);
+  log.info({ phone }, 'new lead created (local + Monday.com)');
+
+  // Create Monday.com item async (non-blocking)
+  const boardId = config.mondayBoardId;
+  if (!boardId) return;
+
+  try {
+    const itemName = `ליד חדש — ${phone}`;
+    const columnValues: Record<string, string> = {};
+    if (config.mondayStatusColumnId) {
+      columnValues[config.mondayStatusColumnId] = 'חדש';
+    }
+    const result = await createBoardItem(itemName, columnValues);
+    if (result?.id) {
+      const mondayItemId = parseInt(result.id, 10);
+      db.prepare('UPDATE leads SET monday_item_id = ?, monday_board_id = ? WHERE phone = ?')
+        .run(mondayItemId, parseInt(boardId, 10), phone);
+      log.info({ phone, mondayItemId }, 'Monday.com item created for new lead');
+
+      // Try to set phone column on the Monday item
+      try {
+        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'טלפון', phone);
+      } catch { /* phone column might have different ID */ }
+
+      // Try to set source column
+      try {
+        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'מקור', 'Facebook Ads');
+      } catch { /* source column might have different ID */ }
+    }
+  } catch (err) {
+    log.error({ err, phone }, 'Failed to create Monday.com item for new lead');
+  }
+}
 
 /**
  * Set up the incoming message handler on the whatsapp-web.js client.
@@ -115,8 +161,7 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
                 .prepare('SELECT id FROM leads WHERE phone = ?')
                 .get(phone) as { id: number } | undefined;
               if (!existingLead) {
-                db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
-                log.info({ phone }, 'new lead created from image');
+                await createNewLead(phone);
               }
             }
 
@@ -167,8 +212,7 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
         .get(phone) as { id: number } | undefined;
 
       if (!existingLead) {
-        db.prepare('INSERT INTO leads (phone) VALUES (?)').run(phone);
-        log.info({ phone }, 'new lead created');
+        await createNewLead(phone, text);
       }
     }
 
