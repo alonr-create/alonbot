@@ -124,7 +124,8 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Detect [OPUS] tag for on-demand model upgrade
   const useOpus = msg.text.startsWith('[OPUS] ') || /אופוס/i.test(msg.text);
   if (useOpus) {
-    const cleanText = msg.text.slice(7);
+    const isKeywordOnly = /^(\[OPUS\] )?אופוס$/i.test(msg.text.trim()) || /^תחליף לאופוס$/i.test(msg.text.trim());
+    const cleanText = isKeywordOnly ? '' : msg.text.replace(/^\[OPUS\] /, '').replace(/תחליף לאופוס[,.]?\s*/i, '').trim();
     // Update saved message to strip prefix (already saved above with prefix)
     try { db.prepare("UPDATE messages SET content = ? WHERE channel = ? AND sender_id = ? ORDER BY id DESC LIMIT 1").run(cleanText, msg.channel, msg.senderId); } catch (e: any) { log.debug({ err: e.message }, 'failed to strip OPUS prefix from DB'); }
     msg.text = cleanText;
