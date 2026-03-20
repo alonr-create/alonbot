@@ -630,7 +630,7 @@ export function createTelegramAdapter(): ChannelAdapter {
       if (config.mode === 'cloud') {
         // Cloud: use webhook (avoids 409 conflicts during deploys)
         await bot.api.deleteWebhook({ drop_pending_updates: true });
-        const webhookUrl = `https://chic-forgiveness-production.up.railway.app/telegram-webhook`;
+        const webhookUrl = `${process.env.RENDER_EXTERNAL_URL || 'https://alonbot.onrender.com'}/telegram-webhook`;
         await bot.api.setWebhook(webhookUrl, { secret_token: config.localApiSecret });
         log.info({ webhookUrl }, 'Telegram webhook set');
       } else {
