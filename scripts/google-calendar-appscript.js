@@ -126,12 +126,43 @@ function addEvent(data) {
   }
 }
 
+/**
+ * Find event by ID across ALL calendars (getEventById only checks default).
+ * Searches ±30 days window to find the event.
+ */
+function findEventById(eventId) {
+  // First try the global lookup (works for default calendar)
+  var event = CalendarApp.getEventById(eventId);
+  if (event) return event;
+
+  // Search across all calendars in a ±30 day window
+  var SKIP_CALENDARS = ['servicedprisha'];
+  var now = new Date();
+  var start = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+  var end = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  var calendars = CalendarApp.getAllCalendars();
+
+  for (var c = 0; c < calendars.length; c++) {
+    var cal = calendars[c];
+    var calName = cal.getName();
+    if (SKIP_CALENDARS.some(function(s) { return calName.toLowerCase().indexOf(s) !== -1; })) continue;
+
+    var events = cal.getEvents(start, end);
+    for (var i = 0; i < events.length; i++) {
+      if (events[i].getId() === eventId) {
+        return events[i];
+      }
+    }
+  }
+  return null;
+}
+
 function updateEvent(data) {
   try {
     if (!data.eventId) return jsonResponse({ success: false, error: 'Missing eventId' });
 
-    var event = CalendarApp.getEventById(data.eventId);
-    if (!event) return jsonResponse({ success: false, error: 'Event not found' });
+    var event = findEventById(data.eventId);
+    if (!event) return jsonResponse({ success: false, error: 'Event not found: ' + data.eventId });
 
     if (data.title) {
       event.setTitle(data.title);
@@ -171,8 +202,8 @@ function deleteEvent(data) {
   try {
     if (!data.eventId) return jsonResponse({ success: false, error: 'Missing eventId' });
 
-    var event = CalendarApp.getEventById(data.eventId);
-    if (!event) return jsonResponse({ success: false, error: 'Event not found' });
+    var event = findEventById(data.eventId);
+    if (!event) return jsonResponse({ success: false, error: 'Event not found: ' + data.eventId });
 
     event.deleteEvent();
 
