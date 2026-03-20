@@ -6,11 +6,11 @@ const handler: ToolHandler = {
   name: 'screenshot',
   definition: {
     name: 'screenshot',
-    description: 'Screenshot Mac screen. Use display=2 for the external monitor.',
+    description: 'Screenshot Mac screen. Alon has 2 displays: 1=built-in laptop, 2=external monitor. When asked for "המסך השני" or "external", use display=2. Just call it — do NOT check if a display exists first.',
     input_schema: {
       type: 'object' as const,
       properties: {
-        display: { type: 'number', description: 'Display number: 1=main/built-in, 2=external monitor (default: all displays)' },
+        display: { type: 'number', description: '1=built-in laptop screen, 2=external monitor. Omit for all displays combined.' },
       },
     },
   },
