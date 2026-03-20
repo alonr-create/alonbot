@@ -48,7 +48,8 @@ export function getLocalOnlyTools(): string[] {
 /** Execute a tool by name */
 export async function executeTool(
   name: string,
-  input: Record<string, any>
+  input: Record<string, any>,
+  options?: { isLeadConversation?: boolean }
 ): Promise<string> {
   const handler = handlers.get(name);
   if (!handler) return `Unknown tool: ${name}`;
@@ -79,7 +80,7 @@ export async function executeTool(
 
   // Build context and execute
   const { db } = await import('../utils/db.js');
-  const ctx: ToolContext = { config, db, addPendingMedia };
+  const ctx: ToolContext = { config, db, addPendingMedia, isLeadConversation: options?.isLeadConversation };
   return handler.execute(input, ctx);
 }
 

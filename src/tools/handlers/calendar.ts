@@ -24,7 +24,16 @@ const handlers: ToolHandler[] = [
         if (!res.ok) return `Error: Calendar API returned ${res.status}`;
         const data = await res.json() as any;
         if (!data.events || data.events.length === 0) return `אין אירועים בקלנדר ב-${days} הימים הקרובים.`;
+
+        // If in lead/sales context, redact event details — show only busy/free slots
+        const isLeadContext = ctx.isLeadConversation === true;
+
         return data.events.map((e: any, i: number) => {
+          if (isLeadContext) {
+            // Lead mode: only show date/time as "busy" — no names, titles, or details
+            const timeStr = e.time || 'כל היום';
+            return `${i + 1}. ${e.date} ${timeStr} — תפוס`;
+          }
           const cal = e.calendar ? ` [${e.calendar}]` : '';
           const loc = e.location ? ` | ${e.location}` : '';
           // Strip HTML from description and truncate

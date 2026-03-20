@@ -139,6 +139,16 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   }
 
   const modelId = useOpus ? 'claude-opus-4-6' : 'claude-sonnet-4-6';
+
+  // Detect if this is a lead conversation (not Alon) — for privacy redaction in tools
+  let isLeadConversation = false;
+  if (msg.channel === 'whatsapp' && msg.senderId) {
+    try {
+      const lead = db.prepare('SELECT 1 FROM leads WHERE phone = ?').get(msg.senderId);
+      isLeadConversation = !!lead;
+    } catch { /* no leads table or other error — default to false */ }
+  }
+
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
 
   // Multi-turn caching: mark the second-to-last message for cache breakpoint
@@ -265,7 +275,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       const toolPromises = toolBlocks.map(async (block) => {
         log.info({ tool: block.name, input: JSON.stringify(block.input).slice(0, 100) }, 'tool call');
         const toolStart = Date.now();
-        const result = await executeTool(block.name, block.input as Record<string, any>);
+        const result = await executeTool(block.name, block.input as Record<string, any>, { isLeadConversation });
         const toolDuration = Date.now() - toolStart;
         const toolSuccess = !result.startsWith('Error:') ? 1 : 0;
         log.info({ tool: block.name, result: result.slice(0, 100), durationMs: toolDuration }, 'tool result');

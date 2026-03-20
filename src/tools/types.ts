@@ -6,6 +6,8 @@ export interface ToolContext {
   config: typeof import('../utils/config.js').config;
   db: Database.Database;
   addPendingMedia: (item: { type: 'image' | 'voice' | 'document'; data: Buffer; filename?: string; mimetype?: string }) => void;
+  /** True when the conversation is with an external lead (not Alon) — redact private details */
+  isLeadConversation?: boolean;
 }
 
 export interface ToolHandler {
