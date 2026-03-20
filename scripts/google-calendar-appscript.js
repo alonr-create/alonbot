@@ -43,18 +43,28 @@ function listEvents(days) {
   const now = new Date();
   const end = new Date(now.getTime() + days * 24 * 60 * 60 * 1000);
 
-  // Read from ALL calendars (own + shared)
+  // Read from ALL calendars (own + shared), skip aggregator calendars
+  var SKIP_CALENDARS = ['servicedprisha'];
   const calendars = CalendarApp.getAllCalendars();
   const allEvents = [];
+  var seenIds = {};
 
   calendars.forEach(function(cal) {
+    var calName = cal.getName();
+    // Skip aggregator/read-only calendars that duplicate events
+    if (SKIP_CALENDARS.some(function(s) { return calName.toLowerCase().indexOf(s) !== -1; })) return;
+
     const events = cal.getEvents(now, end);
-    const calName = cal.getName();
     events.forEach(function(event) {
+      var eid = event.getId();
+      // Deduplicate — same event may appear in multiple calendars
+      if (seenIds[eid]) return;
+      seenIds[eid] = true;
+
       const start = event.getStartTime();
       const isAllDay = event.isAllDayEvent();
       allEvents.push({
-        id: event.getId(),
+        id: eid,
         title: event.getTitle(),
         calendar: calName,
         date: Utilities.formatDate(start, 'Asia/Jerusalem', 'yyyy-MM-dd'),

@@ -155,7 +155,7 @@ export async function submitSummarizeBatch(
   return submitBatch('summarize', [{
     custom_id: `summarize-${channel}-${senderId}-${Date.now()}`,
     params: {
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-sonnet-4-6',
       max_tokens: 500,
       system: 'אתה מסכם שיחות. תן סיכום קצר (3-5 משפטים) של השיחה, וציין נושאים עיקריים כ-JSON array.',
       messages: [{

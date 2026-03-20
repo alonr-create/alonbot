@@ -5,11 +5,24 @@ import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { withRetry } from '../utils/retry.js';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
-import { existsSync } from 'fs';
+import { existsSync, unlinkSync, readdirSync } from 'fs';
+import { join } from 'path';
 
 const log = createLogger('whatsapp');
 
 const SESSION_DIR = './data/whatsapp-wwjs-session';
+const CHROME_SESSION = join(SESSION_DIR, 'session');
+
+/** Remove Chrome singleton lock files that prevent restart after crash */
+function clearChromeLocks() {
+  if (!existsSync(CHROME_SESSION)) return;
+  const lockFiles = ['SingletonLock', 'SingletonSocket', 'SingletonCookie'];
+  for (const f of lockFiles) {
+    const p = join(CHROME_SESSION, f);
+    try { unlinkSync(p); } catch { /* doesn't exist — fine */ }
+  }
+  log.info('cleared Chrome lock files');
+}
 const MAX_RETRIES = 10;
 
 export function createWhatsAppAdapter(): ChannelAdapter {
@@ -96,11 +109,13 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
       log.warn({ reason }, 'disconnected');
       if (retryCount < MAX_RETRIES) {
         retryCount++;
-        log.info({ retryCount, maxRetries: MAX_RETRIES }, 'reconnecting in 5s');
-        setTimeout(() => {
-          client?.destroy().catch(() => {});
+        const delay = Math.min(5000 * retryCount, 30_000); // exponential backoff up to 30s
+        log.info({ retryCount, maxRetries: MAX_RETRIES, delayMs: delay }, 'reconnecting');
+        setTimeout(async () => {
+          try { await client?.destroy(); } catch { /* ignore */ }
+          clearChromeLocks();
           connect();
-        }, 5000);
+        }, delay);
       } else {
         log.error('max retries reached — WhatsApp disabled');
       }
@@ -229,8 +244,20 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
       }
     });
 
+    // Clear stale Chrome locks before launching (prevents "browser already running" after crash)
+    clearChromeLocks();
+
     log.info('initializing (Puppeteer loading)...');
-    await client.initialize();
+    // Timeout: if Puppeteer hangs for 60s, kill and retry
+    const initTimeout = setTimeout(() => {
+      log.warn('initialize timed out after 60s — destroying client');
+      client?.destroy().catch(() => {});
+    }, 60_000);
+    try {
+      await client.initialize();
+    } finally {
+      clearTimeout(initTimeout);
+    }
   }
 
   return {
@@ -242,7 +269,8 @@ img{border-radius:12px;margin:20px}h1{color:#25D366}</style>
     },
 
     async stop() {
-      await client?.destroy().catch(() => {});
+      try { await client?.destroy(); } catch { /* ignore */ }
+      clearChromeLocks();
     },
 
     async sendReply(original: UnifiedMessage, reply: UnifiedReply) {
