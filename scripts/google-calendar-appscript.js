@@ -28,6 +28,14 @@ function doPost(e) {
     return addEvent(data);
   }
 
+  if (data.action === 'update') {
+    return updateEvent(data);
+  }
+
+  if (data.action === 'delete') {
+    return deleteEvent(data);
+  }
+
   return jsonResponse({ error: 'Unknown action' });
 }
 
@@ -46,6 +54,7 @@ function listEvents(days) {
       const start = event.getStartTime();
       const isAllDay = event.isAllDayEvent();
       allEvents.push({
+        id: event.getId(),
         title: event.getTitle(),
         calendar: calName,
         date: Utilities.formatDate(start, 'Asia/Jerusalem', 'yyyy-MM-dd'),
@@ -102,6 +111,62 @@ function addEvent(data) {
         date: data.date,
       });
     }
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.message });
+  }
+}
+
+function updateEvent(data) {
+  try {
+    if (!data.eventId) return jsonResponse({ success: false, error: 'Missing eventId' });
+
+    var event = CalendarApp.getEventById(data.eventId);
+    if (!event) return jsonResponse({ success: false, error: 'Event not found' });
+
+    if (data.title) {
+      event.setTitle(data.title);
+    }
+
+    if (data.description !== undefined) {
+      event.setDescription(data.description);
+    }
+
+    if (data.date || data.time) {
+      var currentStart = event.getStartTime();
+      var currentEnd = event.getEndTime();
+      var durationMs = data.duration_minutes
+        ? data.duration_minutes * 60 * 1000
+        : (currentEnd.getTime() - currentStart.getTime());
+
+      var newDate = data.date || Utilities.formatDate(currentStart, 'Asia/Jerusalem', 'yyyy-MM-dd');
+      var newTime = data.time || Utilities.formatDate(currentStart, 'Asia/Jerusalem', 'HH:mm');
+
+      var newStart = new Date(newDate + 'T' + newTime + ':00');
+      var newEnd = new Date(newStart.getTime() + durationMs);
+
+      event.setTime(newStart, newEnd);
+    } else if (data.duration_minutes) {
+      var start = event.getStartTime();
+      var newEnd = new Date(start.getTime() + data.duration_minutes * 60 * 1000);
+      event.setTime(start, newEnd);
+    }
+
+    return jsonResponse({ success: true, eventId: data.eventId });
+  } catch (err) {
+    return jsonResponse({ success: false, error: err.message });
+  }
+}
+
+function deleteEvent(data) {
+  try {
+    if (!data.eventId) return jsonResponse({ success: false, error: 'Missing eventId' });
+
+    var event = CalendarApp.getEventById(data.eventId);
+    if (!event) return jsonResponse({ success: false, error: 'Event not found' });
+
+    event.deleteEvent();
+
+    return jsonResponse({ success: true });
   } catch (err) {
     return jsonResponse({ success: false, error: err.message });
   }

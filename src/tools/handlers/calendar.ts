@@ -36,9 +36,10 @@ const handlers: ToolHandler[] = [
           }
           const cal = e.calendar ? ` [${e.calendar}]` : '';
           const loc = e.location ? ` | ${e.location}` : '';
+          const eid = e.id ? ` (id:${e.id})` : '';
           // Strip HTML from description and truncate
           const desc = e.description ? e.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
-          return `${i + 1}. ${e.title}${cal} — ${e.date}${e.time ? ' ' + e.time : ''}${e.allDay ? ' (כל היום)' : ''}${loc}${desc ? ' | ' + desc : ''}`;
+          return `${i + 1}. ${e.title}${cal} — ${e.date}${e.time ? ' ' + e.time : ''}${e.allDay ? ' (כל היום)' : ''}${loc}${desc ? ' | ' + desc : ''}${eid}`;
         }).join('\n');
       } catch (e: any) {
         return `Error: Calendar request failed.`;
@@ -83,6 +84,82 @@ const handlers: ToolHandler[] = [
         return data.success ? `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}` : `Error: ${data.error || 'Unknown'}`;
       } catch (e: any) {
         return `Error: Calendar request failed.`;
+      }
+    },
+  },
+  {
+    name: 'calendar_update',
+    definition: {
+      name: 'calendar_update',
+      description: 'Update an existing Google Calendar event (move to new date/time, change title, etc.)',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          eventId: { type: 'string', description: 'The event ID from calendar_list' },
+          title: { type: 'string', description: 'New title (optional)' },
+          date: { type: 'string', description: 'New date YYYY-MM-DD (optional)' },
+          time: { type: 'string', description: 'New time HH:mm 24h format (optional)' },
+          duration_minutes: { type: 'number', description: 'New duration in minutes (optional)' },
+          description: { type: 'string', description: 'New description (optional)' },
+        },
+        required: ['eventId'],
+      },
+    },
+    async execute(input, ctx) {
+      if (!ctx.config.googleCalendarScriptUrl) return 'Error: Google Calendar not configured. Set GOOGLE_CALENDAR_SCRIPT_URL env var.';
+      try {
+        const res = await withRetry(() => fetch(ctx.config.googleCalendarScriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'update',
+            eventId: input.eventId,
+            ...(input.title && { title: input.title }),
+            ...(input.date && { date: input.date }),
+            ...(input.time && { time: input.time }),
+            ...(input.duration_minutes && { duration_minutes: input.duration_minutes }),
+            ...(input.description !== undefined && { description: input.description }),
+          }),
+          signal: AbortSignal.timeout(10000),
+        }));
+        if (!res.ok) return `Error: Calendar API returned ${res.status}`;
+        const data = await res.json() as any;
+        return data.success ? `אירוע עודכן בהצלחה: ${input.date ? input.date : ''}${input.time ? ' ' + input.time : ''}${input.title ? ' "' + input.title + '"' : ''}` : `Error: ${data.error || 'Unknown'}`;
+      } catch (e: any) {
+        return `Error: Calendar update request failed.`;
+      }
+    },
+  },
+  {
+    name: 'calendar_delete',
+    definition: {
+      name: 'calendar_delete',
+      description: 'Delete a Google Calendar event',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          eventId: { type: 'string', description: 'The event ID from calendar_list' },
+        },
+        required: ['eventId'],
+      },
+    },
+    async execute(input, ctx) {
+      if (!ctx.config.googleCalendarScriptUrl) return 'Error: Google Calendar not configured. Set GOOGLE_CALENDAR_SCRIPT_URL env var.';
+      try {
+        const res = await withRetry(() => fetch(ctx.config.googleCalendarScriptUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete',
+            eventId: input.eventId,
+          }),
+          signal: AbortSignal.timeout(10000),
+        }));
+        if (!res.ok) return `Error: Calendar API returned ${res.status}`;
+        const data = await res.json() as any;
+        return data.success ? `אירוע נמחק בהצלחה.` : `Error: ${data.error || 'Unknown'}`;
+      } catch (e: any) {
+        return `Error: Calendar delete request failed.`;
       }
     },
   },

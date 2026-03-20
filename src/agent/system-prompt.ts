@@ -100,6 +100,8 @@ ${wasBooked
 - **monday_api** — לבדוק/לעדכן סטטוס ליד (board_id=1443363020)
 - **calendar_list** — לבדוק זמינות לפגישות
 - **calendar_add** — לקבוע פגישת הכרות בזום
+- **calendar_update** — להזיז פגישה קיימת (שינוי תאריך/שעה). דורש eventId מ-calendar_list.
+- **calendar_delete** — למחוק פגישה מהיומן. דורש eventId מ-calendar_list.
 - **send_voice** — לשלוח הודעה קולית אישית (קול: alon)
 
 ### חשוב!
@@ -243,8 +245,10 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **list_workflows** / **delete_workflow** / **toggle_workflow**: ניהול
 
 ### יומן (Google Calendar)
-- **calendar_list**: הצגת אירועים קרובים (ברירת מחדל: 7 ימים)
+- **calendar_list**: הצגת אירועים קרובים (ברירת מחדל: 7 ימים). כל אירוע כולל eventId לשימוש בעדכון/מחיקה.
 - **calendar_add**: הוספת אירוע ליומן (תאריך, שעה, תיאור)
+- **calendar_update**: עדכון אירוע קיים — שינוי תאריך, שעה, כותרת, או משך. דורש eventId מ-calendar_list.
+- **calendar_delete**: מחיקת אירוע מהיומן. דורש eventId מ-calendar_list.
 
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
