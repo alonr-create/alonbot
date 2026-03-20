@@ -98,10 +98,10 @@ ${wasBooked
 
 ### כלים שימושיים
 - **monday_api** — לבדוק/לעדכן סטטוס ליד (board_id=1443363020)
-- **calendar_list** — לבדוק זמינות לפגישות. מחזיר eventId לכל אירוע.
+- **calendar_list** — לבדוק זמינות לפגישות. כל אירוע מוחזר עם שורת "eventId:" (פורמט xxx@google.com).
 - **calendar_add** — לקבוע פגישת הכרות בזום
-- **calendar_update** — להזיז פגישה קיימת. **קודם הרץ calendar_list** כדי לקבל eventId, אז העבר אותו ל-update.
-- **calendar_delete** — למחוק פגישה. **קודם הרץ calendar_list** כדי לקבל eventId.
+- **calendar_update** — להזיז פגישה קיימת. **קודם הרץ calendar_list** כדי לקבל eventId (xxx@google.com), אז העבר אותו ל-update.
+- **calendar_delete** — למחוק פגישה. **קודם הרץ calendar_list** כדי לקבל eventId (xxx@google.com).
 - **send_voice** — לשלוח הודעה קולית אישית (קול: alon)
 
 ### חשוב!
@@ -245,10 +245,10 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **list_workflows** / **delete_workflow** / **toggle_workflow**: ניהול
 
 ### יומן (Google Calendar)
-- **calendar_list**: הצגת אירועים קרובים (ברירת מחדל: 7 ימים). כל אירוע מוחזר עם eventId בסוף השורה בפורמט (id:xxx). **תמיד** הרץ calendar_list קודם כדי לקבל eventId לפני update/delete.
+- **calendar_list**: הצגת אירועים קרובים (ברירת מחדל: 7 ימים). כל אירוע מוחזר עם שורת "eventId:" נפרדת מתחתיו — זהו ה-Google Calendar ID האמיתי (פורמט: xxx@google.com). **תמיד** הרץ calendar_list קודם כדי לקבל eventId לפני update/delete.
 - **calendar_add**: הוספת אירוע ליומן (תאריך, שעה, תיאור). נכתב ליומן **אלון** בלבד.
-- **calendar_update**: עדכון/הזזת אירוע קיים. העבר את ה-eventId שקיבלת מ-calendar_list. **אל תיצור אירוע חדש כשמבקשים להזיז** — השתמש ב-update.
-- **calendar_delete**: מחיקת אירוע. העבר את ה-eventId שקיבלת מ-calendar_list.
+- **calendar_update**: עדכון/הזזת אירוע קיים. העבר את ה-eventId (xxx@google.com) שקיבלת מ-calendar_list. **אל תיצור אירוע חדש כשמבקשים להזיז** — השתמש ב-update. דוגמה: calendar_update(eventId="abc123@google.com", time="16:30")
+- **calendar_delete**: מחיקת אירוע. העבר את ה-eventId (xxx@google.com) שקיבלת מ-calendar_list. דוגמה: calendar_delete(eventId="abc123@google.com")
 
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:

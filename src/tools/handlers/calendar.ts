@@ -36,9 +36,10 @@ const handlers: ToolHandler[] = [
           }
           const cal = e.calendar ? ` [${e.calendar}]` : '';
           const loc = e.location ? ` | ${e.location}` : '';
-          const eid = e.id ? ` (id:${e.id})` : '';
           // Strip HTML from description and truncate
           const desc = e.description ? e.description.replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim().slice(0, 100) : '';
+          // eventId on a separate labeled line so the model can easily extract it for update/delete
+          const eid = e.id ? `\n   eventId: ${e.id}` : '';
           return `${i + 1}. ${e.title}${cal} — ${e.date}${e.time ? ' ' + e.time : ''}${e.allDay ? ' (כל היום)' : ''}${loc}${desc ? ' | ' + desc : ''}${eid}`;
         }).join('\n');
       } catch (e: any) {
