@@ -173,6 +173,8 @@ const CATEGORY_KEYWORDS: Record<string, string[]> = {
   work_aliza: ['עליזה', 'המפרסמת', 'פוסט', 'קמפיין', 'שיווק', 'רשתות'],
   personal: ['משפחה', 'אישה', 'ילד', 'יום הולדת', 'תחביב', 'ספורט', 'בריאות', 'חופשה'],
   finance: ['כסף', 'השקעה', 'חיסכון', 'הוצאה', 'הכנסה', 'בנק', 'משכנתא'],
+  feedback: ['תיקון', 'שגיאה', 'טעות', 'זכור', 'לא נכון', 'בטעות', 'אל תעשה', 'correction', 'feedback'],
+  rule: ['כלל', 'תמיד', 'אף פעם', 'חוק', 'עקרון', 'חובה', 'אסור', 'iron rule', 'rule'],
 };
 
 function detectCategory(text: string): string | null {
@@ -205,7 +207,7 @@ export async function getRelevantMemories(userMessage: string): Promise<Memory[]
   // 3. Keyword search from user message
   const words = userMessage.split(/\s+/).filter(w => w.length >= 2);
   for (const word of words.slice(0, 5)) {
-    addUnique(stmtSearchMemories.all(`%${word}%`) as Memory[]);
+    addUnique(stmtSearchMemories.all(`%${word.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`) as Memory[]);
   }
 
   // 4. Vector semantic search (if message is meaningful)
@@ -280,7 +282,8 @@ const stmtDecayMemories = db.prepare(
    WHERE importance > 1
      AND importance < 8
      AND (last_accessed IS NULL OR last_accessed < datetime('now', '-60 days'))
-     AND created_at < datetime('now', '-60 days')`
+     AND created_at < datetime('now', '-60 days')
+     AND type NOT IN ('feedback', 'rule')`
 );
 
 const stmtOldEpisodicMemories = db.prepare(

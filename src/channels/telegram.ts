@@ -255,7 +255,7 @@ export function createTelegramAdapter(): ChannelAdapter {
         `SELECT sender_name, role, content, created_at FROM messages
          WHERE channel = 'telegram' AND sender_id = ? AND content LIKE ?
          ORDER BY id DESC LIMIT 10`
-      ).all(String(ctx.from.id), `%${query}%`) as any[];
+      ).all(String(ctx.from.id), `%${query.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`) as any[];
 
       if (rows.length === 0) {
         await ctx.reply(`לא נמצאו תוצאות עבור "${query}"`);
@@ -691,7 +691,8 @@ export function createTelegramAdapter(): ChannelAdapter {
         const chatId = Number(original.senderId);
         if (!chatId) return;
         if (reply.text) {
-          const chunks = reply.text.match(/[\s\S]{1,4000}/g) || [reply.text];
+          const MAX_CHUNKS = 10;
+          const chunks = (reply.text.match(/[\s\S]{1,4000}/g) || [reply.text]).slice(0, MAX_CHUNKS);
           for (const chunk of chunks) {
             try {
               await bot.api.sendMessage(chatId, chunk, { parse_mode: 'Markdown' });
@@ -720,7 +721,8 @@ export function createTelegramAdapter(): ChannelAdapter {
       }
 
       if (reply.text) {
-        const chunks = reply.text.match(/[\s\S]{1,4000}/g) || [reply.text];
+        const MAX_CHUNKS = 10;
+        const chunks = (reply.text.match(/[\s\S]{1,4000}/g) || [reply.text]).slice(0, MAX_CHUNKS);
         for (const chunk of chunks) {
           try {
             await ctx.reply(chunk, { parse_mode: 'Markdown' });

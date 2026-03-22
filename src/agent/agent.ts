@@ -9,43 +9,34 @@ import { db } from '../utils/db.js';
 import type { UnifiedMessage, UnifiedReply } from '../channels/types.js';
 import { withRetry } from '../utils/retry.js';
 import { createLogger } from '../utils/logger.js';
+import { classifyComplexity, selectModel, buildModelCatalog, callFreeModel, type ModelTier } from './model-router.js';
 
 const log = createLogger('agent');
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
-// Gemini fallback for when Claude rate-limits (429)
-// Tries Gemini 2.5 Pro first (stronger), then 2.0 Flash (faster, higher rate limit)
-async function callGemini(model: string, systemPrompt: string, contents: any[]): Promise<string> {
-  const res = await withRetry(() => fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${config.geminiApiKey}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      system_instruction: { parts: [{ text: systemPrompt }] },
-      contents,
-      generationConfig: { maxOutputTokens: 4096 },
-    }),
-  }));
-  if (!res.ok) throw new Error(`Gemini ${model} failed: ${res.status}`);
-  const data = await res.json() as any;
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-}
+// Build model catalog once at startup
+const modelCatalog = buildModelCatalog();
+log.info({ models: modelCatalog.map(m => `${m.provider}/${m.model} (${m.tier})`).join(', ') }, 'model catalog');
 
+// Gemini fallback for when Claude rate-limits (429)
 async function callGeminiFallback(systemPrompt: string, messages: Anthropic.MessageParam[]): Promise<{ text: string; model: string }> {
   const contents = messages.map(m => ({
     role: m.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: typeof m.content === 'string' ? m.content : (m.content as any[]).filter((b: any) => b.type === 'text' || b.type === 'tool_result').map((b: any) => b.text || b.content || '').join('\n') }],
   }));
 
-  // Try Gemini 2.5 Flash first (fast + capable), fall back to 2.0 Flash (higher rate limit)
-  try {
-    const text = await callGemini('gemini-2.5-flash', systemPrompt, contents);
-    if (text) return { text, model: 'Gemini 2.5 Flash' };
-  } catch (e: any) {
-    log.warn({ err: e.message }, 'Gemini 2.5 Flash failed, trying 2.0 Flash');
+  // Try free tier models from catalog
+  const freeModels = modelCatalog.filter(m => m.tier === 'free' && m.apiKey);
+  for (const fm of freeModels) {
+    try {
+      const result = await callFreeModel(fm, systemPrompt, contents.map(c => ({ role: c.role === 'model' ? 'assistant' as const : 'user' as const, content: c.parts[0].text })));
+      if (result.text) return { text: result.text, model: `${fm.provider}/${fm.model}` };
+    } catch (e: any) {
+      log.warn({ err: e.message, model: fm.model }, 'free model fallback failed');
+    }
   }
 
-  const text = await callGemini('gemini-2.0-flash', systemPrompt, contents);
-  return { text: text || 'לא הצלחתי לעבד (fallback).', model: 'Gemini 2.0 Flash' };
+  return { text: 'לא הצלחתי לעבד (כל המודלים נכשלו).', model: 'none' };
 }
 
 // Rate limiting: max 10 messages per minute per user
@@ -138,7 +129,13 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     }
   }
 
-  const modelId = useOpus ? 'claude-opus-4-6' : 'claude-sonnet-4-6';
+  // Smart model routing — classify complexity and pick the right model
+  const hasMedia = !!(msg.image || msg.document);
+  const routedTier: ModelTier = useOpus ? 'premium' : classifyComplexity(msg.text, hasMedia, history.length);
+  const routingDecision = selectModel(routedTier, modelCatalog, useOpus ? 'claude-opus-4-6' : undefined);
+  const modelId = routingDecision.model.model;
+  const isFreeTier = routedTier === 'free' && routingDecision.model.provider !== 'anthropic';
+  log.info({ tier: routedTier, model: modelId, provider: routingDecision.model.provider, reason: routingDecision.reason }, 'model routing');
 
   // Detect if this is a lead conversation (not Alon) — for privacy redaction in tools
   let isLeadConversation = false;
@@ -168,10 +165,56 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
 
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
-  let modelUsed = useOpus ? 'Claude Opus 4.6' : 'Claude Sonnet 4.6';
+  let modelUsed = `${routingDecision.model.provider}/${routingDecision.model.model}`;
+  if (routingDecision.model.provider === 'anthropic') {
+    modelUsed = modelId.includes('opus') ? 'Claude Opus 4.6' : 'Claude Sonnet 4.6';
+  }
   if (useThinking) modelUsed += ' 🧠';
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
+
+  // FREE TIER SHORTCUT — simple queries go to Gemini/Groq (no tools needed, saves $$$)
+  if (isFreeTier) {
+    try {
+      const flatMessages = messages
+        .filter(m => typeof m.content === 'string')
+        .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content as string }));
+      // Flatten system prompt for non-Anthropic models (they only accept string)
+      const flatPrompt = Array.isArray(systemPrompt) ? systemPrompt.map((b: any) => b.text).join('\n') : String(systemPrompt);
+      const result = await callFreeModel(routingDecision.model, flatPrompt, flatMessages);
+      replyText = result.text || 'לא הצלחתי לעבד.';
+      totalInputTokens = result.inputTokens || 0;
+      totalOutputTokens = result.outputTokens || 0;
+      log.info({ model: modelUsed, tokens: totalInputTokens + totalOutputTokens }, 'free tier response');
+    } catch (e: any) {
+      log.warn({ err: e.message }, 'free tier failed, upgrading to balanced');
+      // Fall through to Claude path below
+      modelUsed = 'Claude Sonnet 4.6';
+      replyText = ''; // will be filled by Claude path
+    }
+
+    if (replyText) {
+      // Track API usage (free = $0)
+      try {
+        db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
+          modelUsed, totalInputTokens, totalOutputTokens, 0
+        );
+      } catch (e: any) { log.debug({ err: e.message }, 'api usage tracking failed'); }
+
+      // Save and return
+      saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
+      const isAuthorizedUser = config.allowedWhatsApp.includes(msg.senderId) || config.allowedTelegram.includes(msg.senderId) || msg.channel === 'telegram';
+      if (isAuthorizedUser) {
+        const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
+        replyText += `\n\n_\u200E${env} | ${modelUsed} | חינם_`;
+      }
+
+      if (shouldSummarize(msg.channel, msg.senderId)) {
+        summarizeInBackground(msg.channel, msg.senderId).catch(err => log.error({ err: err.message }, 'summarize error'));
+      }
+      return { text: replyText };
+    }
+  }
 
   try {
     // Knowledge base: inject as document blocks for citation support
@@ -272,10 +315,14 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       }
 
       // Execute tools in parallel (Claude already decides which tools are independent)
+      const TOOL_TIMEOUT_MS = 30_000;
       const toolPromises = toolBlocks.map(async (block) => {
         log.info({ tool: block.name, input: JSON.stringify(block.input).slice(0, 100) }, 'tool call');
         const toolStart = Date.now();
-        const result = await executeTool(block.name, block.input as Record<string, any>, { isLeadConversation });
+        const result = await Promise.race([
+          executeTool(block.name, block.input as Record<string, any>, { isLeadConversation }),
+          new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`Tool ${block.name} timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)),
+        ]).catch((err: Error) => `Error: ${err.message}`);
         const toolDuration = Date.now() - toolStart;
         const toolSuccess = !result.startsWith('Error:') ? 1 : 0;
         log.info({ tool: block.name, result: result.slice(0, 100), durationMs: toolDuration }, 'tool result');
@@ -355,11 +402,9 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     }
   }
 
-  // Track API usage (Opus: $15/$75, Sonnet: $3/$15 per M tokens)
-  const inputRate = useOpus ? 15 : 3;
-  const outputRate = useOpus ? 75 : 15;
-  const costInput = (totalInputTokens / 1_000_000) * inputRate;
-  const costOutput = (totalOutputTokens / 1_000_000) * outputRate;
+  // Track API usage — use actual model costs from routing decision
+  const costInput = (totalInputTokens / 1_000) * (routingDecision.model.costPer1kInput || 0);
+  const costOutput = (totalOutputTokens / 1_000) * (routingDecision.model.costPer1kOutput || 0);
   const totalCost = costInput + costOutput;
   try {
     db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
@@ -380,7 +425,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   const isAuthorizedUser = config.allowedWhatsApp.includes(msg.senderId) || config.allowedTelegram.includes(msg.senderId) || msg.channel === 'telegram';
   if (isAuthorizedUser) {
     const env = config.mode === 'cloud' ? '☁️ ענן' : '🖥️ מחשב';
-    const costStr = modelUsed.includes('Gemini') ? 'חינם' : `$${totalCost.toFixed(4)}`;
+    const costStr = totalCost === 0 ? 'חינם' : `$${totalCost.toFixed(4)}`;
     replyText += `\n\n_\u200E${env} | ${modelUsed} | ${totalInputTokens.toLocaleString()}↓ ${totalOutputTokens.toLocaleString()}↑ | ${costStr}_`;
   }
 

@@ -1,4 +1,4 @@
-import { writeFileSync, chmodSync } from 'fs';
+import { writeFileSync, chmodSync, unlinkSync } from 'fs';
 import { createLogger } from './logger.js';
 
 const log = createLogger('git-auth');
@@ -8,6 +8,7 @@ const ASKPASS_PATH = '/tmp/alonbot-git-askpass.sh';
 /**
  * Write a GIT_ASKPASS script that echoes GITHUB_TOKEN.
  * Called once at startup so git never needs tokens in URLs.
+ * Registers cleanup on process exit.
  */
 export function setupGitAuth(): void {
   const token = process.env.GITHUB_TOKEN;
@@ -15,8 +16,14 @@ export function setupGitAuth(): void {
     log.warn('GITHUB_TOKEN not set — GIT_ASKPASS not configured');
     return;
   }
-  writeFileSync(ASKPASS_PATH, `#!/bin/sh\necho "${token}"\n`);
-  chmodSync(ASKPASS_PATH, 0o700);
+  writeFileSync(ASKPASS_PATH, `#!/bin/sh\necho "${token}"\n`, { mode: 0o700 });
+
+  // Cleanup on process exit
+  const cleanup = () => { try { unlinkSync(ASKPASS_PATH); } catch {} };
+  process.on('exit', cleanup);
+  process.on('SIGINT', cleanup);
+  process.on('SIGTERM', cleanup);
+
   log.info('GIT_ASKPASS configured');
 }
 
