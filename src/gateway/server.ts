@@ -6,12 +6,14 @@ import { config } from '../utils/config.js';
 import { executeTool } from '../agent/tools.js';
 import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
+import { getAllWorkspaces, getWorkspace, createWorkspace, updateWorkspace, deleteWorkspace } from '../utils/workspaces.js';
 
 const log = createLogger('server');
 
 // Cache HTML at startup (no server-side variables needed)
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
+const waManagerHTML = readFileSync(join(import.meta.dirname, '../views/wa-manager.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
@@ -217,7 +219,7 @@ function dashAuth(req: any, res: any, next: any) {
 
     // For HTML page requests, redirect to strip token from URL
     const path = req.path;
-    if (path === '/dashboard' || path === '/chat') {
+    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager') {
       res.redirect(302, path);
       return;
     }
@@ -369,6 +371,504 @@ app.post('/api/chat', dashAuth, async (req, res) => {
   }
 });
 
+// Workspace → source mapping (voice_agent leads belong to dekel workspace)
+function workspaceSources(workspace: string): string[] {
+  const map: Record<string, string[]> = {
+    'dekel': ['dekel', 'voice_agent'],
+    'alon_dev': ['alon_dev', 'alon_dev_whatsapp'],
+  };
+  return map[workspace] || [workspace];
+}
+function wsSourceSQL(workspace: string | undefined): { clause: string; params: string[] } {
+  if (!workspace) return { clause: '', params: [] };
+  const sources = workspaceSources(workspace);
+  const placeholders = sources.map(() => '?').join(',');
+  return { clause: `l.source IN (${placeholders})`, params: sources };
+}
+
+// === WA Manager API Endpoints ===
+app.get('/api/wa-manager/leads', dashAuth, (req, res) => {
+  try {
+    const workspace = req.query.workspace as string | undefined;
+    const { clause, params } = wsSourceSQL(workspace);
+    const whereClause = clause ? `WHERE ${clause}` : '';
+    const leads = db.prepare(`
+      SELECT l.*,
+        (SELECT COUNT(*) FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')) as message_count,
+        (SELECT m.content FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message,
+        (SELECT m.created_at FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message_at,
+        (SELECT m.role FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message_role,
+        (SELECT GROUP_CONCAT(tag, ',') FROM lead_tags lt WHERE lt.phone = l.phone) as tags_csv
+      FROM leads l ${whereClause} ORDER BY l.updated_at DESC
+    `).all(...params) as any[];
+    // Parse tags CSV to array
+    for (const lead of leads) {
+      lead.tags = lead.tags_csv ? lead.tags_csv.split(',') : [];
+      delete lead.tags_csv;
+    }
+    res.json({ success: true, leads });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const messages = db.prepare(`
+      SELECT MIN(id) as id, channel, sender_id, sender_name, role, content, created_at
+      FROM messages
+      WHERE sender_id = ? AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      GROUP BY content, created_at, role
+      ORDER BY MIN(id) ASC
+    `).all(phone);
+    const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone);
+    res.json({ success: true, lead, messages });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
+  try {
+    const workspace = req.query.workspace as string | undefined;
+    const sources = workspace ? workspaceSources(workspace) : [];
+    const srcPlaceholders = sources.map(() => '?').join(',');
+    const leadFilter = workspace ? `WHERE source IN (${srcPlaceholders})` : '';
+    const leadJoinFilter = workspace ? `AND l.source IN (${srcPlaceholders})` : '';
+    const msgJoinFilter = workspace ? `AND m.sender_id IN (SELECT phone FROM leads WHERE source IN (${srcPlaceholders}))` : '';
+
+    // Build a phone list for message filtering
+    const phoneList = workspace
+      ? (db.prepare(`SELECT phone FROM leads WHERE source IN (${srcPlaceholders})`).all(...sources) as any[]).map((r: any) => r.phone)
+      : null;
+    const phoneFilter = phoneList ? `AND m.sender_id IN (${phoneList.map(() => '?').join(',')})` : '';
+
+    const totalLeads = workspace
+      ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE source IN (${srcPlaceholders})`).get(...sources) as any
+      : db.prepare('SELECT COUNT(*) as count FROM leads').get() as any;
+    const activeConvos = db.prepare(`
+      SELECT COUNT(DISTINCT m.sender_id) as count FROM messages m
+      WHERE m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      AND m.created_at >= datetime('now', '-7 days')
+      ${phoneFilter}
+    `).get(...(phoneList || [])) as any;
+    const messagesToday = db.prepare(`
+      SELECT COUNT(*) as count FROM messages m
+      WHERE m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      AND date(m.created_at) = date('now')
+      ${phoneFilter}
+    `).get(...(phoneList || [])) as any;
+    const totalInbound = db.prepare(`
+      SELECT COUNT(*) as count FROM messages m
+      WHERE m.channel IN ('whatsapp','whatsapp-inbound') AND m.role = 'user'
+      ${phoneFilter}
+    `).get(...(phoneList || [])) as any;
+    const totalOutbound = db.prepare(`
+      SELECT COUNT(*) as count FROM messages m
+      WHERE m.channel IN ('whatsapp','whatsapp-outbound') AND m.role = 'assistant'
+      ${phoneFilter}
+    `).get(...(phoneList || [])) as any;
+    const responseRate = totalInbound.count > 0 ? Math.round((totalOutbound.count / totalInbound.count) * 100) : 0;
+    const pendingFollowups = workspace
+      ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('new','contacted') AND source IN (${srcPlaceholders})`).get(...sources) as any
+      : db.prepare("SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('new','contacted')").get() as any;
+    const bookedCount = workspace
+      ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE was_booked = 1 AND source IN (${srcPlaceholders})`).get(...sources) as any
+      : db.prepare('SELECT COUNT(*) as count FROM leads WHERE was_booked = 1').get() as any;
+    const sourceBreakdown = workspace
+      ? db.prepare(`SELECT source, COUNT(*) as count FROM leads WHERE source IN (${srcPlaceholders}) GROUP BY source ORDER BY count DESC`).all(...sources)
+      : db.prepare('SELECT source, COUNT(*) as count FROM leads GROUP BY source ORDER BY count DESC').all();
+    const statusBreakdown = workspace
+      ? db.prepare(`SELECT lead_status, COUNT(*) as count FROM leads WHERE source IN (${srcPlaceholders}) GROUP BY lead_status ORDER BY count DESC`).all(...sources)
+      : db.prepare('SELECT lead_status, COUNT(*) as count FROM leads GROUP BY lead_status ORDER BY count DESC').all();
+
+    const messagesPerDay = db.prepare(`
+      SELECT date(m.created_at) as day, COUNT(*) as count
+      FROM messages m WHERE m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      AND m.created_at >= datetime('now', '-30 days')
+      ${phoneFilter}
+      GROUP BY day ORDER BY day ASC
+    `).all(...(phoneList || []));
+
+    const leadsPerDay = workspace
+      ? db.prepare(`SELECT date(created_at) as day, COUNT(*) as count FROM leads WHERE created_at >= datetime('now', '-30 days') AND source IN (${srcPlaceholders}) GROUP BY day ORDER BY day ASC`).all(...sources)
+      : db.prepare("SELECT date(created_at) as day, COUNT(*) as count FROM leads WHERE created_at >= datetime('now', '-30 days') GROUP BY day ORDER BY day ASC").all();
+
+    // Average response time (minutes) — time between user msg and next assistant msg
+    let avgResponseMin: number | null = null;
+    try {
+      const avgResp = db.prepare(`
+        SELECT AVG(resp_sec) / 60.0 as avg_min FROM (
+          SELECT m1.id,
+            (SELECT MIN(julianday(m2.created_at) - julianday(m1.created_at)) * 86400
+             FROM messages m2 WHERE m2.sender_id = m1.sender_id AND m2.role = 'assistant'
+             AND m2.channel IN ('whatsapp','whatsapp-outbound') AND m2.id > m1.id) as resp_sec
+          FROM messages m1
+          WHERE m1.role = 'user' AND m1.channel IN ('whatsapp','whatsapp-inbound')
+          AND m1.created_at >= datetime('now', '-7 days')
+          ${phoneFilter}
+        ) WHERE resp_sec IS NOT NULL AND resp_sec < 86400
+      `).get(...(phoneList || [])) as any;
+      if (avgResp?.avg_min) avgResponseMin = Math.round(avgResp.avg_min);
+    } catch { /* ok */ }
+
+    res.json({
+      success: true,
+      totalLeads: totalLeads.count,
+      activeConvos: activeConvos.count,
+      messagesToday: messagesToday.count,
+      responseRate,
+      pendingFollowups: pendingFollowups.count,
+      bookedCount: bookedCount.count,
+      avgResponseMin,
+      sourceBreakdown,
+      statusBreakdown,
+      messagesPerDay,
+      leadsPerDay,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
+  const { phone, message } = req.body;
+  if (!phone || !message) {
+    res.status(400).json({ success: false, error: 'Missing phone or message' });
+    return;
+  }
+  try {
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (!wa) {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+    let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
+    chatPhone = chatPhone.replace(/^\+/, '');
+    const chatId = `${chatPhone}@s.whatsapp.net`;
+    await wa.sendReply(
+      { id: 'wa-mgr', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+      { text: message }
+    );
+    try {
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
+    } catch { /* logging failure should not break send */ }
+    log.info({ phone: chatPhone }, 'wa-manager: message sent');
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
+  const { phones, message } = req.body;
+  if (!Array.isArray(phones) || !message) {
+    res.status(400).json({ success: false, error: 'Missing phones array or message' });
+    return;
+  }
+  try {
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (!wa) {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+    const results: { phone: string; success: boolean; error?: string }[] = [];
+    for (const phone of phones) {
+      try {
+        let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
+        if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
+        chatPhone = chatPhone.replace(/^\+/, '');
+        const chatId = `${chatPhone}@s.whatsapp.net`;
+
+        // Personalize message: replace {name} with lead name
+        let personalMsg = message;
+        try {
+          const lead = db.prepare('SELECT name FROM leads WHERE phone = ?').get(chatPhone) as any;
+          if (lead?.name) personalMsg = personalMsg.replace(/\{name\}/g, lead.name);
+          else personalMsg = personalMsg.replace(/\{name\}/g, '');
+          personalMsg = personalMsg.replace(/\{phone\}/g, chatPhone);
+        } catch { /* continue with raw message */ }
+
+        await wa.sendReply(
+          { id: 'wa-broadcast', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+          { text: personalMsg }
+        );
+        try {
+          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, personalMsg);
+        } catch { /* logging failure should not break send */ }
+        results.push({ phone: chatPhone, success: true });
+        // Small delay between sends to avoid rate limiting
+        await new Promise(r => setTimeout(r, 1500));
+      } catch (e: any) {
+        results.push({ phone, success: false, error: e.message });
+      }
+    }
+    log.info({ sent: results.filter(r => r.success).length, failed: results.filter(r => !r.success).length }, 'wa-manager: broadcast complete');
+    res.json({ success: true, results });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const { lead_status, tags, name } = req.body;
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (lead_status !== undefined) {
+      // Record status history
+      try {
+        const current = db.prepare('SELECT lead_status FROM leads WHERE phone = ?').get(phone) as any;
+        db.prepare('INSERT INTO status_history (phone, old_status, new_status) VALUES (?, ?, ?)').run(phone, current?.lead_status || null, lead_status);
+      } catch { /* ok */ }
+      updates.push('lead_status = ?'); params.push(lead_status);
+    }
+    if (tags !== undefined) { updates.push('source = ?'); params.push(tags); }
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (updates.length === 0) {
+      res.status(400).json({ success: false, error: 'No fields to update' });
+      return;
+    }
+    updates.push("updated_at = datetime('now')");
+    params.push(phone);
+    db.prepare(`UPDATE leads SET ${updates.join(', ')} WHERE phone = ?`).run(...params);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// === Tags API ===
+app.get('/api/wa-manager/tags/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const tags = db.prepare('SELECT tag FROM lead_tags WHERE phone = ? ORDER BY created_at ASC').all(phone) as any[];
+    res.json({ success: true, tags: tags.map(t => t.tag) });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/wa-manager/tags/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const { tag } = req.body;
+    if (!tag) { res.status(400).json({ success: false, error: 'Missing tag' }); return; }
+    db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, tag.trim());
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.delete('/api/wa-manager/tags/:phone/:tag', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    db.prepare('DELETE FROM lead_tags WHERE phone = ? AND tag = ?').run(phone, req.params.tag);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.get('/api/wa-manager/all-tags', dashAuth, (_req, res) => {
+  try {
+    const tags = db.prepare('SELECT tag, COUNT(*) as count FROM lead_tags GROUP BY tag ORDER BY count DESC').all();
+    res.json({ success: true, tags });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === Notes API ===
+app.get('/api/wa-manager/notes/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const notes = db.prepare('SELECT * FROM lead_notes WHERE phone = ? ORDER BY created_at DESC').all(phone);
+    res.json({ success: true, notes });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/wa-manager/notes/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const { content } = req.body;
+    if (!content) { res.status(400).json({ success: false, error: 'Missing content' }); return; }
+    db.prepare('INSERT INTO lead_notes (phone, content) VALUES (?, ?)').run(phone, content.trim());
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.delete('/api/wa-manager/notes/:id', dashAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM lead_notes WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === Quick Replies API ===
+app.get('/api/wa-manager/quick-replies', dashAuth, (req, res) => {
+  try {
+    const wsId = req.query.workspace as string | undefined;
+    const replies = wsId
+      ? db.prepare('SELECT * FROM quick_replies WHERE workspace_id = ? OR workspace_id IS NULL ORDER BY sort_order ASC').all(wsId)
+      : db.prepare('SELECT * FROM quick_replies ORDER BY sort_order ASC').all();
+    res.json({ success: true, replies });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/wa-manager/quick-replies', dashAuth, (req, res) => {
+  try {
+    const { title, content, workspace_id } = req.body;
+    if (!title || !content) { res.status(400).json({ success: false, error: 'Missing title or content' }); return; }
+    db.prepare('INSERT INTO quick_replies (title, content, workspace_id) VALUES (?, ?, ?)').run(title, content, workspace_id || null);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.delete('/api/wa-manager/quick-replies/:id', dashAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM quick_replies WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === Status History API ===
+app.get('/api/wa-manager/status-history/:phone', dashAuth, (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const history = db.prepare('SELECT * FROM status_history WHERE phone = ? ORDER BY changed_at DESC LIMIT 20').all(phone);
+    res.json({ success: true, history });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === CSV Export ===
+app.get('/api/wa-manager/export-csv', dashAuth, (req, res) => {
+  try {
+    const workspace = req.query.workspace as string | undefined;
+    const { clause, params } = wsSourceSQL(workspace);
+    const whereClause = clause ? `WHERE ${clause}` : '';
+    const leads = db.prepare(`
+      SELECT l.phone, l.name, l.source, l.lead_status, l.was_booked, l.last_call_summary, l.last_call_sentiment, l.created_at, l.updated_at,
+        (SELECT GROUP_CONCAT(tag, ', ') FROM lead_tags lt WHERE lt.phone = l.phone) as tags,
+        (SELECT COUNT(*) FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')) as message_count
+      FROM leads l ${whereClause} ORDER BY l.updated_at DESC
+    `).all(...params) as any[];
+
+    const header = 'טלפון,שם,מקור,סטטוס,נקבעה פגישה,תגיות,הודעות,סנטימנט,נוצר,עודכן,סיכום שיחה';
+    const rows = leads.map(l => {
+      const fields = [
+        l.phone, `"${(l.name || '').replace(/"/g, '""')}"`, l.source || '',
+        l.lead_status || 'new', l.was_booked ? 'כן' : 'לא',
+        `"${(l.tags || '').replace(/"/g, '""')}"`, l.message_count || 0,
+        l.last_call_sentiment || '', l.created_at || '', l.updated_at || '',
+        `"${(l.last_call_summary || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+      ];
+      return fields.join(',');
+    });
+    const csv = '\uFEFF' + header + '\n' + rows.join('\n');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="leads-${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === Chatbot Flows API ===
+app.get('/api/wa-manager/flows', dashAuth, (req, res) => {
+  try {
+    const wsId = req.query.workspace as string | undefined;
+    const flows = wsId
+      ? db.prepare('SELECT * FROM chatbot_flows WHERE workspace_id = ? OR workspace_id IS NULL ORDER BY created_at DESC').all(wsId)
+      : db.prepare('SELECT * FROM chatbot_flows ORDER BY created_at DESC').all();
+    for (const f of flows as any[]) {
+      try { f.steps = JSON.parse(f.steps); } catch { f.steps = []; }
+      const runs = db.prepare('SELECT COUNT(*) as c FROM flow_runs WHERE flow_id = ?').get(f.id) as any;
+      f.run_count = runs?.c || 0;
+    }
+    res.json({ success: true, flows });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.post('/api/wa-manager/flows', dashAuth, (req, res) => {
+  try {
+    const { name, trigger_type, trigger_value, steps, workspace_id } = req.body;
+    if (!name || !trigger_type) { res.status(400).json({ success: false, error: 'Missing name or trigger_type' }); return; }
+    const result = db.prepare('INSERT INTO chatbot_flows (name, trigger_type, trigger_value, steps, workspace_id) VALUES (?, ?, ?, ?, ?)').run(
+      name, trigger_type, trigger_value || null, JSON.stringify(steps || []), workspace_id || null
+    );
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.patch('/api/wa-manager/flows/:id', dashAuth, (req, res) => {
+  try {
+    const { name, trigger_type, trigger_value, steps, enabled } = req.body;
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (trigger_type !== undefined) { updates.push('trigger_type = ?'); params.push(trigger_type); }
+    if (trigger_value !== undefined) { updates.push('trigger_value = ?'); params.push(trigger_value); }
+    if (steps !== undefined) { updates.push('steps = ?'); params.push(JSON.stringify(steps)); }
+    if (enabled !== undefined) { updates.push('enabled = ?'); params.push(enabled ? 1 : 0); }
+    if (!updates.length) { res.status(400).json({ success: false, error: 'No fields' }); return; }
+    params.push(req.params.id);
+    db.prepare(`UPDATE chatbot_flows SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+app.delete('/api/wa-manager/flows/:id', dashAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM chatbot_flows WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// === Workspace CRUD Endpoints ===
+app.get('/api/wa-manager/workspaces', dashAuth, (_req, res) => {
+  try {
+    const workspaces = getAllWorkspaces();
+    res.json({ success: true, workspaces });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.post('/api/wa-manager/workspaces', dashAuth, (req, res) => {
+  try {
+    const { id, name, icon, color, welcome_msg, system_prompt, monday_board_id, monday_columns, calendar_id, zoom_link, website } = req.body;
+    if (!id || !name) {
+      res.status(400).json({ success: false, error: 'Missing id or name' });
+      return;
+    }
+    createWorkspace({ id, name, icon, color, welcome_msg, system_prompt, monday_board_id, monday_columns, calendar_id, zoom_link, website });
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.patch('/api/wa-manager/workspaces/:id', dashAuth, (req, res) => {
+  try {
+    updateWorkspace(req.params.id, req.body);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+app.delete('/api/wa-manager/workspaces/:id', dashAuth, (req, res) => {
+  try {
+    deleteWorkspace(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// WA Manager HTML
+app.get('/wa-manager', dashAuth, (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(waManagerHTML);
+});
+
 // Dashboard HTML
 app.get('/dashboard', dashAuth, (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -404,11 +904,11 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
       res.json({ success: false, error: 'WhatsApp not connected' });
       return;
     }
-    // Normalize phone: 05X → 972X (whatsapp-web.js needs international format without +)
+    // Normalize phone: 05X → 972X (international format without +)
     let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
-    const chatId = `${chatPhone}@c.us`;
+    const chatId = `${chatPhone}@s.whatsapp.net`;
 
     // Register/update lead in DB for sales follow-up
     if (leadContext || leadName) {
@@ -443,6 +943,10 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
       { id: 'ext', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
       { text: message }
     );
+    // Log outbound WA message for flow tracking
+    try {
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
+    } catch { /* logging failure should not break send */ }
     log.info({ phone, leadName }, 'external WhatsApp text sent');
     res.json({ success: true });
   } catch (e: any) {
@@ -468,7 +972,7 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
-    const chatId = `${chatPhone}@c.us`;
+    const chatId = `${chatPhone}@s.whatsapp.net`;
 
     // Register lead if not already tracked
     if (leadName) {
@@ -485,10 +989,41 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
       { id: 'ext-voice', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
       { text: '', voice: voiceBuffer }
     );
+    // Log outbound voice note for flow tracking
+    try {
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, `[הודעה קולית — ${voiceBuffer.length} bytes]`);
+    } catch { /* logging failure should not break send */ }
     log.info({ phone, leadName, bytes: voiceBuffer.length }, 'external WhatsApp voice sent');
     res.json({ success: true });
   } catch (e: any) {
     log.error({ err: e.message }, 'external WhatsApp voice send failed');
+    res.json({ success: false, error: e.message });
+  }
+});
+
+// WhatsApp message log for flow tracking (outbound + inbound conversations)
+app.get('/api/wa-outbound-log', externalAuth, (req, res) => {
+  try {
+    const since = (req.query.since as string) || new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
+    const phone = req.query.phone as string;
+    let query = `SELECT sender_id as phone, role, content, channel, created_at FROM messages WHERE channel IN ('whatsapp-outbound', 'whatsapp-inbound') AND created_at >= ?`;
+    const params: any[] = [since];
+    if (phone) {
+      const cleanPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+      query += ` AND sender_id = ?`;
+      params.push(cleanPhone);
+    }
+    query += ` ORDER BY created_at DESC LIMIT 500`;
+    const rows = db.prepare(query).all(...params);
+    // Enrich with lead names
+    const enriched = rows.map((row: any) => {
+      try {
+        const lead = db.prepare('SELECT name FROM leads WHERE phone = ?').get(row.phone) as any;
+        return { ...row, name: lead?.name || null };
+      } catch { return { ...row, name: null }; }
+    });
+    res.json({ success: true, count: enriched.length, messages: enriched });
+  } catch (e: any) {
     res.json({ success: false, error: e.message });
   }
 });

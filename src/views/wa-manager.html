@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Manager — AalonBot</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#f5f5f5;--bg2:#ffffff;--bg3:#eaeaea;--border:#ddd;
+  --accent:#25D366;--accent2:#128C7E;--purple:#7b2ff7;--cyan:#0099cc;
+  --text:#1a1a1a;--text2:#666;--text3:#999;
+  --danger:#e74c3c;--warning:#e68a00;--success:#0a3;
+}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;}
+/* Header */
+.header{background:linear-gradient(135deg,#ffffff,#f0faf4);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--accent2);position:fixed;top:0;left:0;right:0;z-index:100;height:56px;}
+.header h1{font-size:20px;font-weight:900;color:var(--accent);display:flex;align-items:center;gap:8px;}
+.header h1 .wa-icon{width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.header-actions{display:flex;gap:10px;align-items:center;}
+.btn{padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;transition:all .2s;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent);}
+.btn-primary:hover{background:var(--accent2);}
+.btn-danger{background:var(--danger);color:#fff;border-color:var(--danger);}
+/* Tabs */
+.tab-bar{position:fixed;top:56px;left:0;right:0;z-index:99;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;padding:0 16px;overflow-x:auto;}
+.tab{padding:12px 20px;cursor:pointer;font-size:13px;font-weight:500;color:var(--text2);border-bottom:2px solid transparent;transition:all .2s;white-space:nowrap;}
+.tab:hover{color:var(--text);}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:700;}
+.tab .badge-count{background:var(--danger);color:#fff;font-size:10px;padding:1px 6px;border-radius:10px;margin-right:4px;font-weight:700;}
+/* Main Content */
+.main{margin-top:100px;height:calc(100vh - 100px);overflow:hidden;}
+.tab-content{display:none;height:100%;}
+.tab-content.active{display:flex;flex-direction:column;}
+/* ===== Overview Tab ===== */
+.overview{padding:20px;overflow-y:auto;height:100%;}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;}
+.stat-card .num{font-size:32px;font-weight:900;color:var(--accent);}
+.stat-card .label{font-size:12px;color:var(--text2);margin-top:4px;}
+.stat-card.purple .num{color:var(--purple);}
+.stat-card.cyan .num{color:var(--cyan);}
+.stat-card.warning .num{color:var(--warning);}
+.section-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:16px;}
+.section-box h3{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;}
+.activity-item{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #eee;font-size:13px;align-items:flex-start;}
+.activity-item:last-child{border-bottom:none;}
+.activity-dot{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;}
+.activity-dot.in{background:var(--cyan);}
+.activity-dot.out{background:var(--accent);}
+.activity-name{font-weight:700;color:var(--accent);min-width:80px;}
+.activity-content{color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.activity-time{color:var(--text3);font-size:11px;min-width:50px;text-align:left;}
+/* Quick actions */
+.quick-actions{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:20px;}
+/* ===== Conversations Tab ===== */
+.conversations-layout{display:flex;height:100%;overflow:hidden;}
+.conv-sidebar{width:340px;min-width:280px;border-left:1px solid var(--border);background:var(--bg2);display:flex;flex-direction:column;overflow:hidden;}
+.conv-search{padding:12px;border-bottom:1px solid var(--border);}
+.conv-search input{width:100%;padding:8px 12px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:inherit;font-size:13px;outline:none;}
+.conv-search input:focus{border-color:var(--accent);}
+.conv-filters{display:flex;gap:6px;padding:8px 12px;border-bottom:1px solid var(--border);overflow-x:auto;}
+.conv-filter{padding:4px 10px;border-radius:12px;font-size:11px;cursor:pointer;background:var(--bg);border:1px solid var(--border);color:var(--text2);white-space:nowrap;}
+.conv-filter.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+.conv-list{overflow-y:auto;flex:1;}
+.conv-item{padding:12px 16px;border-bottom:1px solid #eee;cursor:pointer;transition:background .15s;display:flex;gap:10px;align-items:flex-start;}
+.conv-item:hover{background:var(--bg3);}
+.conv-item.active{background:var(--bg3);border-right:3px solid var(--accent);}
+.conv-avatar{width:40px;height:40px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;flex-shrink:0;}
+.conv-info{flex:1;overflow:hidden;}
+.conv-name{font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;}
+.conv-name .time{font-size:11px;color:var(--text3);font-weight:400;}
+.conv-preview{font-size:12px;color:var(--text2);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.conv-meta{display:flex;gap:6px;margin-top:3px;align-items:center;}
+.conv-source{font-size:10px;padding:1px 6px;border-radius:8px;background:var(--bg);border:1px solid var(--border);color:var(--text3);}
+.conv-unread{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+/* Chat panel */
+.chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;background:var(--bg);}
+.chat-header{padding:12px 20px;border-bottom:1px solid var(--border);background:var(--bg2);display:flex;justify-content:space-between;align-items:center;}
+.chat-header-info h3{font-size:15px;font-weight:700;color:var(--accent);}
+.chat-header-info .phone{font-size:12px;color:var(--text2);}
+.chat-messages{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:6px;}
+.chat-empty{display:flex;align-items:center;justify-content:center;height:100%;color:var(--text3);font-size:15px;}
+.msg-bubble{max-width:75%;padding:8px 12px;border-radius:12px;font-size:13px;line-height:1.5;word-wrap:break-word;position:relative;}
+.msg-bubble .msg-time{font-size:10px;color:var(--text3);margin-top:2px;display:block;}
+.msg-incoming{background:#fff;border:1px solid var(--border);align-self:flex-start;border-radius:12px 12px 12px 2px;}
+.msg-outgoing{background:#dcf8c6;align-self:flex-end;border-radius:12px 12px 2px 12px;color:#1a1a1a;}
+.msg-outgoing .msg-time{color:#666;}
+.chat-input-area{padding:12px 16px;border-top:1px solid var(--border);background:var(--bg2);display:flex;gap:8px;align-items:flex-end;}
+.chat-input-area textarea{flex:1;padding:10px 14px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text);font-family:inherit;font-size:13px;resize:none;outline:none;max-height:100px;min-height:40px;line-height:1.4;}
+.chat-input-area textarea:focus{border-color:var(--accent);}
+.send-btn{width:40px;height:40px;border-radius:50%;background:var(--accent);border:none;color:#fff;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.send-btn:hover{background:var(--accent2);}
+.send-btn:disabled{opacity:0.5;cursor:not-allowed;}
+/* ===== Pipeline Tab ===== */
+.pipeline{padding:16px;overflow-x:auto;height:100%;}
+.kanban{display:flex;gap:14px;height:100%;min-width:max-content;}
+.kanban-col{width:260px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;max-height:100%;}
+.kanban-col-header{padding:12px 14px;border-bottom:1px solid var(--border);font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;}
+.kanban-col-header .count{background:var(--bg3);padding:2px 8px;border-radius:10px;font-size:11px;color:var(--text2);}
+.kanban-col-body{flex:1;overflow-y:auto;padding:8px;}
+.kanban-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:grab;transition:all .15s;}
+.kanban-card:hover{border-color:var(--accent);transform:translateY(-1px);}
+.kanban-card.dragging{opacity:0.5;transform:rotate(2deg);}
+.kanban-card .card-name{font-weight:700;font-size:13px;margin-bottom:3px;}
+.kanban-card .card-phone{font-size:11px;color:var(--text2);}
+.kanban-card .card-source{font-size:10px;color:var(--text3);margin-top:4px;}
+.kanban-card .card-preview{font-size:11px;color:var(--text2);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.kanban-col.drag-over{background:rgba(37,211,102,0.05);border-color:var(--accent);}
+/* Status colors */
+.status-new{border-top:3px solid var(--cyan);}
+.status-contacted{border-top:3px solid var(--warning);}
+.status-interested{border-top:3px solid var(--accent);}
+.status-meeting{border-top:3px solid var(--purple);}
+.status-closed{border-top:3px solid var(--success);}
+/* ===== Broadcasts Tab ===== */
+.broadcasts{padding:20px;overflow-y:auto;height:100%;}
+.broadcast-composer{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;}
+.broadcast-composer h3{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:14px;}
+.form-group{margin-bottom:14px;}
+.form-group label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px;font-weight:500;}
+.form-group select,.form-group textarea,.form-group input{width:100%;padding:10px 14px;border-radius:8px;border:1px solid #ccc;background:#fff;color:#1a1a1a;font-family:inherit;font-size:14px;outline:none;-webkit-appearance:none;appearance:none;}
+.form-group select{background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%23666' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E") no-repeat left 12px center;padding-left:32px;}
+.form-group select:focus,.form-group textarea:focus,.form-group input:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(37,211,102,0.2);}
+.form-group textarea{min-height:80px;resize:vertical;line-height:1.5;}
+.form-group select option{background:#fff;color:#1a1a1a;padding:8px;}
+.recipient-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;}
+.recipient-tag{padding:3px 10px;border-radius:12px;font-size:11px;background:var(--bg);border:1px solid var(--border);display:flex;align-items:center;gap:4px;}
+.recipient-tag .remove{cursor:pointer;color:var(--danger);font-weight:700;}
+.var-hint{font-size:11px;color:var(--text3);margin-top:4px;}
+.broadcast-history h3{font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;}
+/* ===== Analytics Tab ===== */
+.analytics{padding:20px;overflow-y:auto;height:100%;}
+.charts-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;}
+.chart-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;}
+.chart-box h3{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;}
+.chart-canvas{width:100%;height:180px;position:relative;}
+.bar-chart{display:flex;align-items:flex-end;gap:2px;height:100%;padding-top:20px;}
+.bar{background:var(--accent);border-radius:3px 3px 0 0;min-width:6px;flex:1;transition:height .3s;position:relative;cursor:pointer;}
+.bar:hover{background:var(--cyan);}
+.bar .tooltip{display:none;position:absolute;bottom:calc(100% + 4px);left:50%;transform:translateX(-50%);background:var(--bg);border:1px solid var(--border);padding:3px 8px;border-radius:6px;font-size:10px;white-space:nowrap;z-index:10;}
+.bar:hover .tooltip{display:block;}
+.table-box{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:16px;}
+.table-box h3{font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;}
+table{width:100%;border-collapse:collapse;font-size:13px;}
+th{text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;}
+td{padding:8px 10px;border-bottom:1px solid #eee;}
+tr:hover td{background:var(--bg3);}
+/* Utilities */
+.empty-state{text-align:center;color:var(--text3);padding:40px 20px;font-size:14px;}
+.loading{text-align:center;color:var(--text2);padding:30px;}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--accent);color:#fff;padding:10px 24px;border-radius:20px;font-size:13px;font-weight:700;z-index:1000;display:none;animation:fadeIn .3s;}
+@keyframes fadeIn{from{opacity:0;transform:translateX(-50%) translateY(10px);}to{opacity:1;transform:translateX(-50%) translateY(0);}}
+/* Workspace cards */
+.ws-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;margin-bottom:12px;display:flex;align-items:center;gap:14px;transition:all .2s;}
+.ws-card:hover{border-color:var(--accent);}
+.ws-card .ws-icon{font-size:28px;width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;}
+.ws-card .ws-info{flex:1;}
+.ws-card .ws-name{font-size:16px;font-weight:700;}
+.ws-card .ws-meta{font-size:12px;color:var(--text2);margin-top:4px;display:flex;gap:12px;}
+.ws-card .ws-actions{display:flex;gap:6px;}
+.ws-active-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;}
+/* Mobile */
+@media(max-width:768px){
+  .conversations-layout{flex-direction:column;}
+  .conv-sidebar{width:100%;min-width:auto;height:50%;border-left:none;border-bottom:1px solid var(--border);}
+  .chat-panel{height:50%;}
+  .charts-grid{grid-template-columns:1fr;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);}
+  .kanban-col{width:220px;}
+}
+@media(max-width:480px){
+  .header h1{font-size:16px;}
+  .tab{padding:10px 14px;font-size:12px;}
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
+  .stat-card .num{font-size:24px;}
+}
+/* Tags */
+.tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;background:var(--accent);color:#fff;cursor:default;}
+.tag .tag-x{cursor:pointer;font-weight:700;opacity:0.7;margin-right:2px;}
+.tag .tag-x:hover{opacity:1;}
+.tag-input{border:1px solid var(--border);border-radius:10px;padding:2px 8px;font-size:11px;outline:none;width:80px;font-family:inherit;}
+.tag-input:focus{border-color:var(--accent);}
+.tags-row{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin-top:4px;}
+/* Notes */
+.note-item{padding:8px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;font-size:12px;background:var(--bg);position:relative;}
+.note-item .note-time{font-size:10px;color:var(--text3);margin-top:4px;}
+.note-item .note-del{position:absolute;top:6px;left:6px;cursor:pointer;color:var(--danger);font-size:12px;opacity:0.5;}
+.note-item .note-del:hover{opacity:1;}
+.note-input-row{display:flex;gap:6px;margin-top:8px;}
+.note-input-row textarea{flex:1;padding:6px 10px;border:1px solid var(--border);border-radius:8px;font-family:inherit;font-size:12px;resize:none;outline:none;min-height:36px;}
+.note-input-row textarea:focus{border-color:var(--accent);}
+/* Quick replies */
+.qr-bar{display:flex;gap:4px;padding:4px 16px;overflow-x:auto;border-top:1px solid var(--border);background:var(--bg2);}
+.qr-btn{padding:4px 10px;border-radius:12px;font-size:11px;cursor:pointer;background:var(--bg3);border:1px solid var(--border);color:var(--text);white-space:nowrap;font-family:inherit;}
+.qr-btn:hover{border-color:var(--accent);color:var(--accent);}
+/* Status history */
+.history-item{display:flex;gap:8px;align-items:center;font-size:11px;padding:4px 0;border-bottom:1px solid var(--border);}
+.history-item:last-child{border-bottom:none;}
+.history-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0;}
+/* Lead detail panel */
+.lead-detail{border-top:1px solid var(--border);padding:10px 16px;background:var(--bg2);max-height:220px;overflow-y:auto;font-size:12px;}
+.lead-detail h4{font-size:12px;font-weight:700;color:var(--accent);margin:8px 0 4px;}
+.lead-detail h4:first-child{margin-top:0;}
+/* Scrollbar */
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#aaa;}
+/* Modal */
+.modal-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:200;align-items:center;justify-content:center;}
+.modal-overlay.open{display:flex;}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:24px;width:90%;max-width:500px;max-height:80vh;overflow-y:auto;}
+.modal h3{font-size:17px;font-weight:700;color:var(--accent);margin-bottom:16px;}
+.modal-actions{display:flex;gap:8px;margin-top:16px;justify-content:flex-end;}
+/* Flows */
+.flow-card{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;display:flex;align-items:center;gap:12px;transition:border-color .2s;}
+.flow-card:hover{border-color:var(--accent);}
+.flow-card .flow-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.flow-card .flow-info{flex:1;}
+.flow-card .flow-name{font-weight:700;font-size:14px;}
+.flow-card .flow-meta{font-size:11px;color:var(--text2);margin-top:2px;display:flex;gap:10px;}
+.flow-card .flow-actions{display:flex;gap:6px;align-items:center;}
+.flow-toggle{position:relative;width:36px;height:20px;cursor:pointer;}
+.flow-toggle input{display:none;}
+.flow-toggle .slider{position:absolute;inset:0;background:var(--border);border-radius:10px;transition:.2s;}
+.flow-toggle .slider::before{content:'';position:absolute;width:16px;height:16px;border-radius:50%;background:#fff;top:2px;right:2px;transition:.2s;}
+.flow-toggle input:checked+.slider{background:var(--accent);}
+.flow-toggle input:checked+.slider::before{right:18px;}
+/* ===== Visual Flow Editor (n8n style) ===== */
+.flow-editor-overlay{display:none;position:fixed;inset:0;z-index:300;background:var(--bg);}
+.flow-editor-overlay.open{display:flex;flex-direction:column;}
+.fe-toolbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;}
+.fe-toolbar .fe-title{font-size:16px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:8px;}
+.fe-toolbar .fe-title input{background:transparent;border:none;border-bottom:2px solid transparent;font-size:16px;font-weight:700;color:var(--text);font-family:inherit;outline:none;padding:2px 4px;width:200px;}
+.fe-toolbar .fe-title input:focus{border-bottom-color:var(--accent);}
+.fe-toolbar-actions{display:flex;gap:8px;align-items:center;}
+.fe-body{flex:1;display:flex;overflow:hidden;}
+.fe-sidebar{width:220px;background:var(--bg2);border-left:1px solid var(--border);padding:16px;overflow-y:auto;flex-shrink:0;}
+.fe-sidebar h4{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+.fe-node-type{padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:grab;display:flex;align-items:center;gap:10px;transition:all .2s;background:var(--bg);font-size:13px;font-weight:500;}
+.fe-node-type:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.fe-node-type .nt-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.fe-canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg);cursor:grab;}
+.fe-canvas-wrap.grabbing{cursor:grabbing;}
+.fe-canvas{position:absolute;top:0;right:0;width:4000px;height:4000px;transform-origin:0 0;}
+.fe-canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;}
+.fe-canvas svg.fe-connections{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
+.fe-canvas svg.fe-connections path{stroke:var(--border);stroke-width:2;fill:none;}
+.fe-canvas svg.fe-connections path.active{stroke:var(--accent);stroke-width:2.5;}
+/* Node on canvas */
+.fe-node{position:absolute;width:220px;background:var(--bg2);border:2px solid var(--border);border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.06);cursor:grab;z-index:10;transition:box-shadow .2s;user-select:none;}
+.fe-node:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1);}
+.fe-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,211,102,0.2);}
+.fe-node.dragging{z-index:100;opacity:0.9;cursor:grabbing;}
+.fe-node-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;border-radius:10px 10px 0 0;}
+.fe-node-header .nh-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.fe-node-header .nh-label{font-size:12px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fe-node-header .nh-delete{cursor:pointer;color:var(--text3);font-size:14px;opacity:0;transition:opacity .2s;}
+.fe-node:hover .nh-delete{opacity:1;}
+.fe-node-header .nh-delete:hover{color:var(--danger);}
+.fe-node-body{padding:10px 14px;font-size:12px;color:var(--text2);min-height:36px;}
+.fe-node-body textarea,.fe-node-body input,.fe-node-body select{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:11px;outline:none;background:var(--bg);color:var(--text);resize:vertical;}
+.fe-node-body textarea:focus,.fe-node-body input:focus,.fe-node-body select:focus{border-color:var(--accent);}
+.fe-node-body label{display:block;font-size:10px;color:var(--text3);margin-bottom:2px;margin-top:6px;}
+.fe-node-body label:first-child{margin-top:0;}
+/* Port dots */
+.fe-port{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--bg2);border:2px solid var(--border);cursor:crosshair;z-index:20;transition:all .15s;}
+.fe-port:hover{transform:scale(1.3);border-color:var(--accent);background:var(--accent);}
+.fe-port.port-in{top:50%;right:-7px;transform:translateY(-50%);}
+.fe-port.port-out{top:50%;left:-7px;transform:translateY(-50%);}
+.fe-port.port-in:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.port-out:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.connected{background:var(--accent);border-color:var(--accent);}
+/* Trigger node (special) */
+.fe-node.trigger-node{border-color:var(--purple);}
+.fe-node.trigger-node .fe-node-header{background:linear-gradient(135deg,rgba(123,47,247,0.08),transparent);}
+/* Settings panel */
+.fe-settings{display:flex;gap:12px;align-items:center;padding:8px 16px;background:var(--bg2);border-top:1px solid var(--border);font-size:12px;}
+.fe-settings label{color:var(--text2);}
+.fe-settings select,.fe-settings input{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:#fff;color:var(--text);}
+/* Zoom controls */
+.fe-zoom{position:absolute;bottom:16px;left:16px;display:flex;gap:4px;z-index:50;}
+.fe-zoom button{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--text);transition:all .15s;}
+.fe-zoom button:hover{border-color:var(--accent);color:var(--accent);}
+.fe-zoom .zoom-level{padding:0 8px;line-height:32px;font-size:11px;color:var(--text2);}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1><span class="wa-icon">&#9742;</span> WhatsApp Manager</h1>
+  <div class="header-actions">
+    <select id="workspace-select" class="btn" onchange="switchWorkspace(this.value)" style="font-size:12px;min-width:120px;background:#fff;color:#1a1a1a;border:1px solid #ccc;">
+      <option value="">🌐 כל העסקים</option>
+    </select>
+    <span id="conn-status" class="btn" style="font-size:11px;cursor:default;">&#9679; טוען...</span>
+    <button class="btn" onclick="exportCSV()">&#128229; CSV</button>
+    <button class="btn" onclick="loadAll()">&#x21bb; רענון</button>
+    <a href="/dashboard" class="btn">דשבורד ראשי</a>
+  </div>
+</div>
+
+<div class="tab-bar">
+  <div class="tab active" data-tab="overview">סקירה</div>
+  <div class="tab" data-tab="conversations">שיחות <span class="badge-count" id="unread-badge" style="display:none;"></span></div>
+  <div class="tab" data-tab="pipeline">צינור מכירות</div>
+  <div class="tab" data-tab="broadcasts">שידורים</div>
+  <div class="tab" data-tab="analytics">אנליטיקס</div>
+  <div class="tab" data-tab="settings">הגדרות</div>
+</div>
+
+<div class="main">
+  <!-- Overview -->
+  <div class="tab-content active" id="tc-overview">
+    <div class="overview">
+      <div class="stats-grid" id="overview-stats"></div>
+      <div class="quick-actions">
+        <button class="btn btn-primary" onclick="switchTab('broadcasts')">&#9993; שידור חדש</button>
+        <button class="btn" onclick="switchTab('pipeline')">&#9776; צפה בצינור</button>
+        <button class="btn" onclick="switchTab('conversations')">&#128172; שיחות</button>
+      </div>
+      <div class="section-box">
+        <h3>פעילות אחרונה</h3>
+        <div id="recent-activity"><div class="loading">טוען...</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conversations -->
+  <div class="tab-content" id="tc-conversations">
+    <div class="conversations-layout">
+      <div class="conv-sidebar">
+        <div class="conv-search">
+          <input type="text" id="conv-search-input" placeholder="&#128269; חיפוש אנשי קשר..." oninput="filterConversations()">
+        </div>
+        <div class="conv-filters" id="conv-filters-bar"></div>
+        <div class="conv-list" id="conv-list"><div class="loading">טוען שיחות...</div></div>
+      </div>
+      <div class="chat-panel">
+        <div class="chat-header" id="chat-header" style="display:none;">
+          <div class="chat-header-info">
+            <h3 id="chat-lead-name">—</h3>
+            <div class="phone" id="chat-lead-phone"></div>
+          </div>
+          <div style="display:flex;gap:6px;">
+            <select id="chat-status-select" class="btn" onchange="updateLeadStatus()" style="font-size:11px;background:#fff;color:#1a1a1a;border:1px solid #ccc;">
+              <option value="">סטטוס</option>
+              <option value="new">חדש</option>
+              <option value="contacted">יצרנו קשר</option>
+              <option value="interested">מעוניין</option>
+              <option value="meeting_set">נקבע זום</option>
+              <option value="closed">סגור</option>
+            </select>
+          </div>
+        </div>
+        <div class="chat-messages" id="chat-messages">
+          <div class="chat-empty">בחר שיחה מהרשימה</div>
+        </div>
+        <div class="lead-detail" id="lead-detail" style="display:none;">
+          <h4>תגיות</h4>
+          <div class="tags-row" id="lead-tags"></div>
+          <h4>הערות פנימיות</h4>
+          <div id="lead-notes"></div>
+          <div class="note-input-row">
+            <textarea id="note-input" placeholder="הוסף הערה..." rows="1"></textarea>
+            <button class="btn btn-primary" onclick="addNote()" style="padding:4px 12px;font-size:11px;">+</button>
+          </div>
+          <h4>היסטוריית סטטוס</h4>
+          <div id="lead-status-history"></div>
+        </div>
+        <div class="qr-bar" id="qr-bar" style="display:none;"></div>
+        <div class="chat-input-area" id="chat-input-area" style="display:none;">
+          <textarea id="chat-msg-input" placeholder="כתוב הודעה..." rows="1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChatMessage();}"></textarea>
+          <button class="send-btn" id="send-btn" onclick="sendChatMessage()">&#10148;</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pipeline -->
+  <div class="tab-content" id="tc-pipeline">
+    <div class="pipeline">
+      <div class="kanban" id="kanban-board"></div>
+    </div>
+  </div>
+
+  <!-- Broadcasts -->
+  <div class="tab-content" id="tc-broadcasts">
+    <div class="broadcasts">
+      <div class="broadcast-composer">
+        <h3>&#128227; שידור חדש</h3>
+        <div class="form-group">
+          <label>נמענים</label>
+          <select id="bc-recipient-mode" onchange="updateRecipientPreview()">
+            <option value="all">כל הלידים</option>
+            <option value="status">לפי סטטוס</option>
+            <option value="source">לפי מקור</option>
+            <option value="custom">בחירה ידנית</option>
+          </select>
+        </div>
+        <div class="form-group" id="bc-status-filter" style="display:none;">
+          <label>סנן לפי סטטוס</label>
+          <select id="bc-status-select">
+            <option value="new">חדש</option>
+            <option value="contacted">יצרנו קשר</option>
+            <option value="interested">מעוניין</option>
+            <option value="meeting_set">נקבע זום</option>
+          </select>
+        </div>
+        <div class="form-group" id="bc-source-filter" style="display:none;">
+          <label>סנן לפי מקור</label>
+          <select id="bc-source-select">
+            <option value="voice_agent">Voice Agent</option>
+            <option value="alon_dev">Alon.dev</option>
+            <option value="dekel">דקל לפרישה</option>
+          </select>
+        </div>
+        <div class="form-group" id="bc-custom-select" style="display:none;">
+          <label>בחר לידים (Ctrl+click לבחירה מרובה)</label>
+          <select id="bc-custom-leads" multiple style="height:120px;background:#fff;color:#1a1a1a;border:1px solid #ccc;"></select>
+        </div>
+        <div id="bc-recipient-preview" class="recipient-tags"></div>
+        <div class="form-group">
+          <label>הודעה</label>
+          <textarea id="bc-message" placeholder="היי {name}, ..."></textarea>
+          <div class="var-hint">משתנים: {name} — שם הליד, {phone} — מספר טלפון</div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+          <button class="btn btn-primary" onclick="sendBroadcast()">&#128640; שלח עכשיו</button>
+          <span id="bc-count" style="font-size:12px;color:var(--text2);"></span>
+        </div>
+      </div>
+      <div class="section-box">
+        <h3>היסטוריית שידורים</h3>
+        <div id="broadcast-history"><div class="empty-state">אין שידורים קודמים</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics -->
+  <div class="tab-content" id="tc-analytics">
+    <div class="analytics">
+      <div class="charts-grid">
+        <div class="chart-box">
+          <h3>&#128200; הודעות ליום (30 ימים)</h3>
+          <div class="chart-canvas" id="chart-messages"></div>
+        </div>
+        <div class="chart-box">
+          <h3>&#128201; לידים חדשים ליום</h3>
+          <div class="chart-canvas" id="chart-leads"></div>
+        </div>
+      </div>
+      <div class="charts-grid">
+        <div class="table-box">
+          <h3>פילוח לפי מקור</h3>
+          <table id="tbl-sources"><tbody></tbody></table>
+        </div>
+        <div class="table-box">
+          <h3>משפך המרה</h3>
+          <table id="tbl-funnel"><tbody></tbody></table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings -->
+  <div class="tab-content" id="tc-settings">
+    <div class="settings" style="padding:20px;overflow-y:auto;height:100%;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;">
+        <h3 style="color:var(--accent);font-size:18px;font-weight:900;">ניהול עסקים (Workspaces)</h3>
+        <button class="btn btn-primary" onclick="showAddWorkspace()">+ עסק חדש</button>
+      </div>
+      <div id="workspaces-list"></div>
+
+      <!-- Chatbot Flows -->
+      <div style="display:flex;justify-content:space-between;align-items:center;margin:30px 0 16px;">
+        <h3 style="color:var(--purple);font-size:18px;font-weight:900;">&#9889; אוטומציות (Chatbot Flows)</h3>
+        <button class="btn btn-primary" onclick="showFlowEditor()">+ פלו חדש</button>
+      </div>
+      <div id="flows-list"><div class="loading">טוען...</div></div>
+
+      <!-- Visual Flow Editor (full-screen n8n style) -->
+      <div class="flow-editor-overlay" id="flow-editor">
+        <div class="fe-toolbar">
+          <div class="fe-title">
+            <span style="font-size:20px;">&#9889;</span>
+            <input id="fe-name" placeholder="שם הפלו..." value="">
+          </div>
+          <div class="fe-toolbar-actions">
+            <button class="btn btn-danger" id="fe-delete-btn" style="display:none;" onclick="deleteFlow()">&#128465; מחק</button>
+            <button class="btn" onclick="closeFlowEditor()">ביטול</button>
+            <button class="btn btn-primary" onclick="saveFlow()">&#128190; שמור</button>
+          </div>
+        </div>
+        <div class="fe-body">
+          <div class="fe-sidebar">
+            <h4>&#128230; נודים</h4>
+            <div class="fe-node-type" draggable="true" data-type="send_message" ondragstart="onNodeTypeDrag(event,'send_message')">
+              <div class="nt-icon" style="background:#dcf8c6;">&#128172;</div>
+              <div>שלח הודעה</div>
+            </div>
+            <div class="fe-node-type" draggable="true" data-type="wait" ondragstart="onNodeTypeDrag(event,'wait')">
+              <div class="nt-icon" style="background:#fff3cd;">&#9203;</div>
+              <div>המתנה</div>
+            </div>
+            <div class="fe-node-type" draggable="true" data-type="condition" ondragstart="onNodeTypeDrag(event,'condition')">
+              <div class="nt-icon" style="background:#e8daff;">&#128256;</div>
+              <div>תנאי</div>
+            </div>
+            <div class="fe-node-type" draggable="true" data-type="webhook" ondragstart="onNodeTypeDrag(event,'webhook')">
+              <div class="nt-icon" style="background:#d4edff;">&#127760;</div>
+              <div>Webhook</div>
+            </div>
+            <h4 style="margin-top:20px;">&#9881; הגדרות</h4>
+            <div style="margin-bottom:10px;">
+              <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">טריגר</label>
+              <select id="fe-trigger-type" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:#fff;" onchange="updateFeTriggerUI()">
+                <option value="keyword">&#128273; מילת מפתח</option>
+                <option value="new_lead">&#127381; ליד חדש</option>
+                <option value="status_change">&#128260; שינוי סטטוס</option>
+              </select>
+            </div>
+            <div id="fe-trigger-val-wrap">
+              <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;" id="fe-trigger-val-label">ערך</label>
+              <input id="fe-trigger-value" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;" placeholder="שלום">
+            </div>
+            <div style="margin-top:10px;">
+              <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">Workspace</label>
+              <select id="fe-ws" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:#fff;">
+                <option value="">&#127760; כלל-עסקי</option>
+              </select>
+            </div>
+          </div>
+          <div class="fe-canvas-wrap" id="fe-canvas-wrap"
+            ondragover="event.preventDefault()" ondrop="onCanvasDrop(event)">
+            <div class="fe-canvas" id="fe-canvas">
+              <div class="fe-canvas-grid"></div>
+              <svg class="fe-connections" id="fe-connections"></svg>
+            </div>
+            <div class="fe-zoom">
+              <button onclick="feZoom(-0.1)">&#8722;</button>
+              <span class="zoom-level" id="fe-zoom-level">100%</span>
+              <button onclick="feZoom(0.1)">&#43;</button>
+              <button onclick="feZoom(0)" title="איפוס">&#8634;</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Add workspace modal -->
+      <div class="modal-overlay" id="ws-modal">
+        <div class="modal" style="max-width:600px;">
+          <h3 id="ws-modal-title">עסק חדש</h3>
+          <div class="form-group">
+            <label>מזהה (slug, אנגלית)</label>
+            <input id="ws-id" placeholder="my_business" />
+          </div>
+          <div class="form-group">
+            <label>שם העסק</label>
+            <input id="ws-name" placeholder="העסק שלי" />
+          </div>
+          <div class="form-group" style="display:flex;gap:10px;">
+            <div style="flex:1">
+              <label>אייקון</label>
+              <input id="ws-icon" value="📱" />
+            </div>
+            <div style="flex:1">
+              <label>צבע</label>
+              <input id="ws-color" type="color" value="#25D366" style="height:38px;" />
+            </div>
+          </div>
+          <div class="form-group">
+            <label>הודעת פתיחה (לליד חדש)</label>
+            <textarea id="ws-welcome" rows="3" placeholder="היי! ברוך הבא..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>פרומפט מכירה (template — משתנים: {{name}}, {{phone}}, {{status}}, {{summary}}, {{workspace_name}}, {{zoom_link}}, {{website}}, {{board_id}})</label>
+            <textarea id="ws-prompt" rows="8" placeholder="## מצב מכירה — {{workspace_name}}&#10;&#10;אתה נציג מכירות של {{workspace_name}}..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>Monday.com Board ID</label>
+            <input id="ws-monday" placeholder="5092777389" />
+          </div>
+          <div class="form-group">
+            <label>לינק זום</label>
+            <input id="ws-zoom" placeholder="https://zoom.us/j/..." />
+          </div>
+          <div class="form-group">
+            <label>אתר</label>
+            <input id="ws-website" placeholder="https://..." />
+          </div>
+          <div class="modal-actions">
+            <button class="btn" onclick="closeWsModal()">ביטול</button>
+            <button class="btn btn-primary" onclick="saveWorkspace()">שמור</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Lead Details Modal -->
+<div class="modal-overlay" id="lead-modal">
+  <div class="modal">
+    <h3 id="modal-lead-name"></h3>
+    <div id="modal-lead-details"></div>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeModal()">סגור</button>
+      <button class="btn btn-primary" onclick="openConversation(currentModalPhone)">פתח שיחה</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ====== State ======
+let allLeads = [];
+let stats = {};
+let currentPhone = null;
+let currentFilter = 'all';
+let currentModalPhone = null;
+let broadcastLog = JSON.parse(localStorage.getItem('wa_broadcast_log') || '[]');
+let workspaces = [];
+let currentWorkspace = localStorage.getItem('wa-workspace') || '';
+
+const API = (path) => '/api/wa-manager/' + path;
+const STATUS_MAP = {
+  'new': 'חדש', 'contacted': 'יצרנו קשר', 'interested': 'מעוניין',
+  'meeting_set': 'נקבע זום', 'closed': 'סגור', '': 'לא הוגדר', null: 'לא הוגדר'
+};
+const STATUS_KEYS = ['new', 'contacted', 'interested', 'meeting_set', 'closed'];
+
+// ====== Init ======
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('.tab-bar .tab').forEach(t => {
+    t.addEventListener('click', () => switchTab(t.dataset.tab));
+  });
+  loadWorkspaces().then(() => {
+    if (currentWorkspace) {
+      const ws = workspaces.find(w => w.id === currentWorkspace);
+      if (ws) document.documentElement.style.setProperty('--accent', ws.color);
+    }
+    loadAll();
+  });
+  setInterval(loadAll, 30000);
+});
+
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-bar .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === 'tc-' + tabId));
+}
+
+async function loadAll() {
+  try {
+    const wsParam = currentWorkspace ? `?workspace=${currentWorkspace}` : '';
+    const [statsRes, leadsRes] = await Promise.all([
+      fetch(API('stats') + wsParam).then(r => r.json()),
+      fetch(API('leads') + wsParam).then(r => r.json()),
+    ]);
+    if (statsRes.success) {
+      stats = statsRes;
+      renderOverviewStats();
+      renderAnalytics();
+      updateConnStatus(true);
+    }
+    if (leadsRes.success) {
+      allLeads = leadsRes.leads || [];
+      renderConvList();
+      renderPipeline();
+      renderRecentActivity();
+      updateBroadcastOptions();
+      renderWorkspacesList();
+    }
+  } catch (e) {
+    console.error('Load failed:', e);
+    updateConnStatus(false);
+  }
+}
+
+function updateConnStatus(ok) {
+  const el = document.getElementById('conn-status');
+  if (ok) {
+    el.innerHTML = '&#9679; מחובר';
+    el.style.color = 'var(--accent)';
+    el.style.borderColor = 'var(--accent)';
+  } else {
+    el.innerHTML = '&#9679; מנותק';
+    el.style.color = 'var(--danger)';
+    el.style.borderColor = 'var(--danger)';
+  }
+}
+
+// ====== Workspaces ======
+async function loadWorkspaces() {
+  try {
+    const res = await fetch(API('workspaces'));
+    const data = await res.json();
+    if (data.success) {
+      workspaces = data.workspaces || [];
+      renderWorkspaceSelector();
+      renderWorkspacesList();
+      renderConvFilters();
+    }
+  } catch(e) { console.error('loadWorkspaces failed:', e); }
+}
+
+function renderWorkspaceSelector() {
+  const sel = document.getElementById('workspace-select');
+  let html = '<option value="">🌐 כל העסקים</option>';
+  for (const ws of workspaces) {
+    html += `<option value="${ws.id}" ${ws.id === currentWorkspace ? 'selected' : ''}>${ws.icon} ${esc(ws.name)}</option>`;
+  }
+  sel.innerHTML = html;
+}
+
+function switchWorkspace(id) {
+  currentWorkspace = id;
+  localStorage.setItem('wa-workspace', id);
+  const ws = workspaces.find(w => w.id === id);
+  if (ws) {
+    document.documentElement.style.setProperty('--accent', ws.color);
+  } else {
+    document.documentElement.style.setProperty('--accent', '#25D366');
+  }
+  loadAll();
+}
+
+function renderConvFilters() {
+  const container = document.querySelector('.conv-filters');
+  let html = '<div class="conv-filter active" data-filter="all" onclick="setConvFilter(\'all\')">הכל</div>';
+  for (const ws of workspaces) {
+    html += `<div class="conv-filter" data-filter="${ws.id}" onclick="setConvFilter('${ws.id}')">${ws.icon} ${esc(ws.name)}</div>`;
+  }
+  container.innerHTML = html;
+}
+
+function renderWorkspacesList() {
+  const container = document.getElementById('workspaces-list');
+  if (!workspaces.length) {
+    container.innerHTML = '<div class="empty-state">אין עסקים מוגדרים</div>';
+    return;
+  }
+  let html = '';
+  for (const ws of workspaces) {
+    const leadCount = allLeads.filter(l => l.source === ws.id).length;
+    html += `
+    <div class="ws-card" style="border-right:4px solid ${ws.color};">
+      <div class="ws-icon" style="background:${ws.color}20;">${ws.icon}</div>
+      <div class="ws-info">
+        <div class="ws-name">${esc(ws.name)} <span class="ws-active-dot" style="background:${ws.active ? 'var(--accent)' : 'var(--danger)'};"></span></div>
+        <div class="ws-meta">
+          <span>${leadCount} לידים</span>
+          <span>${ws.monday_board_id ? 'Monday: ' + ws.monday_board_id : 'ללא Monday'}</span>
+          ${ws.website ? `<span><a href="${ws.website}" target="_blank" style="color:var(--cyan);text-decoration:none;">${ws.website}</a></span>` : ''}
+        </div>
+      </div>
+      <div class="ws-actions">
+        <button class="btn" onclick="editWorkspace('${ws.id}')">עריכה</button>
+        <button class="btn" onclick="switchWorkspace('${ws.id}');switchTab('overview');" style="border-color:${ws.color};color:${ws.color};">צפה</button>
+      </div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function showAddWorkspace() {
+  document.getElementById('ws-modal-title').textContent = 'עסק חדש';
+  document.getElementById('ws-id').value = '';
+  document.getElementById('ws-id').disabled = false;
+  document.getElementById('ws-name').value = '';
+  document.getElementById('ws-icon').value = '📱';
+  document.getElementById('ws-color').value = '#25D366';
+  document.getElementById('ws-welcome').value = '';
+  document.getElementById('ws-prompt').value = '';
+  document.getElementById('ws-monday').value = '';
+  document.getElementById('ws-zoom').value = '';
+  document.getElementById('ws-website').value = '';
+  document.getElementById('ws-modal').classList.add('open');
+  document.getElementById('ws-modal')._editId = null;
+}
+
+function editWorkspace(id) {
+  const ws = workspaces.find(w => w.id === id);
+  if (!ws) return;
+  document.getElementById('ws-modal-title').textContent = 'עריכת ' + ws.name;
+  document.getElementById('ws-id').value = ws.id;
+  document.getElementById('ws-id').disabled = true;
+  document.getElementById('ws-name').value = ws.name;
+  document.getElementById('ws-icon').value = ws.icon;
+  document.getElementById('ws-color').value = ws.color;
+  document.getElementById('ws-welcome').value = ws.welcome_msg || '';
+  document.getElementById('ws-prompt').value = ws.system_prompt || '';
+  document.getElementById('ws-monday').value = ws.monday_board_id || '';
+  document.getElementById('ws-zoom').value = ws.zoom_link || '';
+  document.getElementById('ws-website').value = ws.website || '';
+  document.getElementById('ws-modal').classList.add('open');
+  document.getElementById('ws-modal')._editId = id;
+}
+
+function closeWsModal() {
+  document.getElementById('ws-modal').classList.remove('open');
+}
+
+async function saveWorkspace() {
+  const editId = document.getElementById('ws-modal')._editId;
+  const data = {
+    id: document.getElementById('ws-id').value.trim(),
+    name: document.getElementById('ws-name').value.trim(),
+    icon: document.getElementById('ws-icon').value.trim() || '📱',
+    color: document.getElementById('ws-color').value,
+    welcome_msg: document.getElementById('ws-welcome').value.trim() || null,
+    system_prompt: document.getElementById('ws-prompt').value.trim() || null,
+    monday_board_id: document.getElementById('ws-monday').value.trim() || null,
+    zoom_link: document.getElementById('ws-zoom').value.trim() || null,
+    website: document.getElementById('ws-website').value.trim() || null,
+  };
+  if (!data.id || !data.name) { showToast('חובה למלא מזהה ושם'); return; }
+
+  try {
+    if (editId) {
+      await fetch(API('workspaces/' + editId), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      showToast(data.name + ' עודכן');
+    } else {
+      await fetch(API('workspaces'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      showToast(data.name + ' נוצר');
+    }
+    closeWsModal();
+    await loadWorkspaces();
+  } catch (e) {
+    showToast('שגיאה: ' + e.message);
+  }
+}
+
+// ====== Overview ======
+function renderOverviewStats() {
+  const wsLabel = currentWorkspace ? (workspaces.find(w => w.id === currentWorkspace)?.name || currentWorkspace) : 'כל העסקים';
+  const wsIcon = currentWorkspace ? (workspaces.find(w => w.id === currentWorkspace)?.icon || '🌐') : '🌐';
+  const html = `
+    <div style="font-size:14px;color:var(--text2);margin-bottom:12px;grid-column:1/-1;">${wsIcon} ${esc(wsLabel)}</div>
+    <div class="stat-card"><div class="num">${stats.totalLeads || 0}</div><div class="label">סה"כ לידים</div></div>
+    <div class="stat-card cyan"><div class="num">${stats.activeConvos || 0}</div><div class="label">שיחות פעילות (7 ימים)</div></div>
+    <div class="stat-card purple"><div class="num">${stats.messagesToday || 0}</div><div class="label">הודעות היום</div></div>
+    <div class="stat-card warning"><div class="num">${stats.responseRate || 0}%</div><div class="label">שיעור מענה</div></div>
+    <div class="stat-card"><div class="num">${stats.pendingFollowups || 0}</div><div class="label">ממתינים למעקב</div></div>
+    <div class="stat-card" style="border-top:2px solid var(--accent);"><div class="num">${stats.bookedCount || 0}</div><div class="label">נקבעו פגישות</div></div>
+    <div class="stat-card cyan"><div class="num">${stats.avgResponseMin || '—'}</div><div class="label">זמן תגובה ממוצע (דק׳)</div></div>
+  `;
+  document.getElementById('overview-stats').innerHTML = html;
+}
+
+function renderRecentActivity() {
+  const recent = allLeads
+    .filter(l => l.last_message)
+    .sort((a, b) => (b.last_message_at || '').localeCompare(a.last_message_at || ''))
+    .slice(0, 20);
+  if (!recent.length) {
+    document.getElementById('recent-activity').innerHTML = '<div class="empty-state">אין פעילות אחרונה</div>';
+    return;
+  }
+  let html = '';
+  for (const l of recent) {
+    const isOut = l.last_message_role === 'assistant';
+    const time = l.last_message_at ? formatTime(l.last_message_at) : '';
+    const preview = (l.last_message || '').slice(0, 80);
+    html += `
+      <div class="activity-item" onclick="openConversation('${l.phone}')" style="cursor:pointer;">
+        <div class="activity-dot ${isOut ? 'out' : 'in'}"></div>
+        <span class="activity-name">${esc(l.name || l.phone)}</span>
+        <span class="activity-content">${isOut ? '&#8592; ' : '&#8594; '}${esc(preview)}</span>
+        <span class="activity-time">${time}</span>
+      </div>`;
+  }
+  document.getElementById('recent-activity').innerHTML = html;
+}
+
+// ====== Conversations ======
+function renderConvList() {
+  const search = (document.getElementById('conv-search-input')?.value || '').toLowerCase();
+  let filtered = allLeads;
+  if (currentFilter !== 'all') {
+    filtered = filtered.filter(l => (l.source || '').includes(currentFilter));
+  }
+  if (search) {
+    filtered = filtered.filter(l =>
+      (l.name || '').toLowerCase().includes(search) ||
+      (l.phone || '').includes(search)
+    );
+  }
+  filtered.sort((a, b) => (b.last_message_at || b.updated_at || '').localeCompare(a.last_message_at || a.updated_at || ''));
+
+  if (!filtered.length) {
+    document.getElementById('conv-list').innerHTML = '<div class="empty-state">אין שיחות</div>';
+    return;
+  }
+  let html = '';
+  for (const l of filtered) {
+    const initials = (l.name || '?').slice(0, 2);
+    const time = l.last_message_at ? formatTime(l.last_message_at) : '';
+    const preview = (l.last_message || 'אין הודעות').slice(0, 60);
+    const isActive = l.phone === currentPhone;
+    const isUnread = l.last_message_role === 'user';
+    html += `
+      <div class="conv-item ${isActive ? 'active' : ''}" onclick="openConversation('${l.phone}')">
+        <div class="conv-avatar">${esc(initials)}</div>
+        <div class="conv-info">
+          <div class="conv-name">${esc(l.name || l.phone)} <span class="time">${time}</span></div>
+          <div class="conv-preview">${esc(preview)}</div>
+          <div class="conv-meta">
+            <span class="conv-source">${esc(l.source || '—')}</span>
+            ${(l.tags||[]).map(t => `<span class="tag" style="font-size:9px;padding:1px 5px;">${esc(t)}</span>`).join('')}
+            ${isUnread ? '<span class="conv-unread"></span>' : ''}
+          </div>
+        </div>
+      </div>`;
+  }
+  document.getElementById('conv-list').innerHTML = html;
+}
+
+function filterConversations() { renderConvList(); }
+
+function setConvFilter(filter) {
+  currentFilter = filter;
+  document.querySelectorAll('.conv-filter').forEach(f => f.classList.toggle('active', f.dataset.filter === filter));
+  renderConvList();
+}
+
+async function openConversation(phone) {
+  currentPhone = phone;
+  renderConvList(); // Update active state
+  switchTab('conversations');
+
+  const header = document.getElementById('chat-header');
+  const inputArea = document.getElementById('chat-input-area');
+  const messagesDiv = document.getElementById('chat-messages');
+  header.style.display = 'flex';
+  inputArea.style.display = 'flex';
+  messagesDiv.innerHTML = '<div class="loading">טוען שיחה...</div>';
+
+  try {
+    const res = await fetch(API('conversations/' + phone));
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+
+    const lead = data.lead || {};
+    document.getElementById('chat-lead-name').textContent = lead.name || phone;
+    document.getElementById('chat-lead-phone').textContent = formatPhone(phone);
+    const statusSel = document.getElementById('chat-status-select');
+    statusSel.value = lead.lead_status || '';
+
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      messagesDiv.innerHTML = '<div class="chat-empty">אין הודעות עדיין. שלח הודעה ראשונה!</div>';
+      return;
+    }
+    let html = '';
+    for (const m of msgs) {
+      const isOut = m.role === 'assistant';
+      const time = m.created_at ? formatTime(m.created_at) : '';
+      html += `<div class="msg-bubble ${isOut ? 'msg-outgoing' : 'msg-incoming'}">
+        ${renderMd(m.content)}
+        <span class="msg-time">${time}</span>
+      </div>`;
+    }
+    messagesDiv.innerHTML = html;
+    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+  } catch (e) {
+    messagesDiv.innerHTML = `<div class="empty-state">שגיאה: ${esc(e.message)}</div>`;
+  }
+}
+
+async function sendChatMessage() {
+  if (!currentPhone) return;
+  const input = document.getElementById('chat-msg-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.disabled = true;
+  input.value = '';
+
+  // Optimistic UI
+  const messagesDiv = document.getElementById('chat-messages');
+  const emptyEl = messagesDiv.querySelector('.chat-empty');
+  if (emptyEl) emptyEl.remove();
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble msg-outgoing';
+  bubble.innerHTML = `${esc(msg)}<span class="msg-time">עכשיו</span>`;
+  messagesDiv.appendChild(bubble);
+  messagesDiv.scrollTop = messagesDiv.scrollHeight;
+
+  try {
+    const res = await fetch(API('send'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: currentPhone, message: msg }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error || 'שליחה נכשלה');
+    showToast('הודעה נשלחה!');
+  } catch (e) {
+    bubble.style.borderColor = 'var(--danger)';
+    bubble.innerHTML += '<br><span style="color:var(--danger);font-size:11px;">שליחה נכשלה</span>';
+    showToast('שגיאה: ' + e.message);
+  } finally {
+    sendBtn.disabled = false;
+    input.focus();
+  }
+}
+
+async function updateLeadStatus() {
+  if (!currentPhone) return;
+  const status = document.getElementById('chat-status-select').value;
+  try {
+    await fetch(API('leads/' + currentPhone), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_status: status }),
+    });
+    showToast('סטטוס עודכן');
+    // Update local data
+    const lead = allLeads.find(l => l.phone === currentPhone);
+    if (lead) lead.lead_status = status;
+    renderPipeline();
+  } catch (e) {
+    showToast('שגיאה: ' + e.message);
+  }
+}
+
+// ====== Pipeline ======
+function renderPipeline() {
+  const cols = [
+    { key: 'new', label: 'חדש', cls: 'status-new' },
+    { key: 'contacted', label: 'יצרנו קשר', cls: 'status-contacted' },
+    { key: 'interested', label: 'מעוניין', cls: 'status-interested' },
+    { key: 'meeting_set', label: 'נקבע זום', cls: 'status-meeting' },
+    { key: 'closed', label: 'סגור', cls: 'status-closed' },
+  ];
+
+  // Group leads by status
+  const grouped = {};
+  for (const c of cols) grouped[c.key] = [];
+  for (const l of allLeads) {
+    const s = l.lead_status || 'new';
+    if (grouped[s]) grouped[s].push(l);
+    else grouped['new'].push(l);
+  }
+
+  let html = '';
+  for (const col of cols) {
+    const leads = grouped[col.key];
+    html += `<div class="kanban-col ${col.cls}" data-status="${col.key}"
+      ondragover="event.preventDefault();this.classList.add('drag-over')"
+      ondragleave="this.classList.remove('drag-over')"
+      ondrop="dropCard(event, '${col.key}');this.classList.remove('drag-over')">
+      <div class="kanban-col-header">${col.label} <span class="count">${leads.length}</span></div>
+      <div class="kanban-col-body">`;
+    for (const l of leads) {
+      const preview = (l.last_message || '').slice(0, 50);
+      html += `<div class="kanban-card" draggable="true" data-phone="${l.phone}"
+        ondragstart="event.dataTransfer.setData('text/plain','${l.phone}');this.classList.add('dragging')"
+        ondragend="this.classList.remove('dragging')"
+        onclick="openConversation('${l.phone}')">
+        <div class="card-name">${esc(l.name || l.phone)}</div>
+        <div class="card-phone">${formatPhone(l.phone)}</div>
+        <div class="card-source">${esc(l.source || '—')}</div>
+        ${preview ? `<div class="card-preview">${esc(preview)}</div>` : ''}
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+  document.getElementById('kanban-board').innerHTML = html;
+}
+
+async function dropCard(event, newStatus) {
+  event.preventDefault();
+  const phone = event.dataTransfer.getData('text/plain');
+  if (!phone) return;
+  try {
+    await fetch(API('leads/' + phone), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead_status: newStatus }),
+    });
+    const lead = allLeads.find(l => l.phone === phone);
+    if (lead) lead.lead_status = newStatus;
+    renderPipeline();
+    showToast(`${lead?.name || phone} → ${STATUS_MAP[newStatus]}`);
+  } catch (e) {
+    showToast('שגיאה: ' + e.message);
+  }
+}
+
+// ====== Broadcasts ======
+function updateRecipientPreview() {
+  const mode = document.getElementById('bc-recipient-mode').value;
+  document.getElementById('bc-status-filter').style.display = mode === 'status' ? 'block' : 'none';
+  document.getElementById('bc-source-filter').style.display = mode === 'source' ? 'block' : 'none';
+  document.getElementById('bc-custom-select').style.display = mode === 'custom' ? 'block' : 'none';
+  updateBroadcastCount();
+}
+
+function updateBroadcastOptions() {
+  const sel = document.getElementById('bc-custom-leads');
+  sel.innerHTML = '';
+  for (const l of allLeads) {
+    const opt = document.createElement('option');
+    opt.value = l.phone;
+    opt.textContent = `${l.name || l.phone} (${formatPhone(l.phone)})`;
+    sel.appendChild(opt);
+  }
+  updateBroadcastCount();
+}
+
+function getBroadcastRecipients() {
+  const mode = document.getElementById('bc-recipient-mode').value;
+  let recipients = [];
+  if (mode === 'all') {
+    recipients = allLeads.map(l => l.phone);
+  } else if (mode === 'status') {
+    const status = document.getElementById('bc-status-select').value;
+    recipients = allLeads.filter(l => (l.lead_status || 'new') === status).map(l => l.phone);
+  } else if (mode === 'source') {
+    const source = document.getElementById('bc-source-select').value;
+    recipients = allLeads.filter(l => (l.source || '').includes(source)).map(l => l.phone);
+  } else if (mode === 'custom') {
+    const sel = document.getElementById('bc-custom-leads');
+    recipients = Array.from(sel.selectedOptions).map(o => o.value);
+  }
+  return recipients;
+}
+
+function updateBroadcastCount() {
+  const count = getBroadcastRecipients().length;
+  document.getElementById('bc-count').textContent = `${count} נמענים נבחרו`;
+}
+
+// Listen to filter changes
+document.addEventListener('change', (e) => {
+  if (['bc-status-select', 'bc-source-select', 'bc-custom-leads', 'bc-recipient-mode'].includes(e.target?.id)) {
+    updateBroadcastCount();
+  }
+});
+
+async function sendBroadcast() {
+  const phones = getBroadcastRecipients();
+  const message = document.getElementById('bc-message').value.trim();
+  if (!message) { showToast('יש להזין הודעה'); return; }
+  if (!phones.length) { showToast('אין נמענים'); return; }
+  if (!confirm(`לשלוח הודעה ל-${phones.length} נמענים?`)) return;
+
+  showToast('שולח שידור...');
+  try {
+    const res = await fetch(API('broadcast'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phones, message }),
+    });
+    const data = await res.json();
+    if (!data.success) throw new Error(data.error);
+    const sent = (data.results || []).filter(r => r.success).length;
+    const failed = (data.results || []).filter(r => !r.success).length;
+    showToast(`שידור הושלם: ${sent} נשלחו, ${failed} נכשלו`);
+
+    // Save to local log
+    broadcastLog.unshift({
+      date: new Date().toISOString(),
+      message: message.slice(0, 100),
+      recipientCount: phones.length,
+      sent, failed,
+    });
+    if (broadcastLog.length > 50) broadcastLog = broadcastLog.slice(0, 50);
+    localStorage.setItem('wa_broadcast_log', JSON.stringify(broadcastLog));
+    renderBroadcastHistory();
+    document.getElementById('bc-message').value = '';
+  } catch (e) {
+    showToast('שגיאה: ' + e.message);
+  }
+}
+
+function renderBroadcastHistory() {
+  if (!broadcastLog.length) {
+    document.getElementById('broadcast-history').innerHTML = '<div class="empty-state">אין שידורים קודמים</div>';
+    return;
+  }
+  let html = '<table><thead><tr><th>תאריך</th><th>הודעה</th><th>נמענים</th><th>נשלחו</th><th>נכשלו</th></tr></thead><tbody>';
+  for (const b of broadcastLog) {
+    html += `<tr>
+      <td>${formatTime(b.date)}</td>
+      <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.message)}</td>
+      <td>${b.recipientCount}</td>
+      <td style="color:var(--accent)">${b.sent}</td>
+      <td style="color:${b.failed ? 'var(--danger)' : 'var(--text3)'}">${b.failed}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  document.getElementById('broadcast-history').innerHTML = html;
+}
+
+// ====== Analytics ======
+function renderAnalytics() {
+  renderBarChart('chart-messages', stats.messagesPerDay || [], 'הודעות');
+  renderBarChart('chart-leads', stats.leadsPerDay || [], 'לידים');
+  renderSourceTable();
+  renderFunnelTable();
+}
+
+function renderBarChart(containerId, data, label) {
+  const container = document.getElementById(containerId);
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state" style="height:100%;display:flex;align-items:center;justify-content:center;">אין נתונים</div>';
+    return;
+  }
+  const max = Math.max(...data.map(d => d.count), 1);
+  let html = '<div class="bar-chart">';
+  for (const d of data) {
+    const pct = Math.max((d.count / max) * 100, 2);
+    const dayLabel = d.day ? d.day.slice(5) : '';
+    html += `<div class="bar" style="height:${pct}%"><div class="tooltip">${dayLabel}: ${d.count} ${label}</div></div>`;
+  }
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderSourceTable() {
+  const tbody = document.querySelector('#tbl-sources tbody');
+  const data = stats.sourceBreakdown || [];
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="2" class="empty-state">אין נתונים</td></tr>'; return; }
+  let html = '<tr><th>מקור</th><th>לידים</th></tr>';
+  for (const s of data) {
+    html += `<tr><td>${esc(s.source || 'לא ידוע')}</td><td>${s.count}</td></tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function renderFunnelTable() {
+  const tbody = document.querySelector('#tbl-funnel tbody');
+  const data = stats.statusBreakdown || [];
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="3" class="empty-state">אין נתונים</td></tr>'; return; }
+  const total = data.reduce((s, d) => s + d.count, 0) || 1;
+  let html = '<tr><th>שלב</th><th>לידים</th><th>%</th></tr>';
+  for (const s of data) {
+    const pct = Math.round((s.count / total) * 100);
+    html += `<tr><td>${STATUS_MAP[s.lead_status] || esc(s.lead_status || 'לא ידוע')}</td><td>${s.count}</td><td>${pct}%</td></tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+// ====== Modal ======
+function openLeadModal(phone) {
+  const lead = allLeads.find(l => l.phone === phone);
+  if (!lead) return;
+  currentModalPhone = phone;
+  document.getElementById('modal-lead-name').textContent = lead.name || phone;
+  document.getElementById('modal-lead-details').innerHTML = `
+    <div style="font-size:13px;line-height:2;">
+      <div><strong>טלפון:</strong> ${formatPhone(phone)}</div>
+      <div><strong>מקור:</strong> ${esc(lead.source || '—')}</div>
+      <div><strong>סטטוס:</strong> ${STATUS_MAP[lead.lead_status] || '—'}</div>
+      <div><strong>סנטימנט:</strong> ${esc(lead.last_call_sentiment || '—')}</div>
+      <div><strong>נקבעה פגישה:</strong> ${lead.was_booked ? 'כן' : 'לא'}</div>
+      <div><strong>הודעות:</strong> ${lead.message_count || 0}</div>
+      ${lead.last_call_summary ? `<div><strong>סיכום שיחה:</strong> ${esc(lead.last_call_summary)}</div>` : ''}
+    </div>`;
+  document.getElementById('lead-modal').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('lead-modal').classList.remove('open');
+}
+
+// Close modal on overlay click
+document.getElementById('lead-modal')?.addEventListener('click', (e) => {
+  if (e.target.classList.contains('modal-overlay')) closeModal();
+});
+
+// ====== Helpers ======
+function esc(str) {
+  const d = document.createElement('div');
+  d.textContent = str || '';
+  return d.innerHTML;
+}
+
+function renderMd(str) {
+  let s = esc(str);
+  // **bold**
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // *italic*
+  s = s.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  // newlines
+  s = s.replace(/\n/g, '<br>');
+  return s;
+}
+
+function formatPhone(phone) {
+  if (!phone) return '';
+  const p = phone.replace(/^\+/, '');
+  if (p.startsWith('972') && p.length >= 12) {
+    return `+${p.slice(0,3)}-${p.slice(3,5)}-${p.slice(5,8)}-${p.slice(8)}`;
+  }
+  if (p.startsWith('972')) {
+    return `+${p.slice(0,3)}-${p.slice(3)}`;
+  }
+  return phone;
+}
+
+function formatTime(ts) {
+  if (!ts) return '';
+  try {
+    const d = new Date(ts);
+    const now = new Date();
+    const isToday = d.toDateString() === now.toDateString();
+    const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = d.toDateString() === yesterday.toDateString();
+
+    const time = d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return time;
+    if (isYesterday) return 'אתמול ' + time;
+    return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' }) + ' ' + time;
+  } catch { return ts; }
+}
+
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.display = 'none'; }, 3000);
+}
+
+// Init broadcast history on load
+renderBroadcastHistory();
+
+// ====== Tags ======
+let allTags = []; // {tag, count}[]
+async function loadAllTags() {
+  try {
+    const res = await fetch(API('all-tags'));
+    const data = await res.json();
+    if (data.success) allTags = data.tags || [];
+  } catch {}
+}
+
+async function loadLeadTags(phone) {
+  try {
+    const res = await fetch(API('tags/' + phone));
+    const data = await res.json();
+    return data.success ? data.tags : [];
+  } catch { return []; }
+}
+
+function renderLeadTags(phone, tags) {
+  const container = document.getElementById('lead-tags');
+  let html = tags.map(t =>
+    `<span class="tag">${esc(t)} <span class="tag-x" onclick="removeTag('${phone}','${esc(t)}')">&times;</span></span>`
+  ).join('');
+  // Suggestions datalist
+  const suggestions = allTags.map(t => t.tag).filter(t => !tags.includes(t));
+  html += `<input class="tag-input" id="tag-new-input" list="tag-suggestions" placeholder="+ תגית" onkeydown="if(event.key==='Enter'){addTag('${phone}');event.preventDefault();}">`;
+  html += '<datalist id="tag-suggestions">' + suggestions.map(s => `<option value="${esc(s)}">`).join('') + '</datalist>';
+  container.innerHTML = html;
+}
+
+async function addTag(phone) {
+  const input = document.getElementById('tag-new-input');
+  const tag = input.value.trim();
+  if (!tag) return;
+  await fetch(API('tags/' + phone), {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({tag})
+  });
+  input.value = '';
+  const tags = await loadLeadTags(phone);
+  renderLeadTags(phone, tags);
+  // Update lead in local array
+  const lead = allLeads.find(l => l.phone === phone);
+  if (lead) lead.tags = tags;
+  renderConvList();
+  loadAllTags();
+  showToast('תגית נוספה');
+}
+
+async function removeTag(phone, tag) {
+  await fetch(API('tags/' + phone + '/' + encodeURIComponent(tag)), {method:'DELETE'});
+  const tags = await loadLeadTags(phone);
+  renderLeadTags(phone, tags);
+  const lead = allLeads.find(l => l.phone === phone);
+  if (lead) lead.tags = tags;
+  renderConvList();
+  loadAllTags();
+}
+
+// ====== Notes ======
+async function loadLeadNotes(phone) {
+  try {
+    const res = await fetch(API('notes/' + phone));
+    const data = await res.json();
+    return data.success ? data.notes : [];
+  } catch { return []; }
+}
+
+function renderLeadNotes(phone, notes) {
+  const container = document.getElementById('lead-notes');
+  if (!notes.length) { container.innerHTML = '<div style="color:var(--text3);font-size:11px;">אין הערות</div>'; return; }
+  container.innerHTML = notes.map(n => `
+    <div class="note-item">
+      <span class="note-del" onclick="deleteNote(${n.id},'${phone}')">&times;</span>
+      ${esc(n.content)}
+      <div class="note-time">${formatTime(n.created_at)}</div>
+    </div>
+  `).join('');
+}
+
+async function addNote() {
+  if (!currentPhone) return;
+  const input = document.getElementById('note-input');
+  const content = input.value.trim();
+  if (!content) return;
+  await fetch(API('notes/' + currentPhone), {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({content})
+  });
+  input.value = '';
+  const notes = await loadLeadNotes(currentPhone);
+  renderLeadNotes(currentPhone, notes);
+  showToast('הערה נשמרה');
+}
+
+async function deleteNote(id, phone) {
+  await fetch(API('notes/' + id), {method:'DELETE'});
+  const notes = await loadLeadNotes(phone);
+  renderLeadNotes(phone, notes);
+}
+
+// ====== Status History ======
+async function loadStatusHistory(phone) {
+  try {
+    const res = await fetch(API('status-history/' + phone));
+    const data = await res.json();
+    return data.success ? data.history : [];
+  } catch { return []; }
+}
+
+function renderStatusHistory(history) {
+  const container = document.getElementById('lead-status-history');
+  if (!history.length) { container.innerHTML = '<div style="color:var(--text3);font-size:11px;">אין שינויים</div>'; return; }
+  container.innerHTML = history.map(h => `
+    <div class="history-item">
+      <span class="history-dot"></span>
+      <span>${STATUS_MAP[h.old_status] || '—'} &rarr; ${STATUS_MAP[h.new_status] || '—'}</span>
+      <span style="color:var(--text3);margin-right:auto;">${formatTime(h.changed_at)}</span>
+    </div>
+  `).join('');
+}
+
+// ====== Quick Replies ======
+let quickReplies = [];
+async function loadQuickReplies() {
+  try {
+    const wsParam = currentWorkspace ? `?workspace=${currentWorkspace}` : '';
+    const res = await fetch(API('quick-replies') + wsParam);
+    const data = await res.json();
+    if (data.success) quickReplies = data.replies || [];
+  } catch {}
+}
+
+function renderQuickReplies() {
+  const bar = document.getElementById('qr-bar');
+  if (!quickReplies.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = quickReplies.map(qr =>
+    `<button class="qr-btn" title="${esc(qr.content)}" onclick="useQuickReply(${qr.id})">${esc(qr.title)}</button>`
+  ).join('') + '<button class="qr-btn" onclick="showQRModal()" style="color:var(--accent);">+ חדש</button>';
+}
+
+function useQuickReply(id) {
+  const qr = quickReplies.find(q => q.id === id);
+  if (!qr) return;
+  const input = document.getElementById('chat-msg-input');
+  let text = qr.content;
+  if (currentPhone) {
+    const lead = allLeads.find(l => l.phone === currentPhone);
+    if (lead?.name) text = text.replace(/\{name\}/g, lead.name);
+    text = text.replace(/\{phone\}/g, currentPhone);
+  }
+  input.value = text;
+  input.focus();
+}
+
+function showQRModal() {
+  const title = prompt('שם התבנית:');
+  if (!title) return;
+  const content = prompt('תוכן ההודעה (משתנים: {name}, {phone}):');
+  if (!content) return;
+  fetch(API('quick-replies'), {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({title, content, workspace_id: currentWorkspace || null})
+  }).then(() => { loadQuickReplies().then(renderQuickReplies); showToast('תבנית נשמרה'); });
+}
+
+// ====== CSV Export ======
+function exportCSV() {
+  const wsParam = currentWorkspace ? `?workspace=${currentWorkspace}` : '';
+  window.open(API('export-csv') + wsParam, '_blank');
+}
+
+// ====== Enhanced openConversation ======
+const _origOpenConversation = openConversation;
+openConversation = async function(phone) {
+  await _origOpenConversation(phone);
+  // Load extra data
+  const detailPanel = document.getElementById('lead-detail');
+  detailPanel.style.display = 'block';
+  const qrBar = document.getElementById('qr-bar');
+  qrBar.style.display = quickReplies.length ? 'flex' : 'none';
+
+  const [tags, notes, history] = await Promise.all([
+    loadLeadTags(phone),
+    loadLeadNotes(phone),
+    loadStatusHistory(phone),
+  ]);
+  // Store tags on lead
+  const lead = allLeads.find(l => l.phone === phone);
+  if (lead) lead.tags = tags;
+
+  renderLeadTags(phone, tags);
+  renderLeadNotes(phone, notes);
+  renderStatusHistory(history);
+};
+
+// ====== Enhanced loadAll — also load tags + quick replies ======
+const _origLoadAll = loadAll;
+loadAll = async function() {
+  await Promise.all([_origLoadAll(), loadAllTags(), loadQuickReplies()]);
+  // Attach tags to leads
+  for (const lead of allLeads) {
+    if (!lead.tags) lead.tags = [];
+  }
+  renderQuickReplies();
+};
+
+// ====== Tag filter in conversations ======
+const _origSetConvFilter = setConvFilter;
+setConvFilter = function(filter) {
+  // Check if it's a tag filter
+  if (filter.startsWith('tag:')) {
+    currentFilter = filter;
+    document.querySelectorAll('.conv-filter').forEach(f => f.classList.toggle('active', f.dataset.filter === filter));
+    renderConvList();
+  } else {
+    _origSetConvFilter(filter);
+  }
+};
+
+const _origRenderConvList = renderConvList;
+renderConvList = function() {
+  if (currentFilter.startsWith('tag:')) {
+    const tagFilter = currentFilter.slice(4);
+    const search = (document.getElementById('conv-search-input')?.value || '').toLowerCase();
+    let filtered = allLeads.filter(l => (l.tags || []).includes(tagFilter));
+    if (search) {
+      filtered = filtered.filter(l =>
+        (l.name || '').toLowerCase().includes(search) ||
+        (l.phone || '').includes(search)
+      );
+    }
+    filtered.sort((a, b) => (b.last_message_at || b.updated_at || '').localeCompare(a.last_message_at || a.updated_at || ''));
+    if (!filtered.length) {
+      document.getElementById('conv-list').innerHTML = '<div class="empty-state">אין שיחות</div>';
+      return;
+    }
+    let html = '';
+    for (const l of filtered) {
+      const initials = (l.name || '?').slice(0, 2);
+      const time = l.last_message_at ? formatTime(l.last_message_at) : '';
+      const preview = (l.last_message || 'אין הודעות').slice(0, 60);
+      const isActive = l.phone === currentPhone;
+      const isUnread = l.last_message_role === 'user';
+      html += `
+        <div class="conv-item ${isActive ? 'active' : ''}" onclick="openConversation('${l.phone}')">
+          <div class="conv-avatar">${esc(initials)}</div>
+          <div class="conv-info">
+            <div class="conv-name">${esc(l.name || l.phone)} <span class="time">${time}</span></div>
+            <div class="conv-preview">${esc(preview)}</div>
+            <div class="conv-meta">
+              <span class="conv-source">${esc(l.source || '—')}</span>
+              ${(l.tags||[]).map(t => `<span class="tag" style="font-size:9px;padding:1px 5px;">${esc(t)}</span>`).join('')}
+              ${isUnread ? '<span class="conv-unread"></span>' : ''}
+            </div>
+          </div>
+        </div>`;
+    }
+    document.getElementById('conv-list').innerHTML = html;
+  } else {
+    _origRenderConvList();
+  }
+};
+
+// Enhanced conv filters — add tag filters
+const _origRenderConvFilters = renderConvFilters;
+renderConvFilters = function() {
+  _origRenderConvFilters();
+  // Append tag filters
+  const container = document.querySelector('.conv-filters');
+  if (allTags.length) {
+    let tagHtml = '<span style="width:1px;height:16px;background:var(--border);margin:0 4px;"></span>';
+    for (const t of allTags.slice(0, 8)) {
+      tagHtml += `<div class="conv-filter" data-filter="tag:${esc(t.tag)}" onclick="setConvFilter('tag:${esc(t.tag)}')">#${esc(t.tag)} <span style="font-size:9px;color:var(--text3);">${t.count}</span></div>`;
+    }
+    container.innerHTML += tagHtml;
+  }
+};
+
+// ====== Chatbot Flows ======
+let allFlows = [];
+let editingFlowId = null;
+
+// Canvas state
+let feNodes = []; // {id, type, x, y, data}
+let feConnections = []; // {from, to}
+let feScale = 1;
+let feOffsetX = 0, feOffsetY = 0;
+let feDragNode = null;
+let feDragStartX = 0, feDragStartY = 0;
+let feNodeStartX = 0, feNodeStartY = 0;
+let feSelectedNode = null;
+let fePanning = false;
+let fePanStartX = 0, fePanStartY = 0;
+let feNodeIdCounter = 1;
+let feConnecting = null; // {fromId, startX, startY}
+
+const NODE_META = {
+  trigger: { label: 'טריגר', icon: '&#9889;', color: '#7b2ff7', bg: '#e8daff' },
+  send_message: { label: 'שלח הודעה', icon: '&#128172;', color: '#25D366', bg: '#dcf8c6' },
+  wait: { label: 'המתנה', icon: '&#9203;', color: '#e68a00', bg: '#fff3cd' },
+  condition: { label: 'תנאי', icon: '&#128256;', color: '#7b2ff7', bg: '#e8daff' },
+  webhook: { label: 'Webhook', icon: '&#127760;', color: '#0099cc', bg: '#d4edff' },
+};
+
+async function loadFlows() {
+  try {
+    const res = await fetch(API('flows'));
+    const data = await res.json();
+    if (data.success) { allFlows = data.flows || []; renderFlowsList(); }
+  } catch {}
+}
+
+function renderFlowsList() {
+  const container = document.getElementById('flows-list');
+  if (!allFlows.length) {
+    container.innerHTML = '<div class="empty-state">אין אוטומציות מוגדרות. לחץ "+ פלו חדש" ליצירת אוטומציה.</div>';
+    return;
+  }
+  const triggerLabels = { keyword: '&#128273; מילת מפתח', new_lead: '&#127381; ליד חדש', status_change: '&#128260; שינוי סטטוס' };
+  const triggerColors = { keyword: 'var(--cyan)', new_lead: 'var(--accent)', status_change: 'var(--purple)' };
+  container.innerHTML = allFlows.map(f => {
+    const steps = typeof f.steps === 'string' ? JSON.parse(f.steps || '[]') : (f.steps || []);
+    const ws = f.workspace_id ? workspaces.find(w => w.id === f.workspace_id) : null;
+    return `
+    <div class="flow-card">
+      <div class="flow-icon" style="background:${triggerColors[f.trigger_type] || 'var(--accent)'}20;color:${triggerColors[f.trigger_type] || 'var(--accent)'};">&#9889;</div>
+      <div class="flow-info">
+        <div class="flow-name">${esc(f.name)}</div>
+        <div class="flow-meta">
+          <span>${triggerLabels[f.trigger_type] || f.trigger_type}: <strong>${esc(f.trigger_value || '—')}</strong></span>
+          <span>${steps.length} צעדים</span>
+          ${ws ? `<span>${ws.icon} ${esc(ws.name)}</span>` : ''}
+        </div>
+      </div>
+      <div class="flow-actions">
+        <label class="flow-toggle" title="${f.enabled ? 'פעיל' : 'כבוי'}">
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlow(${f.id}, this.checked)">
+          <span class="slider"></span>
+        </label>
+        <button class="btn" onclick="openFlowEditor(${f.id})" style="font-size:11px;">&#9998; עריכה</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleFlow(id, enabled) {
+  try {
+    await fetch(API('flows/' + id), {
+      method: 'PATCH', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ enabled: enabled ? 1 : 0 })
+    });
+    const f = allFlows.find(fl => fl.id === id);
+    if (f) f.enabled = enabled ? 1 : 0;
+    showToast(enabled ? 'פלו הופעל' : 'פלו כובה');
+  } catch (e) { showToast('שגיאה: ' + e.message); }
+}
+
+// ====== Visual Flow Editor ======
+function openFlowEditor(id) {
+  const flow = id ? allFlows.find(f => f.id === id) : null;
+  editingFlowId = flow ? flow.id : null;
+
+  document.getElementById('fe-name').value = flow ? flow.name : '';
+  document.getElementById('fe-trigger-type').value = flow ? flow.trigger_type : 'keyword';
+  document.getElementById('fe-trigger-value').value = flow ? (flow.trigger_value || '') : '';
+  document.getElementById('fe-delete-btn').style.display = flow ? 'inline-block' : 'none';
+
+  // Populate workspace selector
+  const wsSel = document.getElementById('fe-ws');
+  wsSel.innerHTML = '<option value="">&#127760; כלל-עסקי</option>' +
+    workspaces.map(w => `<option value="${w.id}" ${flow && flow.workspace_id === w.id ? 'selected' : ''}>${w.icon} ${esc(w.name)}</option>`).join('');
+
+  updateFeTriggerUI();
+
+  // Convert steps to nodes
+  feNodes = [];
+  feConnections = [];
+  feNodeIdCounter = 1;
+  feScale = 1;
+  feOffsetX = 0;
+  feOffsetY = 0;
+  feSelectedNode = null;
+
+  const steps = flow ? (typeof flow.steps === 'string' ? JSON.parse(flow.steps || '[]') : (flow.steps || [])) : [];
+
+  // Create trigger node
+  const triggerNode = { id: feNodeIdCounter++, type: 'trigger', x: 300, y: 80, data: {} };
+  feNodes.push(triggerNode);
+
+  // Create step nodes
+  let prevId = triggerNode.id;
+  steps.forEach((step, i) => {
+    const node = {
+      id: feNodeIdCounter++,
+      type: step.type,
+      x: 300,
+      y: 80 + (i + 1) * 140,
+      data: { ...step },
+    };
+    feNodes.push(node);
+    feConnections.push({ from: prevId, to: node.id });
+    prevId = node.id;
+  });
+
+  document.getElementById('flow-editor').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderCanvas();
+  initCanvasEvents();
+}
+
+function showFlowEditor() { openFlowEditor(null); }
+
+function closeFlowEditor() {
+  document.getElementById('flow-editor').classList.remove('open');
+  document.body.style.overflow = '';
+  editingFlowId = null;
+  feNodes = [];
+  feConnections = [];
+}
+
+function updateFeTriggerUI() {
+  const type = document.getElementById('fe-trigger-type').value;
+  const label = document.getElementById('fe-trigger-val-label');
+  const input = document.getElementById('fe-trigger-value');
+  const wrap = document.getElementById('fe-trigger-val-wrap');
+  if (type === 'keyword') { label.textContent = 'מילת מפתח'; input.placeholder = 'שלום'; wrap.style.display = 'block'; }
+  else if (type === 'new_lead') { wrap.style.display = 'none'; input.value = '*'; }
+  else if (type === 'status_change') { label.textContent = 'סטטוס יעד'; input.placeholder = 'interested'; wrap.style.display = 'block'; }
+}
+
+// ---- Canvas rendering ----
+function renderCanvas() {
+  const canvas = document.getElementById('fe-canvas');
+  canvas.style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+
+  // Remove old nodes
+  canvas.querySelectorAll('.fe-node').forEach(n => n.remove());
+
+  // Render nodes
+  for (const node of feNodes) {
+    const meta = NODE_META[node.type] || NODE_META.send_message;
+    const el = document.createElement('div');
+    el.className = 'fe-node' + (node.type === 'trigger' ? ' trigger-node' : '') + (feSelectedNode === node.id ? ' selected' : '');
+    el.dataset.nodeId = node.id;
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+
+    let bodyHTML = '';
+    if (node.type === 'trigger') {
+      const tt = document.getElementById('fe-trigger-type')?.value || 'keyword';
+      const tv = document.getElementById('fe-trigger-value')?.value || '';
+      bodyHTML = `<div style="font-size:11px;color:var(--text2);">${NODE_META.trigger.label}: ${tv || '*'}</div>`;
+    } else if (node.type === 'send_message') {
+      bodyHTML = `<label>הודעה</label>
+        <textarea rows="3" placeholder="היי {name}..." oninput="feUpdateData(${node.id},'content',this.value)">${esc(node.data.content || '')}</textarea>
+        <div style="font-size:9px;color:var(--text3);margin-top:2px;">משתנים: {name}, {phone}</div>`;
+    } else if (node.type === 'wait') {
+      bodyHTML = `<label>זמן המתנה</label>
+        <input value="${esc(node.data.duration || '1h')}" placeholder="1h / 24h / 7d" oninput="feUpdateData(${node.id},'duration',this.value)">
+        <div style="font-size:9px;color:var(--text3);margin-top:2px;">m=דקות h=שעות d=ימים</div>`;
+    } else if (node.type === 'condition') {
+      bodyHTML = `<label>שדה</label>
+        <select onchange="feUpdateData(${node.id},'field',this.value)">
+          <option value="lead_status" ${node.data.field === 'lead_status' ? 'selected' : ''}>סטטוס ליד</option>
+          <option value="was_booked" ${node.data.field === 'was_booked' ? 'selected' : ''}>נקבעה פגישה</option>
+          <option value="source" ${node.data.field === 'source' ? 'selected' : ''}>מקור</option>
+        </select>
+        <label>ערך</label>
+        <input value="${esc(node.data.value || '')}" placeholder="interested" oninput="feUpdateData(${node.id},'value',this.value)">`;
+    } else if (node.type === 'webhook') {
+      bodyHTML = `<label>URL</label>
+        <input value="${esc(node.data.url || '')}" placeholder="https://..." oninput="feUpdateData(${node.id},'url',this.value)">`;
+    }
+
+    el.innerHTML = `
+      <div class="fe-node-header" style="background:${meta.bg};">
+        <div class="nh-icon" style="background:${meta.color}22;color:${meta.color};">${meta.icon}</div>
+        <div class="nh-label">${meta.label}</div>
+        ${node.type !== 'trigger' ? `<span class="nh-delete" onclick="feDeleteNode(${node.id})" title="מחק">&times;</span>` : ''}
+      </div>
+      <div class="fe-node-body">${bodyHTML}</div>
+      ${node.type !== 'trigger' ? `<div class="fe-port port-in" data-node="${node.id}" data-dir="in"></div>` : ''}
+      <div class="fe-port port-out" data-node="${node.id}" data-dir="out"></div>
+    `;
+
+    // Node dragging
+    const header = el.querySelector('.fe-node-header');
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('nh-delete')) return;
+      e.stopPropagation();
+      feDragNode = node;
+      feDragStartX = e.clientX;
+      feDragStartY = e.clientY;
+      feNodeStartX = node.x;
+      feNodeStartY = node.y;
+      el.classList.add('dragging');
+      feSelectedNode = node.id;
+      renderCanvas();
+    });
+
+    canvas.appendChild(el);
+  }
+
+  // Render connections as SVG
+  renderConnections();
+}
+
+function renderConnections() {
+  const svg = document.getElementById('fe-connections');
+  let paths = '';
+  for (const conn of feConnections) {
+    const fromNode = feNodes.find(n => n.id === conn.from);
+    const toNode = feNodes.find(n => n.id === conn.to);
+    if (!fromNode || !toNode) continue;
+
+    const x1 = fromNode.x + 110; // center of node (220/2)
+    const y1 = fromNode.y + 90;  // bottom of node approx
+    const x2 = toNode.x + 110;
+    const y2 = toNode.y;         // top of node
+
+    const midY = (y1 + y2) / 2;
+    const d = `M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}`;
+    paths += `<path d="${d}" class="active" marker-end=""/>`;
+  }
+  svg.innerHTML = paths;
+}
+
+function feUpdateData(nodeId, key, value) {
+  const node = feNodes.find(n => n.id === nodeId);
+  if (node) node.data[key] = value;
+}
+
+function feDeleteNode(nodeId) {
+  feNodes = feNodes.filter(n => n.id !== nodeId);
+  // Reconnect: if A->deleted->B, make A->B
+  const incoming = feConnections.filter(c => c.to === nodeId);
+  const outgoing = feConnections.filter(c => c.from === nodeId);
+  feConnections = feConnections.filter(c => c.from !== nodeId && c.to !== nodeId);
+  for (const inc of incoming) {
+    for (const out of outgoing) {
+      feConnections.push({ from: inc.from, to: out.to });
+    }
+  }
+  renderCanvas();
+}
+
+// ---- Canvas events ----
+function initCanvasEvents() {
+  const wrap = document.getElementById('fe-canvas-wrap');
+
+  // Mouse move (drag node or pan)
+  const onMouseMove = (e) => {
+    if (feDragNode) {
+      const dx = (e.clientX - feDragStartX) / feScale;
+      const dy = (e.clientY - feDragStartY) / feScale;
+      feDragNode.x = Math.round((feNodeStartX + dx) / 12) * 12; // snap to grid
+      feDragNode.y = Math.round((feNodeStartY + dy) / 12) * 12;
+      const el = document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`);
+      if (el) { el.style.left = feDragNode.x + 'px'; el.style.top = feDragNode.y + 'px'; }
+      renderConnections();
+    } else if (fePanning) {
+      const dx = (e.clientX - fePanStartX) / feScale;
+      const dy = (e.clientY - fePanStartY) / feScale;
+      feOffsetX += dx;
+      feOffsetY += dy;
+      fePanStartX = e.clientX;
+      fePanStartY = e.clientY;
+      document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+      wrap.classList.add('grabbing');
+    }
+  };
+
+  const onMouseUp = () => {
+    if (feDragNode) {
+      document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`)?.classList.remove('dragging');
+      feDragNode = null;
+      renderCanvas();
+    }
+    fePanning = false;
+    wrap.classList.remove('grabbing');
+  };
+
+  // Pan canvas
+  wrap.onmousedown = (e) => {
+    if (e.target === wrap || e.target.classList.contains('fe-canvas-grid')) {
+      fePanning = true;
+      fePanStartX = e.clientX;
+      fePanStartY = e.clientY;
+      feSelectedNode = null;
+      renderCanvas();
+    }
+  };
+
+  // Port click to connect
+  wrap.addEventListener('mousedown', (e) => {
+    const port = e.target.closest('.fe-port');
+    if (port && port.dataset.dir === 'out') {
+      e.stopPropagation();
+      feConnecting = { fromId: parseInt(port.dataset.node) };
+    }
+  });
+
+  wrap.addEventListener('mouseup', (e) => {
+    if (feConnecting) {
+      const port = e.target.closest('.fe-port');
+      if (port && port.dataset.dir === 'in') {
+        const toId = parseInt(port.dataset.node);
+        if (toId !== feConnecting.fromId && !feConnections.find(c => c.from === feConnecting.fromId && c.to === toId)) {
+          feConnections.push({ from: feConnecting.fromId, to: toId });
+          renderConnections();
+        }
+      }
+      feConnecting = null;
+    }
+  });
+
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+
+  // Zoom with scroll
+  wrap.onwheel = (e) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05;
+    feScale = Math.min(2, Math.max(0.3, feScale + delta));
+    document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+    document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+  };
+
+  // Keyboard
+  document.getElementById('flow-editor').onkeydown = (e) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && feSelectedNode && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
+      const node = feNodes.find(n => n.id === feSelectedNode);
+      if (node && node.type !== 'trigger') feDeleteNode(feSelectedNode);
+    }
+  };
+}
+
+function feZoom(delta) {
+  if (delta === 0) { feScale = 1; feOffsetX = 0; feOffsetY = 0; }
+  else feScale = Math.min(2, Math.max(0.3, feScale + delta));
+  document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+}
+
+// ---- Drag from sidebar ----
+function onNodeTypeDrag(e, type) {
+  e.dataTransfer.setData('text/plain', type);
+}
+
+function onCanvasDrop(e) {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  if (!type || !NODE_META[type]) return;
+
+  const wrap = document.getElementById('fe-canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.round(((e.clientX - rect.left) / feScale - feOffsetX) / 12) * 12;
+  const y = Math.round(((e.clientY - rect.top) / feScale - feOffsetY) / 12) * 12;
+
+  const data = {};
+  if (type === 'send_message') data.content = '';
+  else if (type === 'wait') data.duration = '1h';
+  else if (type === 'condition') { data.field = 'lead_status'; data.value = ''; }
+  else if (type === 'webhook') data.url = '';
+
+  const newNode = { id: feNodeIdCounter++, type, x, y, data };
+  feNodes.push(newNode);
+
+  // Auto-connect: find nearest node above that has no outgoing
+  const nodesAbove = feNodes.filter(n => n.id !== newNode.id && n.y < y)
+    .sort((a, b) => b.y - a.y);
+  for (const n of nodesAbove) {
+    if (!feConnections.find(c => c.from === n.id)) {
+      feConnections.push({ from: n.id, to: newNode.id });
+      break;
+    }
+  }
+
+  feSelectedNode = newNode.id;
+  renderCanvas();
+}
+
+// ---- Save / Delete ----
+function nodesToSteps() {
+  // BFS from trigger node following connections
+  const trigger = feNodes.find(n => n.type === 'trigger');
+  if (!trigger) return [];
+
+  const steps = [];
+  const visited = new Set();
+  let currentId = trigger.id;
+  visited.add(currentId);
+
+  while (true) {
+    const conn = feConnections.find(c => c.from === currentId);
+    if (!conn || visited.has(conn.to)) break;
+    visited.add(conn.to);
+    const node = feNodes.find(n => n.id === conn.to);
+    if (!node) break;
+    steps.push({ type: node.type, ...node.data });
+    currentId = node.id;
+  }
+  return steps;
+}
+
+async function saveFlow() {
+  const name = document.getElementById('fe-name').value.trim();
+  const trigger_type = document.getElementById('fe-trigger-type').value;
+  const trigger_value = document.getElementById('fe-trigger-value').value.trim() || '*';
+  const workspace_id = document.getElementById('fe-ws').value || null;
+
+  if (!name) { showToast('חובה למלא שם'); return; }
+
+  const steps = nodesToSteps();
+  const body = { name, trigger_type, trigger_value, steps: JSON.stringify(steps), workspace_id };
+
+  try {
+    if (editingFlowId) {
+      await fetch(API('flows/' + editingFlowId), {
+        method: 'PATCH', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      showToast('פלו עודכן');
+    } else {
+      await fetch(API('flows'), {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body)
+      });
+      showToast('פלו נוצר');
+    }
+    closeFlowEditor();
+    await loadFlows();
+  } catch (e) { showToast('שגיאה: ' + e.message); }
+}
+
+async function deleteFlow() {
+  if (!editingFlowId) return;
+  if (!confirm('למחוק את הפלו?')) return;
+  try {
+    await fetch(API('flows/' + editingFlowId), { method: 'DELETE' });
+    showToast('פלו נמחק');
+    closeFlowEditor();
+    await loadFlows();
+  } catch (e) { showToast('שגיאה: ' + e.message); }
+}
+
+// Load flows on init
+const _origLoadAll2 = loadAll;
+loadAll = async function() {
+  await _origLoadAll2();
+  await loadFlows();
+};
+</script>
+</body>
+</html>

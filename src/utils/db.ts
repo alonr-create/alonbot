@@ -169,6 +169,87 @@ db.exec(`
   );
 
   CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
+  CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source);
+
+  CREATE TABLE IF NOT EXISTS lead_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    tag TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(phone, tag)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lead_tags_phone ON lead_tags(phone);
+  CREATE INDEX IF NOT EXISTS idx_lead_tags_tag ON lead_tags(tag);
+
+  CREATE TABLE IF NOT EXISTS lead_notes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    content TEXT NOT NULL,
+    author TEXT NOT NULL DEFAULT 'admin',
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_lead_notes_phone ON lead_notes(phone);
+
+  CREATE TABLE IF NOT EXISTS quick_replies (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    workspace_id TEXT,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS status_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    old_status TEXT,
+    new_status TEXT NOT NULL,
+    changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_status_history_phone ON status_history(phone);
+
+  CREATE TABLE IF NOT EXISTS chatbot_flows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    trigger_type TEXT NOT NULL CHECK(trigger_type IN ('keyword', 'new_lead', 'status_change')),
+    trigger_value TEXT,
+    steps TEXT NOT NULL DEFAULT '[]',
+    workspace_id TEXT,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS flow_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    flow_id INTEGER NOT NULL REFERENCES chatbot_flows(id) ON DELETE CASCADE,
+    phone TEXT NOT NULL,
+    current_step INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_flow_runs_phone ON flow_runs(phone, status);
+
+  CREATE TABLE IF NOT EXISTS workspaces (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL DEFAULT '📱',
+    color TEXT NOT NULL DEFAULT '#25D366',
+    welcome_msg TEXT,
+    system_prompt TEXT,
+    monday_board_id TEXT,
+    monday_columns TEXT,
+    calendar_id TEXT,
+    zoom_link TEXT,
+    website TEXT,
+    default_lead_status TEXT DEFAULT 'new',
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
 `);
 
 // Vector table for semantic memory search (768-dim Gemini embedding)
@@ -210,5 +291,27 @@ try {
 } catch {
   // facts table doesn't exist or already migrated — ok
 }
+
+// Seed workspaces if empty
+try {
+  const wsCount = db.prepare('SELECT COUNT(*) as c FROM workspaces').get() as any;
+  if (wsCount.c === 0) {
+    const seedWs = db.prepare('INSERT OR IGNORE INTO workspaces (id, name, icon, color, welcome_msg, monday_board_id, monday_columns, zoom_link, website, system_prompt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
+    seedWs.run('alon_dev', 'Alon.dev', '💻', '#7b2ff7',
+      'היי! ברוך הבא 👋 אני נציג של Alon.dev — שירותי טכנולוגיה ודיגיטל לעסקים. ספר לי קצת — מה העסק שלך? אשמח להבין מה אתה עושה ואיך אנחנו יכולים לעזור.',
+      '5092777389',
+      JSON.stringify({ phone: 'phone_mm16hqz2', email: 'email_mm161rpz', source: 'text_mm16pfzp', message: 'long_text_mm16k6vr', service: 'dropdown_mm16speh' }),
+      'https://us04web.zoom.us/j/2164012025', 'https://alon.dev', null);
+    seedWs.run('dekel', 'דקל לפרישה — יעל', '🏦', '#128C7E',
+      null, '1443363020', null,
+      'https://zoom.us/j/96752752908', 'https://dprisha.co.il', null);
+    log.info('seeded 2 default workspaces');
+  }
+} catch { /* workspaces already seeded */ }
+
+// Normalize legacy source values
+try {
+  db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();
+} catch { /* ok */ }
 
 export { db };
