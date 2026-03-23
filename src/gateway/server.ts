@@ -21,6 +21,14 @@ const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
 const app = express();
 app.use(express.json({ limit: '1mb' }));
 
+// Serve marketing assets (logo, images, video)
+app.use('/assets', express.static(join(config.dataDir), {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.mp4')) res.setHeader('Content-Type', 'video/mp4');
+  },
+}));
+
 // Security headers
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
