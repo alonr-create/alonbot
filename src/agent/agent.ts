@@ -458,7 +458,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       if (ttsText.length > 0 && ttsText.length < 3000) {
         const isHebrew = /[\u0590-\u05FF]/.test(ttsText);
         const preset = isHebrew ? VOICE_PRESETS.alon : VOICE_PRESETS.english;
-        const ttsRes = await withRetry(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${preset.id}`, {
+        const ttsRes = await withRetry(() => fetch(`https://api.elevenlabs.io/v1/text-to-speech/${preset.id}?output_format=ogg_opus`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'xi-api-key': config.elevenlabsApiKey },
           body: JSON.stringify({ text: ttsText, model_id: 'eleven_v3', voice_settings: preset.settings }),
