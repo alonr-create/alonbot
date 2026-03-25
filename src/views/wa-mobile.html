@@ -848,6 +848,16 @@ html,body{
             <span class="toggle-slider"></span>
           </label>
         </div>
+        <div class="settings-row">
+          <div class="settings-label">
+            Push Notifications
+            <small id="pushStatusText">בודק...</small>
+          </div>
+          <div style="display:flex;gap:6px;flex-direction:column;">
+            <button class="tool-btn" style="padding:8px 12px;font-size:12px;" onclick="testPushSetup()">&#128276; בדוק תמיכה</button>
+            <button class="tool-btn" style="padding:8px 12px;font-size:12px;" onclick="sendTestPush()">&#128228; שלח בדיקה</button>
+          </div>
+        </div>
       </div>
       <div class="settings-section">
         <div class="settings-section-title">עדכונים</div>
@@ -869,7 +879,7 @@ html,body{
           &#128194; פתח ב-Desktop Inbox
         </a>
       </div>
-      <div class="version-info">360Shmikley v1.0</div>
+      <div class="version-info">360Shmikley v2.0</div>
     </div>
   </div>
 
@@ -1866,12 +1876,87 @@ async function subscribePush() {
 }
 
 async function requestNotifPermission() {
-  if (!('Notification' in window)) return;
+  if (!('Notification' in window)) {
+    updatePushStatus('לא נתמך בדפדפן זה', 'red');
+    return;
+  }
   if (Notification.permission === 'granted') {
     subscribePush();
-  } else if (Notification.permission !== 'denied') {
+    updatePushStatus('פעיל ✅', 'green');
+  } else if (Notification.permission === 'denied') {
+    updatePushStatus('חסום — יש לאפשר בהגדרות הדפדפן', 'red');
+  } else {
     const perm = await Notification.requestPermission();
-    if (perm === 'granted') subscribePush();
+    if (perm === 'granted') {
+      subscribePush();
+      updatePushStatus('פעיל ✅', 'green');
+    } else {
+      updatePushStatus('נדחה — יש לאפשר בהגדרות', 'red');
+    }
+  }
+}
+
+function updatePushStatus(text, color) {
+  const el = document.getElementById('pushStatusText');
+  if (el) { el.textContent = text; el.style.color = color === 'green' ? '#4CAF50' : color === 'red' ? '#F44336' : '#999'; }
+}
+
+async function testPushSetup() {
+  const el = document.getElementById('pushStatusText');
+  const checks = [];
+
+  // Check 1: Standalone PWA?
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  checks.push(isStandalone ? '✅ PWA מותקן' : '⚠️ לא מותקן כ-PWA (הוסף למסך הבית)');
+
+  // Check 2: Service Worker?
+  const hasSW = 'serviceWorker' in navigator;
+  checks.push(hasSW ? '✅ Service Worker' : '❌ אין Service Worker');
+
+  // Check 3: Push Manager?
+  const hasPush = 'PushManager' in window;
+  checks.push(hasPush ? '✅ Push Manager' : '❌ Push לא נתמך (נדרש iOS 16.4+)');
+
+  // Check 4: Notification permission?
+  if ('Notification' in window) {
+    const perm = Notification.permission;
+    if (perm === 'granted') {
+      checks.push('✅ הרשאת התראות');
+      // Try subscribing
+      try {
+        await subscribePush();
+        checks.push('✅ Push subscription פעיל');
+      } catch (e) {
+        checks.push('❌ שגיאה ב-subscription: ' + e.message);
+      }
+    } else if (perm === 'denied') {
+      checks.push('❌ התראות חסומות — לך להגדרות Safari > אתר > התראות');
+    } else {
+      checks.push('⚠️ עדיין לא אישרת התראות — לחץ לאשר');
+      Notification.requestPermission().then(p => {
+        if (p === 'granted') { subscribePush(); updatePushStatus('פעיל ✅', 'green'); }
+      });
+    }
+  } else {
+    checks.push('❌ Notification API לא זמין');
+  }
+
+  alert(checks.join('\n'));
+}
+
+async function sendTestPush() {
+  try {
+    let url = '/api/push/test';
+    if (TOKEN) url += '?token=' + TOKEN;
+    const r = await fetch(url, { method: 'POST', credentials: 'same-origin' });
+    const res = await r.json();
+    if (res.success) {
+      alert(`נשלח! (${res.subscribers} מנויים רשומים)\nאם לא קיבלת — בדוק שאתה ב-PWA + הרשאות פעילות.`);
+    } else {
+      alert('שגיאה: ' + (res.error || 'לא ידוע'));
+    }
+  } catch (e) {
+    alert('שגיאה: ' + e.message);
   }
 }
 

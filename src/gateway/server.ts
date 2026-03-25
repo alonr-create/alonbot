@@ -215,6 +215,21 @@ app.post('/api/push/unsubscribe', (req, res) => {
   res.json({ success: true });
 });
 
+// Test push — sends a test notification to all subscribers
+app.post('/api/push/test', dashAuth, async (_req, res) => {
+  try {
+    const subs = db.prepare('SELECT COUNT(*) as count FROM push_subscriptions').get() as any;
+    await sendPushNotification({
+      title: '360Shmikley - בדיקה',
+      body: 'ההתראות עובדות! 🎉',
+      tag: 'test-' + Date.now(),
+    });
+    res.json({ success: true, subscribers: subs.count });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Send push notification to all subscribers
 export async function sendPushNotification(payload: { title: string; body: string; phone?: string; url?: string; tag?: string }) {
   try {
