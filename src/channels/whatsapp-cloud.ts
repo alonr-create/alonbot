@@ -90,7 +90,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(30000),
         }).then(r => {
           if (r.ok) {
             log.info('webhook forwarded to local — local will handle');
@@ -99,7 +99,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
             processWebhookEntries(body);
           }
         }).catch(err => {
-          log.warn({ err: err.message }, 'local unreachable — processing on cloud');
+          log.warn({ err: err.message }, 'local unreachable — processing on cloud (fallback)');
           processWebhookEntries(body);
         });
       } else {
