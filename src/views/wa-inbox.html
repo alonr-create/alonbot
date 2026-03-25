@@ -901,12 +901,20 @@ async function loadContacts() {
       // Add campaign-only contacts to the list
       for (const [ph, info] of Object.entries(campaignCache)) {
         if (!ph || existingPhones.has(ph)) continue;
-        const lastMsg = info.messages[0] || info.calls[0];
+        // Find the most recent activity (message or call)
+        const allTimes = [...(info.messages||[]), ...(info.calls||[])]
+          .map(x => x.time).filter(Boolean).sort((a,b) => new Date(b) - new Date(a));
+        const lastTime = allTimes[0] || '';
+        const lastCall = info.calls?.slice(-1)[0];
+        const lastWa = info.messages?.slice(-1)[0];
+        const lastActivity = lastCall && lastWa
+          ? (new Date(lastCall.time) > new Date(lastWa.time) ? '📞 שיחה בוצעה' : '📱 הודעה נשלחה')
+          : (lastCall ? '📞 שיחה בוצעה' : '📱 הודעה נשלחה');
         contacts.push({
           phone: ph,
           name: info.name || ph,
-          lastMessage: '🚀 קמפיין — הודעה נשלחה',
-          lastTime: lastMsg?.time || '',
+          lastMessage: '🚀 קמפיין — ' + lastActivity,
+          lastTime: lastTime,
           unread: 0,
           isOutgoing: true,
           source: 'campaign',
