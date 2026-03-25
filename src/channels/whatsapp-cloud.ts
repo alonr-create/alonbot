@@ -310,14 +310,21 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
 
       // Template message (works outside 24-hour window)
       if (reply.template) {
+        const tpl: any = {
+          name: reply.template,
+          language: { code: reply.templateLanguage || 'he' },
+        };
+        if (reply.templateParams && reply.templateParams.length > 0) {
+          tpl.components = [{
+            type: 'body',
+            parameters: reply.templateParams.map(val => ({ type: 'text', text: val })),
+          }];
+        }
         await sendGraphApi('messages', {
           messaging_product: 'whatsapp',
           to,
           type: 'template',
-          template: {
-            name: reply.template,
-            language: { code: reply.templateLanguage || 'he' },
-          },
+          template: tpl,
         });
         return;
       }

@@ -15,6 +15,7 @@ const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
+const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
 
@@ -53,6 +54,18 @@ app.get('/icon-192.png', (_req, res) => {
   res.send(iconPNG);
 });
 app.get('/icon-512.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.send(iconPNG);
+});
+app.get('/manifest-wa.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.send(manifestWaJSON);
+});
+app.get('/icon-wa-192.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.send(iconPNG);
+});
+app.get('/icon-wa-512.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
   res.send(iconPNG);
 });
@@ -1077,9 +1090,9 @@ app.post('/api/sync/import', externalAuth, (req, res) => {
 });
 
 app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
-  const { phone, message, leadName, leadContext } = req.body;
-  if (!phone || !message) {
-    res.status(400).json({ success: false, error: 'Missing phone or message' });
+  const { phone, message, leadName, leadContext, template, templateParams } = req.body;
+  if (!phone || (!message && !template)) {
+    res.status(400).json({ success: false, error: 'Missing phone or message/template' });
     return;
   }
   try {
@@ -1124,15 +1137,20 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
       }
     }
 
+    const replyPayload: any = template
+      ? { text: '', template, templateParams: templateParams || [] }
+      : { text: message };
+
     await wa.sendReply(
       { id: 'ext', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
-      { text: message }
+      replyPayload
     );
     // Log outbound WA message for flow tracking
+    const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
     try {
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
     } catch { /* logging failure should not break send */ }
-    log.info({ phone, leadName }, 'external WhatsApp text sent');
+    log.info({ phone, leadName, template: template || 'none' }, 'external WhatsApp sent');
     res.json({ success: true });
   } catch (e: any) {
     log.error({ err: e.message }, 'external WhatsApp send failed');

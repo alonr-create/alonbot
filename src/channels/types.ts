@@ -32,6 +32,8 @@ export interface UnifiedReply {
   template?: string;
   /** Template language code (default: 'he') */
   templateLanguage?: string;
+  /** Template body parameters (positional: {{1}}, {{2}}, ...) */
+  templateParams?: string[];
 }
 
 export interface ChannelAdapter {
