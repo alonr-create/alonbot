@@ -951,27 +951,45 @@ function handleSearch(val) {
 // ===== SELECT CONTACT =====
 const messageCache = {};
 
-async function selectContact(phone) {
+function selectContact(phone) {
+  console.log('[360] selectContact called with:', phone);
   activePhone = phone;
-  // Update URL without reload so user can bookmark/share direct chat links
-  const url = new URL(window.location);
-  url.searchParams.set('chat', phone);
-  history.replaceState(null, '', url);
+
+  // Update URL
+  try {
+    const u = new URL(window.location);
+    u.searchParams.set('chat', phone);
+    history.replaceState(null, '', u);
+  } catch(e) { console.error('URL update failed:', e); }
 
   const contact = contacts.find(c => c.phone === phone);
-  if (!contact) { console.warn('Contact not found:', phone); return; }
+  console.log('[360] contact found:', contact ? contact.name : 'NOT FOUND', 'total contacts:', contacts.length);
 
-  // Update header FIRST before any re-render
+  if (!contact) {
+    document.title = 'NOT FOUND: ' + phone;
+    return;
+  }
+
+  // Update header
   const headerName = contact.name || contact.phone;
+  document.title = '360 | ' + headerName;
+
   const color = getAvatarColor(headerName);
   const initials = getInitials(headerName);
-  document.getElementById('chatHeader').style.display = 'flex';
-  document.getElementById('chatInputArea').style.display = 'flex';
-  document.getElementById('emptyState').style.display = 'none';
-  document.getElementById('chatHeaderAvatar').style.background = color;
-  document.getElementById('chatHeaderAvatar').textContent = initials;
-  document.getElementById('chatHeaderName').textContent = headerName;
-  document.getElementById('chatHeaderStatus').textContent = contact.phone;
+
+  const chatHeader = document.getElementById('chatHeader');
+  const chatInputArea = document.getElementById('chatInputArea');
+  const emptyState = document.getElementById('emptyState');
+  const avatarEl = document.getElementById('chatHeaderAvatar');
+  const nameEl = document.getElementById('chatHeaderName');
+  const statusEl = document.getElementById('chatHeaderStatus');
+
+  if (chatHeader) chatHeader.style.display = 'flex';
+  if (chatInputArea) chatInputArea.style.display = 'flex';
+  if (emptyState) emptyState.style.display = 'none';
+  if (avatarEl) { avatarEl.style.background = color; avatarEl.textContent = initials; }
+  if (nameEl) nameEl.textContent = headerName;
+  if (statusEl) statusEl.textContent = contact.phone;
 
   renderContacts();
 
