@@ -612,7 +612,10 @@ html,body{
 
 <script>
 /* ===== CONFIG ===== */
-const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+// Save token to localStorage so PWA works after home screen install
+const _urlToken = new URLSearchParams(window.location.search).get('token');
+if (_urlToken) localStorage.setItem('wa_token', _urlToken);
+const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
 const API = '/api/wa-manager';
 const POLL_INTERVAL = 15000;
 const AVATAR_COLORS = ['#e17055','#00b894','#0088cc','#6c5ce7','#fdcb6e','#e84393','#00cec9','#2d3436','#d63031','#a29bfe'];
