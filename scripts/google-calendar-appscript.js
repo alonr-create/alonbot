@@ -88,6 +88,7 @@ function listEvents(days) {
 
 function addEvent(data) {
   try {
+    // Script is deployed from alon12@gmail.com — getDefaultCalendar() returns alon12's calendar
     const cal = CalendarApp.getDefaultCalendar();
 
     if (data.time) {
