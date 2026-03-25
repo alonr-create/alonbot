@@ -419,6 +419,63 @@ export async function updateColumnValue(
   }
 }
 
+// ── Sync WhatsApp chat to Monday.com item as update ──
+export async function syncChatToMonday(
+  itemId: number,
+  incomingMessages: string[],
+  botResponse: string,
+  leadName?: string,
+): Promise<void> {
+  try {
+    const safeId = validateId(itemId);
+    const timestamp = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+    const incoming = incomingMessages.join('\n');
+    const name = leadName || 'לקוח';
+
+    const body = `💬 שיחת WhatsApp (${timestamp})\n\n📩 ${name}:\n${incoming}\n\n🤖 יעל:\n${botResponse}`;
+
+    const escaped = body.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    const mutation = `mutation {
+      create_update(item_id: ${safeId}, body: "${escaped}") {
+        id
+      }
+    }`;
+    await mondayQuery(mutation);
+    log.info({ itemId }, 'Chat synced to Monday.com');
+  } catch (err) {
+    log.error({ err, itemId }, 'Failed to sync chat to Monday.com');
+  }
+}
+
+// ── Update item name on Monday.com ──
+export async function updateItemName(
+  boardId: number,
+  itemId: number,
+  name: string,
+): Promise<boolean> {
+  try {
+    const safeItemId = validateId(itemId);
+    const safeBoardId = validateId(boardId);
+    const safeName = sanitizeGraphQL(name);
+    const mutation = `mutation {
+      change_simple_column_value(
+        item_id: ${safeItemId},
+        board_id: ${safeBoardId},
+        column_id: "name",
+        value: "${safeName}"
+      ) {
+        id
+      }
+    }`;
+    await mondayQuery(mutation);
+    log.info({ itemId, name }, 'Item name updated on Monday.com');
+    return true;
+  } catch (err) {
+    log.error({ err, itemId, name }, 'Failed to update item name');
+    return false;
+  }
+}
+
 // ── Delete an item ──
 export async function deleteItem(itemId: number): Promise<boolean> {
   try {

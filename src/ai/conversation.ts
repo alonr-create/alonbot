@@ -7,6 +7,8 @@ import {
   updateMondayStatus,
   addItemUpdate,
   createBoardItem,
+  syncChatToMonday,
+  updateItemName,
 } from '../monday/api.js';
 import { bookMeeting } from '../calendar/api.js';
 import {
@@ -859,6 +861,19 @@ function storeMessages(
     insertMsg.run(phone, leadId, 'in', text);
   }
   insertMsg.run(phone, leadId, 'out', outResponse);
+
+  // Sync chat to Monday.com (fire-and-forget, non-blocking)
+  if (!isAdminPhone(phone)) {
+    const db = getDb();
+    const lead = db
+      .prepare('SELECT monday_item_id, name FROM leads WHERE phone = ?')
+      .get(phone) as { monday_item_id: number | null; name: string | null } | undefined;
+    if (lead?.monday_item_id) {
+      syncChatToMonday(lead.monday_item_id, batchedMessages, outResponse, lead.name || undefined).catch(
+        (err) => { log.error({ err, phone }, 'Monday chat sync failed'); },
+      );
+    }
+  }
 }
 
 function updateLeadTimestamp(

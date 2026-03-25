@@ -49,14 +49,14 @@ async function createNewLead(phone: string, firstMessage?: string): Promise<void
         .run(mondayItemId, parseInt(boardId, 10), phone);
       log.info({ phone, mondayItemId }, 'Monday.com item created for new lead');
 
-      // Try to set phone column on the Monday item
+      // Set phone column (board column ID: phone_mm16hqz2)
       try {
-        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'טלפון', phone);
+        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'phone_mm16hqz2', phone);
       } catch { /* phone column might have different ID */ }
 
-      // Try to set source column
+      // Set source column (board column ID: text_mm16pfzp)
       try {
-        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'מקור', 'Facebook Ads');
+        await updateColumnValue(mondayItemId, parseInt(boardId, 10), 'text_mm16pfzp', 'WhatsApp בוט');
       } catch { /* source column might have different ID */ }
     }
   } catch (err) {
