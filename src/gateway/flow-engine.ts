@@ -142,7 +142,7 @@ export function seedExampleFlows() {
 
   // Flow 1: Welcome new lead — greet + ask for details + tag
   const welcomeSteps: FlowStep[] = [
-    { type: 'send_message', params: { message: 'היי {name}! 👋 תודה שפנית אלינו.\nאני הבוט של Alon.dev — אשמח לעזור לך.' }, delay_ms: 0 },
+    { type: 'send_message', params: { message: 'היי {name}! 👋 תודה שפנית אלינו.\nאני יעל, העוזרת הדיגיטלית של Alon.dev — אשמח לעזור לך.' }, delay_ms: 0 },
     { type: 'send_message', params: { message: 'ב-48 שעות אני בונה אתר מקצועי ומותאם אישית לעסק שלך.\n\nמה סוג העסק שלך? 🏪' }, delay_ms: 3000 },
     { type: 'add_tag', params: { tag: 'welcome_sent' }, delay_ms: 0 },
     { type: 'update_status', params: { status: 'contacted' }, delay_ms: 0 },
