@@ -506,6 +506,7 @@ html,body{
         <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
         <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
         <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
+        <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
       </div>
     </div>
     <div class="ptr-indicator" id="ptrIndicator">&#8635; שחרר לרענון</div>
@@ -708,6 +709,7 @@ async function loadContacts() {
       contacts.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
       applyFilter();
       updateUnreadBadge();
+      if (typeof checkNewMessages === 'function') checkNewMessages();
     }
   } catch (e) {
     console.error('Load contacts error:', e);
@@ -720,6 +722,7 @@ function applyFilter() {
     if (currentFilter === 'new' && c.lead_status !== 'new') return false;
     if (currentFilter === 'vip' && c.lead_status !== 'vip') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
+    if (currentFilter === 'replied' && c.last_message_role !== 'user') return false;
     if (q && !(c.name || '').toLowerCase().includes(q) && !(c.phone || '').includes(q)) return false;
     return true;
   });
@@ -1134,6 +1137,71 @@ document.getElementById('msgInput').addEventListener('input', function() {
 /* ===== SERVICE WORKER ===== */
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+/* ===== NOTIFICATIONS ===== */
+// WhatsApp-style notification sound (short double-beep)
+const notifCtx = new (window.AudioContext || window.webkitAudioContext)();
+function playNotifSound() {
+  try {
+    const now = notifCtx.currentTime;
+    // First beep
+    const o1 = notifCtx.createOscillator();
+    const g1 = notifCtx.createGain();
+    o1.type = 'sine'; o1.frequency.value = 880;
+    g1.gain.setValueAtTime(0.3, now);
+    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
+    o1.connect(g1); g1.connect(notifCtx.destination);
+    o1.start(now); o1.stop(now + 0.12);
+    // Second beep (higher)
+    const o2 = notifCtx.createOscillator();
+    const g2 = notifCtx.createGain();
+    o2.type = 'sine'; o2.frequency.value = 1100;
+    g2.gain.setValueAtTime(0.3, now + 0.15);
+    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+    o2.connect(g2); g2.connect(notifCtx.destination);
+    o2.start(now + 0.15); o2.stop(now + 0.3);
+  } catch(e) {}
+}
+
+// Track previous unread count to detect new messages
+let prevTotalUnread = -1;
+
+// Request notification permission
+if ('Notification' in window && Notification.permission === 'default') {
+  // Wait for user interaction to request
+  document.addEventListener('click', function askNotif() {
+    Notification.requestPermission();
+    document.removeEventListener('click', askNotif);
+  }, { once: true });
+}
+
+function checkNewMessages() {
+  const totalUnread = contacts.reduce((s, c) => s + (c.unread_count || 0), 0);
+  if (prevTotalUnread >= 0 && totalUnread > prevTotalUnread) {
+    // New message arrived!
+    playNotifSound();
+
+    // Vibrate if supported
+    if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+
+    // Find who sent the new message
+    const newMsg = contacts.find(c => (c.unread_count || 0) > 0 && c.last_message_role === 'user');
+
+    // Browser notification (works in PWA on iPhone)
+    if ('Notification' in window && Notification.permission === 'granted') {
+      const name = newMsg ? (newMsg.name || newMsg.phone) : 'הודעה חדשה';
+      const body = newMsg ? (newMsg.last_message || '').slice(0, 80) : 'קיבלת הודעה חדשה';
+      new Notification('360Shmikley', {
+        body: `${name}: ${body}`,
+        icon: '/icon-wa-blue-192.png',
+        badge: '/icon-wa-blue-192.png',
+        tag: 'wa-msg-' + Date.now(),
+        renotify: true
+      });
+    }
+  }
+  prevTotalUnread = totalUnread;
 }
 
 /* ===== INIT ===== */
