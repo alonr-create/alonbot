@@ -55,28 +55,56 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     }
   }
 
+  // Process webhook entries (extracted for cloud/local forwarding logic)
+  function processWebhookEntries(body: any) {
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        const value = change.value;
+        if (value.messages) {
+          for (const msg of value.messages) {
+            processIncomingMessage(msg, value.contacts).catch(err =>
+              log.error({ err: err.message }, 'error processing message')
+            );
+          }
+        }
+        if (value.statuses) {
+          for (const status of value.statuses) {
+            log.debug({ recipient: status.recipient_id, status: status.status }, 'status update');
+          }
+        }
+      }
+    }
+  }
+
   // Webhook handler — receives forwarded messages from the webhook middleware
   function webhookHandler(req: any, res: any) {
     const body = req.body;
 
     // Direct Meta webhook format
     if (body.object === 'whatsapp_business_account') {
-      for (const entry of body.entry || []) {
-        for (const change of entry.changes || []) {
-          const value = change.value;
-          if (value.messages) {
-            for (const msg of value.messages) {
-              processIncomingMessage(msg, value.contacts).catch(err =>
-                log.error({ err: err.message }, 'error processing message')
-              );
-            }
+      // Cloud mode: try forwarding to local Mac first (has local tools: shell, files, camera)
+      // Only process on cloud if local is unreachable (fallback)
+      if (config.mode === 'cloud' && (config as any).localApiUrl) {
+        const localUrl = (config as any).localApiUrl;
+        fetch(`${localUrl}/whatsapp-cloud-webhook`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+          signal: AbortSignal.timeout(10000),
+        }).then(r => {
+          if (r.ok) {
+            log.info('webhook forwarded to local — local will handle');
+          } else {
+            log.warn({ status: r.status }, 'local returned error — processing on cloud');
+            processWebhookEntries(body);
           }
-          if (value.statuses) {
-            for (const status of value.statuses) {
-              log.debug({ recipient: status.recipient_id, status: status.status }, 'status update');
-            }
-          }
-        }
+        }).catch(err => {
+          log.warn({ err: err.message }, 'local unreachable — processing on cloud');
+          processWebhookEntries(body);
+        });
+      } else {
+        // Local mode or no local connected: process directly
+        processWebhookEntries(body);
       }
       res.sendStatus(200);
       return;

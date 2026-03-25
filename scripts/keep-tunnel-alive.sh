@@ -4,8 +4,7 @@
 
 LOCAL_PORT="${PORT:-3700}"
 RAILWAY_PROJECT_DIR="/Users/oakhome/קלוד עבודות/voice-agent"
-RAILWAY_WEBHOOK_DIR="/Users/oakhome/קלוד עבודות/evolution-api"
-ALONBOT_CLOUD_URL="https://chic-forgiveness-production.up.railway.app"
+ALONBOT_CLOUD_URL="https://alonbot.onrender.com"
 ALONBOT_SECRET="alonbot-secret-2026"
 CHECK_INTERVAL=300  # 5 minutes
 TUNNEL_LOG="/tmp/cf-tunnel-keepalive.log"
@@ -36,16 +35,13 @@ start_tunnel() {
   log "Tunnel URL: $TUNNEL_URL (PID: $TUNNEL_PID)"
   echo "$TUNNEL_URL" > /tmp/alonbot-tunnel-url.txt
 
-  # Update Railway voice-agent
+  # Update Railway voice-agent AALONBOT_URL (for post-call WhatsApp)
   log "Updating Railway voice-agent..."
   cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
 
-  # Update Railway wa-webhook FORWARD_URL
-  log "Updating Railway wa-webhook..."
-  cd "$RAILWAY_WEBHOOK_DIR" && railway variables --set "FORWARD_URL=$TUNNEL_URL/whatsapp-cloud-webhook" 2>&1
-
-  # Register with AalonBot cloud (in-memory update, no redeploy needed)
-  log "Registering with AalonBot cloud..."
+  # Register with AalonBot cloud on Render (in-memory update, no redeploy needed)
+  # Render forwards WhatsApp webhooks to local when connected
+  log "Registering with AalonBot cloud (Render)..."
   curl -s -X POST "$ALONBOT_CLOUD_URL/api/register-local" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $ALONBOT_SECRET" \
