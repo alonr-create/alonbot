@@ -46,6 +46,8 @@
   .cost-fill { height:100%; background:linear-gradient(90deg,#0a3,#fa0,#f00); border-radius:3px; }
   .refresh-btn { background:#7b2ff7; color:#fff; border:none; padding:8px 20px; border-radius:20px; cursor:pointer; font-family:inherit; font-size:13px; }
   .refresh-btn:hover { background:#9b4fff; }
+  .wa-btn { background:#25D366; color:#fff; border:none; padding:8px 20px; border-radius:20px; cursor:pointer; font-family:inherit; font-size:13px; text-decoration:none; display:inline-flex; align-items:center; gap:6px; }
+  .wa-btn:hover { background:#128C7E; }
   .empty { text-align:center; color:#555; padding:30px; }
   @media(max-width:600px) { .grid { grid-template-columns:repeat(2,1fr); } .container { padding:10px; } }
 </style>
@@ -55,6 +57,7 @@
   <h1>AlonBot Dashboard</h1>
   <div class="status">
     <span id="mode-badge" class="badge badge-ok">...</span>
+    <a id="wa-mgr-link" class="wa-btn" href="#" target="_blank">📲 WA Manager</a>
     <button class="refresh-btn" onclick="loadAll()">Refresh</button>
   </div>
 </div>
@@ -172,6 +175,10 @@ document.getElementById('main-tabs').addEventListener('click', e => {
 
 loadAll();
 setInterval(loadAll, 30000); // refresh every 30s
+// Set WA Manager link with same token
+const urlParams = new URLSearchParams(window.location.search);
+const token = urlParams.get('token') || '';
+document.getElementById('wa-mgr-link').href = '/wa-manager' + (token ? '?token=' + token : '');
 </script>
 </body>
 </html>

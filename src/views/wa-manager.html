@@ -165,17 +165,41 @@ tr:hover td{background:var(--bg3);}
 /* Mobile */
 @media(max-width:768px){
   .conversations-layout{flex-direction:column;}
-  .conv-sidebar{width:100%;min-width:auto;height:50%;border-left:none;border-bottom:1px solid var(--border);}
-  .chat-panel{height:50%;}
+  .conv-sidebar{width:100%;min-width:auto;height:45%;border-left:none;border-bottom:1px solid var(--border);}
+  .chat-panel{height:55%;}
   .charts-grid{grid-template-columns:1fr;}
   .stats-grid{grid-template-columns:repeat(2,1fr);}
-  .kanban-col{width:220px;}
+  .kanban{min-width:auto;}
+  .kanban-col{width:240px;}
+  .header{padding:10px 14px;}
+  .header-actions{gap:6px;}
+  .btn{padding:5px 10px;font-size:11px;}
+  .overview{padding:12px;}
+  .broadcasts{padding:12px;}
+  .pipeline{padding:8px;}
 }
 @media(max-width:480px){
-  .header h1{font-size:16px;}
-  .tab{padding:10px 14px;font-size:12px;}
+  body{overflow-y:auto;}
+  .main{height:auto;overflow:visible;}
+  .tab-content.active{display:flex;flex-direction:column;height:auto;}
+  .conversations-layout{flex-direction:column;height:auto;}
+  .conv-sidebar{width:100%;min-width:auto;height:auto;max-height:300px;border-left:none;border-bottom:1px solid var(--border);}
+  .chat-panel{height:auto;min-height:400px;}
+  .header h1{font-size:15px;}
+  .header h1 .wa-icon{width:22px;height:22px;font-size:13px;}
+  .tab-bar{padding:0 8px;}
+  .tab{padding:10px 12px;font-size:11px;}
   .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px;}
-  .stat-card .num{font-size:24px;}
+  .stat-card{padding:12px;}
+  .stat-card .num{font-size:22px;}
+  .kanban{overflow-x:scroll;padding-bottom:16px;}
+  .kanban-col{width:200px;}
+  .broadcast-composer{padding:14px;}
+  .form-group select,.form-group textarea,.form-group input{font-size:14px;}
+  .msg-bubble{max-width:88%;}
+  .chat-input-area{padding:8px;}
+  .chat-input-area textarea{font-size:14px;}
+  .overview{padding:10px;}
 }
 /* Tags */
 .tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:500;background:var(--accent);color:#fff;cursor:default;}
