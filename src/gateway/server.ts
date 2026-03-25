@@ -940,13 +940,20 @@ app.get('/api/wa-manager/costs', dashAuth, (req, res) => {
 // WA Templates API — proxy to Meta Graph API
 app.get('/api/wa-manager/templates', dashAuth, async (_req, res) => {
   try {
-    const wabaId = '1289908013100682';
+    const wabaId = config.waCloudWabaId || '1289908013100682';
     const token = config.waCloudToken;
-    if (!token) { res.json({ templates: [] }); return; }
-    const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
+    if (!token) { res.json({ templates: [], debug: 'no token' }); return; }
+    const url = `https://graph.facebook.com/v21.0/${wabaId}/message_templates?limit=100`;
+    log.info({ wabaId, url }, 'fetching templates');
+    const r = await fetch(url, {
       headers: { 'Authorization': `Bearer ${token}` }
     });
     const data = await r.json() as any;
+    if (data.error) {
+      log.error({ error: data.error }, 'Meta templates API error');
+      res.json({ templates: [], error: data.error });
+      return;
+    }
     res.json({ templates: data.data || [] });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });

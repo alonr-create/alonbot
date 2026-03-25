@@ -23,6 +23,7 @@ export const config = {
   fbAccessToken: process.env.FB_ACCESS_TOKEN || '',
   waCloudToken: process.env.WA_CLOUD_TOKEN || '',
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
+  waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
   dataDir: join(process.cwd(), 'data'),
   skillsDir: join(process.cwd(), 'skills'),

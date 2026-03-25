@@ -1423,6 +1423,14 @@ let templates = [];
 async function loadTemplates() {
   try {
     const data = await api('/templates');
+    if (data.error) {
+      console.error('Templates API error:', data.error);
+      document.getElementById('templatesList').innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">
+        <div style="font-size:16px;margin-bottom:8px;">שגיאה מ-Meta API</div>
+        <div style="font-size:13px;color:var(--text2);">${esc(data.error.message || JSON.stringify(data.error))}</div>
+      </div>`;
+      return;
+    }
     templates = data.templates || [];
     renderTemplates();
   } catch(e) {
