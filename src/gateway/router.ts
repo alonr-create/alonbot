@@ -3,10 +3,23 @@ import { handleMessage, type StreamCallback } from '../agent/agent.js';
 import { matchKeywordWorkflows } from '../agent/workflows.js';
 import { executeWorkflowActions } from '../agent/tools.js';
 import { createLogger } from '../utils/logger.js';
+import { config } from '../utils/config.js';
 
 const log = createLogger('router');
 
 const adapters = new Map<string, ChannelAdapter>();
+
+// Deduplication: prevent processing the same message twice (e.g. Telegram polling restarts, webhook retries)
+const recentMessageIds = new Map<string, number>(); // messageKey -> timestamp
+const DEDUP_WINDOW_MS = 60_000; // 1 minute
+
+// Cleanup stale dedup entries every 2 minutes
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, ts] of recentMessageIds) {
+    if (now - ts > DEDUP_WINDOW_MS) recentMessageIds.delete(key);
+  }
+}, 120_000);
 
 // Tool name → Hebrew label for streaming display
 const TOOL_LABELS: Record<string, string> = {
@@ -48,7 +61,20 @@ export function registerAdapter(adapter: ChannelAdapter) {
   adapters.set(adapter.name, adapter);
 
   adapter.onMessage(async (msg: UnifiedMessage) => {
+    // Deduplicate: skip if we already processed this exact message
+    const dedupKey = `${msg.channel}:${msg.senderId}:${msg.id}`;
+    if (recentMessageIds.has(dedupKey)) {
+      log.warn({ dedupKey }, 'duplicate message skipped');
+      return;
+    }
+    recentMessageIds.set(dedupKey, Date.now());
+
     log.info({ channel: msg.channel, sender: msg.senderName, text: msg.text.slice(0, 80) }, 'incoming message');
+
+    // Notify Alon on Telegram when a lead/non-Alon sends a WhatsApp message
+    if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
+      notifyLeadMessage(msg).catch(() => {});
+    }
 
     // Check for keyword workflows (fire-and-forget, don't block response)
     try {
@@ -123,6 +149,15 @@ export function registerAdapter(adapter: ChannelAdapter) {
         await adapter.sendReply(msg, reply);
       }
       log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback }, 'reply sent');
+
+      // Log bot reply to leads for flow tracking
+      if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
+        try {
+          const { db } = await import('../utils/db.js');
+          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
+            .run(msg.senderId, reply.text.substring(0, 2000));
+        } catch { /* non-critical */ }
+      }
     } catch (error: any) {
       if (typingInterval) clearInterval(typingInterval);
       log.error({ channel: msg.channel, err: error.message, stack: error.stack?.slice(0, 500) }, 'message handling error');
@@ -163,6 +198,29 @@ export async function sendAgentMessage(channel: string, targetId: string, text: 
   } catch (error: any) {
     log.error({ err: error.message }, 'agent message error');
   }
+}
+
+// Notify Alon via Telegram when a lead messages on WhatsApp
+async function notifyLeadMessage(msg: UnifiedMessage) {
+  const targetId = config.allowedTelegram[0];
+  if (!targetId || !config.telegramBotToken) return;
+  try {
+    const { Bot } = await import('grammy');
+    const bot = new Bot(config.telegramBotToken);
+    const preview = msg.text ? msg.text.slice(0, 200) : '(תמונה/קובץ/קולי)';
+    await bot.api.sendMessage(Number(targetId),
+      `📩 הודעת WhatsApp חדשה!\n\n👤 ${msg.senderName || msg.senderId}\n💬 ${preview}`
+    );
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'lead notification failed');
+  }
+
+  // Log to DB for flow tracking
+  try {
+    const { db } = await import('../utils/db.js');
+    db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'user', ?, datetime('now'))`)
+      .run(msg.senderId, msg.text || '(מדיה)');
+  } catch { /* non-critical */ }
 }
 
 export async function sendToChannel(channel: string, targetId: string, text: string) {

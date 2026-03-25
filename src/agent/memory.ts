@@ -123,7 +123,11 @@ const stmtUnembeddedMemories = db.prepare(
 // --- Messages ---
 
 export function saveMessage(channel: string, senderId: string, senderName: string, role: 'user' | 'assistant', content: string) {
-  stmtInsertMsg.run(channel, senderId, senderName, role, content);
+  try {
+    stmtInsertMsg.run(channel, senderId, senderName, role, content);
+  } catch (e: any) {
+    log.error({ err: e.message, channel, senderId, role }, 'saveMessage FAILED');
+  }
 }
 
 export function getHistory(channel: string, senderId: string): Array<{ role: string; content: string }> {

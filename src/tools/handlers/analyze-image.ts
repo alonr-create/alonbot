@@ -32,7 +32,7 @@ const handler: ToolHandler = {
       const question = input.question || 'Describe this image in detail. If there is text, extract it (OCR). Answer in Hebrew.';
 
       const res = await withRetry(() => fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${ctx.config.geminiApiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${ctx.config.geminiApiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

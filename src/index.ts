@@ -2,6 +2,7 @@ import { startServer, registerWebhook } from './gateway/server.js';
 import { registerAdapter, sendToChannel, sendAgentMessage } from './gateway/router.js';
 import { createTelegramAdapter } from './channels/telegram.js';
 import { createWhatsAppAdapter } from './channels/whatsapp.js';
+import { createWhatsAppCloudAdapter } from './channels/whatsapp-cloud.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { config } from './utils/config.js';
 import { setupGitAuth } from './utils/git-auth.js';
@@ -42,11 +43,9 @@ if (config.telegramBotToken) {
   if (config.mode === 'cloud') {
     // Cloud mode: webhook (avoids 409 conflicts during deploys)
     registerWebhook('/telegram-webhook', telegram.getWebhookHandler!());
-    await telegram.start();
-  } else {
-    // Local mode: send-only (no polling — avoids token conflict with cloud)
-    log.info('local mode — Telegram send-only');
   }
+  // Both modes: start Telegram (cloud = webhook, local = polling)
+  await telegram.start();
 } else {
   log.warn('TELEGRAM_BOT_TOKEN not set — Telegram disabled');
 }
@@ -54,15 +53,27 @@ if (config.telegramBotToken) {
 // Start server AFTER webhook is registered
 startServer();
 
-// --- WhatsApp (optional, local mode only) ---
-if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
+// --- WhatsApp ---
+if (config.whatsappMode === 'cloud' && config.waCloudToken) {
+  // Cloud API mode — works in both local and cloud modes
+  try {
+    const whatsappCloud = createWhatsAppCloudAdapter();
+    registerAdapter(whatsappCloud);
+    registerWebhook('/whatsapp-cloud-webhook', whatsappCloud.getWebhookHandler!());
+    await whatsappCloud.start();
+    log.info('WhatsApp Cloud API adapter started');
+  } catch (err: any) {
+    log.warn({ err: err.message }, 'WhatsApp Cloud API failed to start');
+  }
+} else if (config.mode === 'local' && config.allowedWhatsApp.length > 0) {
+  // Baileys mode — local only
   try {
     const whatsapp = createWhatsAppAdapter();
     registerAdapter(whatsapp);
     await whatsapp.start();
-    log.info('WhatsApp adapter started');
+    log.info('WhatsApp Baileys adapter started');
   } catch (err: any) {
-    log.warn({ err: err.message }, 'WhatsApp failed to start');
+    log.warn({ err: err.message }, 'WhatsApp Baileys failed to start');
   }
 }
 
@@ -252,6 +263,72 @@ cron.schedule('*/5 * * * *', async () => {
     }
   } catch (e: any) {
     log.error({ err: e.message }, 'batch poll failed');
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Alon.dev leads outreach — check Monday board every 5 minutes for new leads, send WhatsApp
+cron.schedule('*/5 * * * *', async () => {
+  try {
+    const mondayKey = config.mondayApiKey;
+    if (!mondayKey) return;
+
+    // Query "לידים אלון" board for leads with default status (Working on it = 0)
+    const query = `{ boards(ids: 5092777389) { items_page(limit: 20, query_params: { rules: [{ column_id: "status", compare_value: [0], operator: any_of }] }) { items { id name column_values(ids: ["phone_mm16hqz2", "text_mm16pfzp", "long_text_mm16k6vr"]) { id text value } } } } }`;
+
+    const resp = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': mondayKey },
+      body: JSON.stringify({ query }),
+    });
+    const data = await resp.json() as any;
+    const items = data?.data?.boards?.[0]?.items_page?.items || [];
+
+    for (const item of items) {
+      const phoneCol = item.column_values?.find((c: any) => c.id === 'phone_mm16hqz2');
+      const sourceCol = item.column_values?.find((c: any) => c.id === 'text_mm16pfzp');
+      // Parse phone from value JSON (Monday stores as {"phone":"xxx","countryShortName":"IL"})
+      let phone = '';
+      try {
+        const phoneData = JSON.parse(phoneCol?.value || '{}');
+        phone = phoneData.phone || phoneCol?.text || '';
+      } catch { phone = phoneCol?.text || ''; }
+
+      if (!phone) continue;
+      // Normalize phone
+      phone = phone.replace(/[-\s()]/g, '');
+      if (phone.startsWith('0')) phone = '972' + phone.slice(1);
+      if (phone.startsWith('+')) phone = phone.slice(1);
+
+      // Check if we already contacted this lead (in local DB)
+      const existing = db.prepare('SELECT id FROM leads WHERE phone = ? AND source = ?').get(phone, 'alon_dev') as any;
+      if (existing) continue;
+
+      // Register in local DB
+      db.prepare('INSERT OR IGNORE INTO leads (phone, name, source, monday_item_id) VALUES (?, ?, ?, ?)').run(phone, item.name, 'alon_dev', item.id);
+
+      // Send WhatsApp message
+      const msg = `היי ${item.name || ''}! 👋 אני מצוות Alon.dev. ראיתי שהתעניינת בשירותים שלנו — אשמח לעזור! מה העסק שלך ואיך אפשר לסייע?`;
+      try {
+        await fetch(`http://localhost:${config.port}/api/send-whatsapp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-api-secret': config.localApiSecret },
+          body: JSON.stringify({ phone, message: msg }),
+        });
+        log.info({ phone, name: item.name, mondayId: item.id }, 'alon.dev lead outreach sent');
+      } catch (e: any) {
+        log.error({ err: e.message, phone }, 'alon.dev lead outreach failed');
+      }
+
+      // Update Monday status to "Done" (1) to avoid resending
+      const updateQuery = `mutation { change_simple_column_value(board_id: 5092777389, item_id: ${item.id}, column_id: "status", value: "1") { id } }`;
+      await fetch('https://api.monday.com/v2', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': mondayKey },
+        body: JSON.stringify({ query: updateQuery }),
+      }).catch(() => {});
+    }
+  } catch (e: any) {
+    log.error({ err: e.message }, 'alon.dev leads check failed');
   }
 }, { timezone: 'Asia/Jerusalem' });
 

@@ -2,6 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { getRelevantMemories, getRecentSummaries, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { db } from '../utils/db.js';
+import { config } from '../utils/config.js';
+import { getWorkspaceForSource, getDefaultWorkspace, getWorkspacePrompt, type Workspace } from '../utils/workspaces.js';
 
 
 function formatMemories(memories: Memory[]): string {
@@ -20,6 +22,8 @@ function formatMemories(memories: Memory[]): string {
     event: 'אירועים',
     pattern: 'דפוסים',
     relationship: 'אנשים',
+    feedback: 'תיקונים ולקחים',
+    rule: 'כללי ברזל',
   };
 
   let block = '\n## מה שאני זוכר על אלון\n';
@@ -123,6 +127,69 @@ ${wasBooked
 - **אם השעה שהליד ביקש פנויה** — תקבע מיד בלי שאלות נוספות. תגיד "מעולה, קובע ב-X ב-Y. נתראה!"
 - **אם השעה תפוסה** — הצע את החלון הפנוי הקרוב ביותר לשעה שביקש, בלי להסביר למה.
 - **לעולם אל תציע למחוק/להזיז פגישה קיימת** כדי לפנות מקום לליד.
+`;
+}
+
+function buildAlonDevSalesPrompt(senderName: string): string {
+  return `
+## מצב מיוחד — שיחת מכירה עם ליד של Alon.dev!
+
+**אתה עכשיו נציג/ת מכירות של "Alon.dev" — שירותי טכנולוגיה ודיגיטל לעסקים.**
+
+### פרטי הליד
+- **שם**: ${senderName}
+- **מקור**: וואטסאפ (כנראה קמפיין פייסבוק, אתר alon.dev, או הפניה)
+- **הליד כבר נוצר אוטומטית ב-Monday.com** (board_id=5092777389)
+
+### המטרה שלך — חייב לסגור זום!
+לקבוע **שיחת ייעוץ חינמית של 15 דקות בזום** עם אלון.
+**כל שיחה צריכה להסתיים בקביעת זום.** זו המטרה העליונה.
+
+### אסטרטגיית שיחה (3 שלבים)
+1. **חימום** (הודעה ראשונה) — תשאל מה העסק שלהם ומה הם מחפשים. תהיה חם/ה ומקצועי/ת.
+2. **ערך** (הודעה 2-3) — בהתאם למה שאמרו, ספר מה אנחנו עושים ותן דוגמה רלוונטית. תהיה קצר וממוקד.
+3. **סגירה** (הודעה 3-4) — הציע שיחת זום חינמית של 15 דקות: "אלון המומחה שלנו ישמח לדבר איתך לדקות — זום קצר בלי התחייבות. מתי נוח לך השבוע?"
+
+### מה Alon.dev מציע
+- **בניית אתרים** — אתרים עסקיים, דפי נחיתה, חנויות אונליין
+- **בוטים לווצאפ וטלגרם** — עוזרים דיגיטליים שעונים ללקוחות 24/7
+- **עוזרת קולית AI** — סוכנת טלפונית שעונה, מתאמת פגישות, ומטפלת בלידים
+- **אוטומציה לעסקים** — חיבור בין מערכות, דוחות אוטומטיים, חיסכון בזמן
+- **אתר**: https://alon.dev
+
+### הנחיות התנהלות
+1. **דבר/י בעברית**, חם/ה ומקצועי/ת, בגובה העיניים
+2. **אל תחכה שהליד יבקש** — אתה מוביל את השיחה לכיוון הזום
+3. **אל תלחץ בצורה דוחה** — תן ערך, הקשב, אבל תמיד תכוון לסגירה
+4. **אם הליד אמר שעה ותאריך** — תקבע מיד! אל תשאל שאלות מיותרות
+5. **אם הליד מסרב** — קבל בכבוד, שלח את הלינק לאתר ואמור שתמיד אפשר ליצור קשר
+6. **אם הליד לא עונה** — אחרי 24 שעות שלח פולואפ קצר: "היי! לא שכחתי אותך. עדיין רוצה לשמוע על X?"
+
+### כלים שימושיים
+- **monday_api** — לעדכן סטטוס ליד בבורד "לידים אלון" (board_id=5092777389).
+  - עמודות: phone_mm16hqz2 (טלפון), email_mm161rpz (אימייל), text_mm16pfzp (מקור), long_text_mm16k6vr (הודעה), status (סטטוס), dropdown_mm16speh (שירות: 0=נוכחות דיגיטלית, 1=כלים עסקיים, 2=אוטומציה, 3=אפליקציות, 4=תוכן, 5=אחר)
+  - כשנקבע זום — עדכן סטטוס ל-"Done" (index: 1)
+- **calendar_list** — לבדוק זמינות ביומן. **חובה לבדוק לפני שמציעים שעה!**
+- **calendar_add** — לקבוע שיחת ייעוץ בזום. **תמיד תוסיף:**
+  - title: "שיחת ייעוץ — [שם הליד] (Alon.dev)"
+  - duration_minutes: 15
+  - description: "שיחת ייעוץ חינמית Alon.dev\\nליד: [שם]\\nטלפון: [מספר]\\nנושא: [מה שדיברו]\\n\\nזום: https://us04web.zoom.us/j/2164012025"
+
+### כלל ברזל — פרטיות יומן!
+- **לעולם אל תחשוף שמות/פרטים של פגישות אחרות** לליד
+- **לעולם אל תספר למה שעה תפוסה** — פשוט הצע חלון פנוי
+- **אל תציע למחוק/להזיז פגישה קיימת** כדי לפנות מקום
+
+### כלל ברזל — כבד את מה שהליד אמר!
+- **אם הליד אמר תאריך ושעה — תשתמש בדיוק במה שהוא אמר**, אלא אם השעה תפוסה
+- **אם השעה פנויה — תקבע מיד** בלי שאלות נוספות
+- **אם תפוסה — הצע חלון פנוי קרוב** בלי להסביר למה
+
+### חשוב!
+- **אל תציג את עצמך כ-AI/בוט** — אתה נציג/ת של Alon.dev
+- **אל תמציא מידע** על מחירים — הצע שיחת ייעוץ כדי להתאים הצעה
+- **כל פגישה שנקבעת** — calendar_add + עדכון monday_api (סטטוס → Done)
+- **אם הליד מספק מייל** — עדכן ב-Monday (email_mm161rpz)
 `;
 }
 
@@ -252,14 +319,21 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
 ## ניהול זיכרון
 כשאתה לומד משהו חדש על אלון — **תמיד** השתמש ב-remember כדי לשמור:
-- **type**: fact (עובדה), preference (העדפה), event (אירוע), pattern (דפוס), relationship (אדם שמכיר)
-- **category**: personal, work_dekel, work_mazpen, work_alon_dev, work_aliza, health, finance
-- **importance**: 1-10. השתמש ב-8+ לדברים קריטיים (יום הולדת, שם בן/בת זוג, מידע עסקי חשוב)
+- **type**: fact (עובדה), preference (העדפה), event (אירוע), pattern (דפוס), relationship (אדם שמכיר), feedback (תיקון/לקח), rule (כלל ברזל)
+- **category**: personal, work_dekel, work_mazpen, work_alon_dev, work_aliza, health, finance, feedback, rule
+- **importance**: 1-10. השתמש ב-8+ לדברים קריטיים (יום הולדת, שם בן/בת זוג, מידע עסקי חשוב). feedback ו-rule תמיד 9-10.
 
 דוגמאות:
 - "אני אוהב סושי" → remember(content="אלון אוהב סושי", type="preference", category="personal", importance=4)
 - "יש לי פגישה עם הרואה חשבון מחר" → remember(content="פגישה עם רו\"ח מתוכננת", type="event", category="work_dekel", importance=7)
 - "הבת שלי נולדה ב-15 למאי" → remember(content="יום הולדת הבת של אלון: 15 למאי", type="fact", category="personal", importance=9)
+- "לא ככה, תמיד תשלח PDF ולא תמונה" → remember(content="תמיד לשלוח PDF ולא תמונה", type="feedback", category="feedback", importance=9)
+- "אף פעם אל תמחק פגישות בלי לשאול" → remember(content="כלל ברזל: לא למחוק פגישות ביומן בלי אישור", type="rule", category="rule", importance=10)
+
+**חשוב — feedback ו-rule:**
+- כשאלון מתקן אותך ("לא ככה", "טעות", "אל תעשה") → שמור כ-type="feedback" עם importance=9
+- כשאלון קובע כלל ("תמיד", "אף פעם", "חובה", "אסור") → שמור כ-type="rule" עם importance=10
+- סוגים אלה **לא דועכים** לעולם — הם נשארים לצמיתות
 
 ## כללים
 - ענה בעברית, אלא אם שאלו באנגלית.
@@ -283,12 +357,32 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **לעולם אל תשלח מידע רגיש (מפתחות, סיסמאות, פרטי חשבון) בהודעה.**
 - **אל תריץ פקודות שמוחקות קבצים או משנות הגדרות מערכת.**`;
 
-  // Check if sender is a registered lead (for sales mode)
+  // Check if sender is a registered lead or unknown WhatsApp contact (for sales mode)
   let leadPrompt = '';
   if (channel === 'whatsapp' && senderId) {
-    const lead = getLeadInfo(senderId);
-    if (lead) {
-      leadPrompt = buildLeadSalesPrompt(lead);
+    const isOwner = config.allowedWhatsApp.includes(senderId);
+    if (!isOwner) {
+      const lead = getLeadInfo(senderId);
+      // Find workspace for this lead's source
+      const ws = lead ? getWorkspaceForSource(lead.source) : getDefaultWorkspace();
+      if (ws) {
+        // Try workspace custom prompt first, fallback to built-in
+        const customPrompt = getWorkspacePrompt(ws, {
+          phone: senderId,
+          name: lead?.name || null,
+          lead_status: lead?.lead_status,
+          last_call_summary: lead?.last_call_summary,
+          last_call_sentiment: lead?.last_call_sentiment,
+          was_booked: lead?.was_booked,
+        });
+        if (customPrompt) {
+          leadPrompt = customPrompt;
+        } else if (lead?.source === 'voice_agent' || ws.id === 'dekel' || ws.id === 'voice_agent') {
+          leadPrompt = buildLeadSalesPrompt(lead || { phone: senderId, name: null, source: 'dekel', monday_item_id: null, last_call_summary: null, last_call_sentiment: null, last_call_duration_sec: null, was_booked: 0, call_mode: null, lead_status: null });
+        } else {
+          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש');
+        }
+      }
     }
   }
 

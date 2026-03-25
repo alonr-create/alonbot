@@ -908,7 +908,31 @@ app.get('/api/wa-manager/costs', dashAuth, (req, res) => {
       GROUP BY model
     `).all() as any[];
 
-    res.json({ success: true, daily, totals, today });
+    // WhatsApp costs — estimated from conversations (unique contacts per day)
+    // Meta pricing Israel: service $0.02, marketing $0.065, utility $0.008
+    const waDaily = db.prepare(`
+      SELECT date(created_at) as day,
+        COUNT(CASE WHEN role='user' THEN 1 END) as incoming_msgs,
+        COUNT(CASE WHEN role='assistant' THEN 1 END) as outgoing_msgs,
+        COUNT(DISTINCT sender_id) as conversations
+      FROM messages
+      WHERE channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+        AND created_at >= datetime('now', '-' || ? || ' days')
+      GROUP BY day ORDER BY day DESC
+    `).all(days) as any[];
+
+    // Estimate: user-initiated = service ($0.02), bot-initiated = marketing ($0.065)
+    const waToday = db.prepare(`
+      SELECT
+        COUNT(DISTINCT sender_id) as conversations,
+        COUNT(CASE WHEN role='user' THEN 1 END) as incoming_msgs,
+        COUNT(CASE WHEN role='assistant' THEN 1 END) as outgoing_msgs
+      FROM messages
+      WHERE channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+        AND date(created_at) = date('now')
+    `).get() as any;
+
+    res.json({ success: true, daily, totals, today, waDaily, waToday });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }

@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import crypto from 'crypto';
+import { join } from 'path';
 
 export const config = {
   mode: (process.env.MODE || 'local') as 'cloud' | 'local',
@@ -20,6 +21,9 @@ export const config = {
   dashboardSecret: process.env.DASHBOARD_SECRET || process.env.LOCAL_API_SECRET || crypto.randomBytes(32).toString('hex'),
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
   fbAccessToken: process.env.FB_ACCESS_TOKEN || '',
-  dataDir: new URL('../../data/', import.meta.url).pathname,
-  skillsDir: new URL('../../skills/', import.meta.url).pathname,
+  waCloudToken: process.env.WA_CLOUD_TOKEN || '',
+  waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
+  whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
+  dataDir: join(process.cwd(), 'data'),
+  skillsDir: join(process.cwd(), 'skills'),
 };

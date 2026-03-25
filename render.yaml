@@ -30,6 +30,18 @@ services:
         sync: false
       - key: GITHUB_TOKEN
         sync: false
+      - key: WHATSAPP_MODE
+        value: cloud
+      - key: WA_CLOUD_TOKEN
+        sync: false
+      - key: WA_CLOUD_PHONE_ID
+        sync: false
+      - key: FB_ACCESS_TOKEN
+        sync: false
+      - key: GOOGLE_CALENDAR_SCRIPT_URL
+        sync: false
+      - key: OPENROUTER_API_KEY
+        sync: false
       - key: MODE
         value: cloud
       - key: PORT

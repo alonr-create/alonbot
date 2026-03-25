@@ -174,6 +174,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   let totalOutputTokens = 0;
 
   // FREE TIER SHORTCUT — simple queries go to Gemini/Groq (no tools needed, saves $$$)
+  let usedFreeTier = false;
   if (isFreeTier) {
     try {
       const flatMessages = messages
@@ -185,6 +186,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       replyText = result.text || 'לא הצלחתי לעבד.';
       totalInputTokens = result.inputTokens || 0;
       totalOutputTokens = result.outputTokens || 0;
+      usedFreeTier = true;
       log.info({ model: modelUsed, tokens: totalInputTokens + totalOutputTokens }, 'free tier response');
     } catch (e: any) {
       log.warn({ err: e.message }, 'free tier failed, upgrading to balanced');
@@ -193,7 +195,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       replyText = ''; // will be filled by Claude path
     }
 
-    if (replyText) {
+    if (usedFreeTier && replyText) {
       // Track API usage (free = $0)
       try {
         db.prepare('INSERT INTO api_usage (model, input_tokens, output_tokens, cost_usd) VALUES (?, ?, ?, ?)').run(
@@ -216,6 +218,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     }
   }
 
+  // CLAUDE PATH — only if free tier was not used or failed
   try {
     // Knowledge base: inject as document blocks for citation support
     let hasKnowledgeDocs = false;
