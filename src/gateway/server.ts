@@ -16,6 +16,7 @@ const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), '
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
+const waManagerManifestJSON = readFileSync(join(import.meta.dirname, '../views/wa-manager-manifest.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
 const iconWa192 = readFileSync(join(import.meta.dirname, '../views/icon-wa-192.png'));
@@ -80,6 +81,10 @@ app.get('/apple-touch-icon-wa.png', (_req, res) => {
 app.get('/favicon-wa-32.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
   res.send(faviconWa32);
+});
+app.get('/wa-manager-manifest.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.send(waManagerManifestJSON);
 });
 
 app.get('/health', (_req, res) => {

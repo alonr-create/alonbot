@@ -3,7 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>WhatsApp Manager — AlonBot</title>
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-32.png">
+<link rel="manifest" href="/wa-manager-manifest.json">
+<meta name="theme-color" content="#FFD700">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="360Shmikley">
+<title>360Shmikley — WA Manager</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -17,7 +23,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-h
 /* Header */
 .header{background:linear-gradient(135deg,#ffffff,#f0faf4);padding:14px 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--accent2);position:fixed;top:0;left:0;right:0;z-index:100;height:56px;}
 .header h1{font-size:20px;font-weight:900;color:var(--accent);display:flex;align-items:center;gap:8px;}
-.header h1 .wa-icon{width:28px;height:28px;background:var(--accent);border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;}
+.header h1 .wa-icon{width:28px;height:28px;background:#FFD700;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;}
 .header-actions{display:flex;gap:10px;align-items:center;}
 .btn{padding:6px 16px;border-radius:20px;border:1px solid var(--border);background:var(--bg3);color:var(--text);cursor:pointer;font-family:inherit;font-size:12px;transition:all .2s;}
 .btn:hover{border-color:var(--accent);color:var(--accent);}
@@ -315,8 +321,9 @@ tr:hover td{background:var(--bg3);}
 <body>
 
 <div class="header">
-  <h1><span class="wa-icon">&#9742;</span> WhatsApp Manager</h1>
+  <h1><img src="/icon-wa-192.png" style="height:28px;vertical-align:middle;margin-left:8px;border-radius:6px;"> 360Shmikley</h1>
   <div class="header-actions">
+      <button id="pwa-install-btn" class="btn btn-primary" style="display:none;align-items:center;gap:6px;">📲 התקן</button>
     <select id="workspace-select" class="btn" onchange="switchWorkspace(this.value)" style="font-size:12px;min-width:120px;background:#fff;color:#1a1a1a;border:1px solid #ccc;">
       <option value="">🌐 כל העסקים</option>
     </select>
@@ -2118,6 +2125,35 @@ loadAll = async function() {
   await _origLoadAll2();
   await loadFlows();
 };
+</script>
+<script>
+// Register Service Worker for PWA
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("/sw.js")
+      .then(reg => console.log("✅ SW registered:", reg.scope))
+      .catch(err => console.log("❌ SW error:", err));
+  });
+}
+
+let deferredPrompt;
+window.addEventListener("beforeinstallprompt", (e) => {
+  e.preventDefault();
+  deferredPrompt = e;
+  const btn = document.getElementById("pwa-install-btn");
+  if(btn) btn.style.display = "flex";
+});
+document.addEventListener("DOMContentLoaded", () => {
+  const btn = document.getElementById("pwa-install-btn");
+  if(btn) btn.addEventListener("click", async () => {
+    if(deferredPrompt){
+      deferredPrompt.prompt();
+      const {outcome} = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      if(outcome==="accepted") btn.style.display="none";
+    }
+  });
+});
 </script>
 </body>
 </html>
