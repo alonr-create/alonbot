@@ -150,13 +150,29 @@ export function registerAdapter(adapter: ChannelAdapter) {
       }
       log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback }, 'reply sent');
 
-      // Log bot reply to leads for flow tracking
+      // Log bot reply to leads for flow tracking + Monday.com sync
       if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
         try {
           const { db } = await import('../utils/db.js');
           db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
             .run(msg.senderId, reply.text.substring(0, 2000));
         } catch { /* non-critical */ }
+
+        // Sync chat to Monday.com (fire-and-forget)
+        import('../utils/monday-leads.js').then(({ syncChatToMonday, extractLeadName, updateMondayItemName }) => {
+          syncChatToMonday(msg.senderId, msg.text, reply.text).catch(() => {});
+
+          // Auto-detect lead name if not set yet
+          const name = extractLeadName(msg.text);
+          if (name) {
+            import('../utils/db.js').then(({ db: leadDb }) => {
+              const lead = leadDb.prepare('SELECT name FROM leads WHERE phone = ?').get(msg.senderId) as any;
+              if (lead && !lead.name) {
+                updateMondayItemName(msg.senderId, name).catch(() => {});
+              }
+            }).catch(() => {});
+          }
+        }).catch(() => {});
       }
     } catch (error: any) {
       if (typingInterval) clearInterval(typingInterval);

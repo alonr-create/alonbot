@@ -1185,6 +1185,10 @@ export function registerWebhook(path: string, handler: (req: any, res: any) => v
   }
 }
 
+// Monday.com webhook for status changes → WhatsApp messages
+import { mondayWebhookHandler } from '../utils/monday-leads.js';
+app.post('/monday-webhook', mondayWebhookHandler());
+
 export function startServer() {
   app.listen(config.port, () => {
     log.info({ port: config.port }, 'health check server started');

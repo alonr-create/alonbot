@@ -91,3 +91,181 @@ export async function createMondayLead(
     return null;
   }
 }
+
+/**
+ * Sync a WhatsApp conversation exchange to Monday.com as an item update.
+ * Fire-and-forget — never throws.
+ */
+export async function syncChatToMonday(
+  phone: string,
+  userMessage: string,
+  botResponse: string,
+): Promise<void> {
+  if (!config.mondayApiKey) return;
+
+  try {
+    const lead = db.prepare('SELECT monday_item_id, name FROM leads WHERE phone = ?')
+      .get(phone) as { monday_item_id: string | null; name: string | null } | undefined;
+
+    if (!lead?.monday_item_id) return;
+
+    const timestamp = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+    const name = lead.name || 'לקוח';
+    const body = `💬 שיחת WhatsApp (${timestamp})\n\n📩 ${name}:\n${userMessage}\n\n🤖 יעל:\n${botResponse}`;
+
+    const escaped = body.replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    const mutation = `mutation { create_update(item_id: ${lead.monday_item_id}, body: "${escaped}") { id } }`;
+
+    await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: mutation }),
+    });
+    log.debug({ phone }, 'chat synced to Monday.com');
+  } catch (e: any) {
+    log.error({ err: e.message, phone }, 'failed to sync chat to Monday.com');
+  }
+}
+
+/**
+ * Update Monday.com item name (e.g. when we learn the lead's real name).
+ */
+export async function updateMondayItemName(
+  phone: string,
+  newName: string,
+): Promise<void> {
+  if (!config.mondayApiKey) return;
+
+  try {
+    const lead = db.prepare('SELECT monday_item_id FROM leads WHERE phone = ?')
+      .get(phone) as { monday_item_id: string | null } | undefined;
+
+    if (!lead?.monday_item_id) return;
+
+    const safeName = newName.replace(/[\\"{}\[\]()]/g, '').slice(0, 100);
+    const mutation = `mutation {
+      change_simple_column_value(
+        item_id: ${lead.monday_item_id},
+        board_id: ${ALON_DEV_BOARD_ID},
+        column_id: "name",
+        value: "${safeName} — ${phone}"
+      ) { id }
+    }`;
+
+    await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: mutation }),
+    });
+
+    // Update local DB too
+    db.prepare('UPDATE leads SET name = ?, updated_at = datetime(\'now\') WHERE phone = ?')
+      .run(newName, phone);
+
+    log.info({ phone, name: newName }, 'lead name updated in Monday.com + SQLite');
+  } catch (e: any) {
+    log.error({ err: e.message, phone }, 'failed to update Monday.com item name');
+  }
+}
+
+/**
+ * Extract a lead's name from their message text.
+ * Looks for common Hebrew/English patterns.
+ */
+export function extractLeadName(text: string): string | null {
+  const patterns = [
+    /(?:שמי|אני|קוראים לי|השם שלי)\s+([א-ת]{2,}(?:\s+[א-ת]{2,})?)/,
+    /(?:my name is|i'm|i am)\s+([A-Za-z]{2,}(?:\s+[A-Za-z]{2,})?)/i,
+  ];
+  const ignore = ['מעוניין', 'רוצה', 'צריך', 'מחפש', 'בעל', 'עובד', 'גר', 'פה', 'כאן', 'בא'];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const name = match[1].trim();
+      if (!ignore.includes(name)) return name;
+    }
+  }
+  return null;
+}
+
+/**
+ * Status label → WhatsApp message mapping.
+ * When boss changes status on Monday.com, send appropriate message to lead.
+ */
+const STATUS_MESSAGES: Record<string, string | null> = {
+  'הצעת מחיר נשלחה': 'היי! רציתי לוודא שקיבלת את הצעת המחיר שלנו. יש שאלות? אשמח לעזור 😊',
+  'סגור-זכייה': 'מעולה! שמחים שהחלטת להתקדם איתנו 🎉 ניצור קשר בקרוב עם כל הפרטים.',
+  'ממתין לתשובה': 'היי, רק רציתי לבדוק — ראית את ההודעה האחרונה שלי? אשמח לעזור אם יש שאלות 🙏',
+};
+
+/**
+ * Handle Monday.com webhook for column value changes.
+ * Returns the Express route handler.
+ */
+export function mondayWebhookHandler() {
+  return async (req: any, res: any) => {
+    const payload = req.body;
+
+    // Challenge verification
+    if (payload.challenge) {
+      log.info('Monday.com webhook challenge received');
+      return res.json({ challenge: payload.challenge });
+    }
+
+    const event = payload.event;
+    if (!event) return res.status(400).json({ error: 'No event' });
+
+    // Respond 200 immediately
+    res.status(200).json({ ok: true });
+
+    // Only handle status column changes
+    if (event.type !== 'update_column_value') return;
+
+    const newStatus = event.value?.label?.text;
+    if (!newStatus) return;
+
+    const message = STATUS_MESSAGES[newStatus];
+    if (!message) return;
+
+    // Find lead by Monday item ID
+    const lead = db.prepare('SELECT phone, name FROM leads WHERE monday_item_id = ?')
+      .get(String(event.pulseId)) as { phone: string; name: string | null } | undefined;
+
+    if (!lead) {
+      log.warn({ pulseId: event.pulseId }, 'No local lead for Monday item');
+      return;
+    }
+
+    // Don't message Alon
+    if (config.allowedWhatsApp.includes(lead.phone)) return;
+
+    // Send WhatsApp message via the adapter
+    try {
+      const { getAdapter } = await import('../gateway/router.js');
+      const whatsapp = getAdapter('whatsapp');
+      if (!whatsapp) {
+        log.warn('No WhatsApp adapter — cannot send status message');
+        return;
+      }
+
+      const fakeMsg = {
+        id: 'monday-webhook',
+        channel: 'whatsapp' as const,
+        senderId: lead.phone,
+        senderName: lead.name || '',
+        text: '',
+        timestamp: Date.now(),
+        raw: null,
+      };
+
+      await whatsapp.sendReply(fakeMsg, { text: message });
+      log.info({ phone: lead.phone, newStatus }, 'Monday status → WhatsApp message sent');
+
+      // Store in messages DB
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
+        .run(lead.phone, message);
+    } catch (e: any) {
+      log.error({ err: e.message, phone: lead.phone }, 'Failed to send status change message');
+    }
+  };
+}
