@@ -880,6 +880,22 @@ async function loadContacts() {
       const existingPhones = new Set(contacts.map(c => c.phone));
       campaignCache = {};
 
+      // Convert campaign UTC times to local (matching AalonBot format)
+      function utcToLocal(isoStr) {
+        if (!isoStr) return '';
+        const d = new Date(isoStr);
+        if (isNaN(d)) return isoStr;
+        return d.getFullYear() + '-' +
+          String(d.getMonth()+1).padStart(2,'0') + '-' +
+          String(d.getDate()).padStart(2,'0') + ' ' +
+          String(d.getHours()).padStart(2,'0') + ':' +
+          String(d.getMinutes()).padStart(2,'0') + ':' +
+          String(d.getSeconds()).padStart(2,'0');
+      }
+      // Normalize all campaign times to local
+      for (const m of (campData.messages || [])) { m.time = utcToLocal(m.time); }
+      for (const c of (campData.calls || [])) { c.time = utcToLocal(c.time); }
+
       // Build item_id -> phone map from messages
       const itemPhoneMap = {};
       for (const m of (campData.messages || [])) {
@@ -928,8 +944,13 @@ async function loadContacts() {
       console.error('Failed to load campaign data:', e);
     }
 
-    // Sort by last message time desc
-    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    // Sort by last message time desc (normalize to ms for consistent comparison)
+    contacts.sort((a,b) => {
+      const ta = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+      const tb = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+      // Handle NaN from invalid dates
+      return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+    });
     renderContacts();
   } catch(e) {
     console.error('Failed to load contacts:', e);
