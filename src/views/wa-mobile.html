@@ -235,7 +235,10 @@ html,body{
   flex:1;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   padding:8px 12px;
-  background:var(--bg);
+  background-color:#0b141a;
+  background-image:url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+  background-size:contain;
+  background-repeat:repeat;
   display:flex;flex-direction:column;
 }
 .messages-area::-webkit-scrollbar{display:none;}
@@ -491,6 +494,149 @@ html,body{
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
+/* ===== TYPING INDICATOR ===== */
+.typing-indicator{
+  display:none;align-self:flex-end;
+  background:var(--bubble-in);
+  border-radius:10px;border-bottom-left-radius:4px;
+  padding:10px 14px;margin-bottom:3px;margin-right:auto;
+}
+.typing-indicator.visible{display:flex;align-items:center;gap:4px;}
+.typing-dot{
+  width:7px;height:7px;border-radius:50%;
+  background:var(--text-muted);
+  animation:typingBounce 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2){animation-delay:.2s;}
+.typing-dot:nth-child(3){animation-delay:.4s;}
+@keyframes typingBounce{
+  0%,60%,100%{transform:translateY(0);}
+  30%{transform:translateY(-6px);}
+}
+
+/* ===== CHAT SEARCH BAR ===== */
+.chat-search-bar{
+  display:none;padding:6px 12px;
+  background:var(--bg-header);
+  border-bottom:1px solid var(--border);
+}
+.chat-search-bar.visible{display:flex;align-items:center;gap:8px;}
+.chat-search-input{
+  flex:1;padding:7px 12px;border-radius:18px;
+  background:var(--bg-input);color:var(--text);
+  border:none;font-size:14px;font-family:inherit;outline:none;
+}
+.chat-search-input::placeholder{color:var(--text-muted);}
+.chat-search-close{
+  border:none;background:none;color:var(--text-secondary);
+  font-size:16px;cursor:pointer;padding:4px;
+}
+
+/* ===== TOOLS SCREEN ===== */
+.tools-content{flex:1;overflow-y:auto;padding:16px;}
+.tools-content::-webkit-scrollbar{display:none;}
+.tool-section-title{
+  font-size:13px;font-weight:600;color:var(--blue);
+  margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px;
+}
+.tool-btn{
+  display:flex;align-items:center;gap:14px;
+  width:100%;padding:14px 16px;border-radius:12px;
+  background:var(--bg-secondary);border:none;color:var(--text);
+  font-size:15px;font-family:inherit;cursor:pointer;text-align:right;
+  transition:background .15s;margin-bottom:8px;
+}
+.tool-btn:active{background:var(--border);}
+.tool-btn-icon{font-size:22px;flex-shrink:0;}
+.tool-btn-info{flex:1;}
+.tool-btn-label{font-weight:500;margin-bottom:2px;}
+.tool-btn-desc{font-size:12px;color:var(--text-muted);}
+
+/* Broadcast form */
+.broadcast-form{
+  display:none;background:var(--bg-secondary);
+  border-radius:12px;padding:16px;margin-top:8px;
+}
+.broadcast-form.visible{display:block;}
+.broadcast-textarea{
+  width:100%;min-height:80px;padding:10px;border-radius:8px;
+  background:var(--bg-input);color:var(--text);
+  border:1px solid var(--border);font-family:inherit;
+  font-size:14px;resize:vertical;outline:none;
+}
+.broadcast-textarea:focus{border-color:var(--blue);}
+.broadcast-send{
+  margin-top:8px;padding:10px;border-radius:8px;border:none;
+  background:var(--blue);color:#fff;font-size:14px;
+  font-weight:500;cursor:pointer;width:100%;
+}
+.broadcast-send:active{opacity:.8;}
+
+/* Tags list */
+.tags-list-wrap{
+  display:none;background:var(--bg-secondary);
+  border-radius:12px;padding:16px;margin-top:8px;
+}
+.tags-list-wrap.visible{display:block;}
+.tag-stat-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 0;border-bottom:1px solid var(--border);
+}
+.tag-stat-row:last-child{border-bottom:none;}
+.tag-stat-name{font-size:14px;color:var(--text);}
+.tag-stat-count{
+  font-size:12px;color:#fff;background:var(--blue);
+  padding:2px 8px;border-radius:10px;font-weight:600;
+}
+
+/* ===== SETTINGS SCREEN ===== */
+.settings-content{flex:1;overflow-y:auto;padding:16px;}
+.settings-content::-webkit-scrollbar{display:none;}
+.settings-section{
+  background:var(--bg-secondary);border-radius:12px;
+  margin-bottom:16px;overflow:hidden;
+}
+.settings-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 16px;border-bottom:1px solid rgba(42,57,66,.6);
+}
+.settings-row:last-child{border-bottom:none;}
+.settings-label{font-size:15px;color:var(--text);}
+.settings-label small{display:block;font-size:12px;color:var(--text-muted);margin-top:2px;}
+.settings-section-title{
+  font-size:13px;font-weight:600;color:var(--blue);
+  padding:10px 16px 4px;text-transform:uppercase;letter-spacing:.5px;
+}
+.toggle-switch{
+  position:relative;width:48px;height:28px;flex-shrink:0;
+}
+.toggle-switch input{opacity:0;width:0;height:0;position:absolute;}
+.toggle-slider{
+  position:absolute;inset:0;border-radius:14px;
+  background:var(--border);cursor:pointer;transition:background .2s;
+}
+.toggle-slider:before{
+  content:'';position:absolute;width:22px;height:22px;border-radius:50%;
+  background:#fff;bottom:3px;left:3px;transition:transform .2s;
+}
+.toggle-switch input:checked + .toggle-slider{background:var(--blue);}
+.toggle-switch input:checked + .toggle-slider:before{transform:translateX(20px);}
+.settings-select{
+  padding:6px 10px;border-radius:8px;
+  background:var(--bg-input);color:var(--text);
+  border:1px solid var(--border);font-family:inherit;font-size:14px;
+  outline:none;cursor:pointer;
+}
+.settings-select:focus{border-color:var(--blue);}
+.settings-link{
+  font-size:14px;color:var(--blue);text-decoration:none;
+  display:block;padding:14px 16px;
+}
+.settings-link:active{opacity:.6;}
+.version-info{
+  text-align:center;padding:20px;color:var(--text-muted);font-size:13px;
+}
+
 /* ===== SCROLLBAR HIDE ===== */
 ::-webkit-scrollbar{display:none;}
 *{scrollbar-width:none;}
@@ -537,10 +683,20 @@ html,body{
         <div class="chat-header-status" id="chatStatus">לחץ לפרטים</div>
       </div>
       <div class="chat-header-actions">
+        <button class="chat-action-btn" onclick="toggleChatSearch()" title="חיפוש">&#128269;</button>
         <button class="chat-action-btn" onclick="openDetails(currentPhone)" title="פרטים">&#9432;</button>
       </div>
     </div>
+    <div class="chat-search-bar" id="chatSearchBar">
+      <input class="chat-search-input" id="chatSearchInput" placeholder="חיפוש בשיחה..." oninput="filterMessages()" type="search">
+      <button class="chat-search-close" onclick="toggleChatSearch()">&#10005;</button>
+    </div>
     <div class="messages-area" id="messagesArea"></div>
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+      <div class="typing-dot"></div>
+    </div>
     <div class="input-bar">
       <button class="input-attach" onclick="showAttach()" title="צרף">&#128206;</button>
       <textarea class="input-field" id="msgInput" placeholder="הודעה..." rows="1" oninput="autoGrow(this)" onkeydown="handleKey(event)"></textarea>
@@ -578,10 +734,38 @@ html,body{
         <span class="list-title">כלים</span>
       </div>
     </div>
-    <div class="placeholder-screen">
-      <div class="ph-icon">&#128295;</div>
-      <div class="ph-title">כלי ניהול</div>
-      <div class="ph-desc">שידורים, תגיות, ייצוא נתונים ועוד — בקרוב</div>
+    <div class="tools-content">
+      <div class="tool-section-title">פעולות</div>
+      <button class="tool-btn" onclick="toggleBroadcastForm()">
+        <span class="tool-btn-icon">&#128226;</span>
+        <div class="tool-btn-info">
+          <div class="tool-btn-label">שידור</div>
+          <div class="tool-btn-desc">שלח הודעה לכל אנשי הקשר</div>
+        </div>
+      </button>
+      <div class="broadcast-form" id="broadcastForm">
+        <textarea class="broadcast-textarea" id="broadcastMsg" placeholder="כתוב את ההודעה לשידור..."></textarea>
+        <button class="broadcast-send" onclick="sendBroadcast()">שלח לכולם &#128226;</button>
+      </div>
+
+      <button class="tool-btn" onclick="exportCSV()">
+        <span class="tool-btn-icon">&#128196;</span>
+        <div class="tool-btn-info">
+          <div class="tool-btn-label">ייצוא CSV</div>
+          <div class="tool-btn-desc">הורד את כל הלידים לקובץ CSV</div>
+        </div>
+      </button>
+
+      <button class="tool-btn" onclick="toggleTagsList()">
+        <span class="tool-btn-icon">&#127991;</span>
+        <div class="tool-btn-info">
+          <div class="tool-btn-label">תגיות</div>
+          <div class="tool-btn-desc">הצג את כל התגיות עם מספר אנשי קשר</div>
+        </div>
+      </button>
+      <div class="tags-list-wrap" id="tagsListWrap">
+        <div style="color:var(--text-muted);font-size:13px;" id="tagsListContent">טוען...</div>
+      </div>
     </div>
   </div>
 
@@ -592,10 +776,41 @@ html,body{
         <span class="list-title">הגדרות</span>
       </div>
     </div>
-    <div class="placeholder-screen">
-      <div class="ph-icon">&#9881;</div>
-      <div class="ph-title">הגדרות</div>
-      <div class="ph-desc">התאמה אישית, התראות, חשבון</div>
+    <div class="settings-content">
+      <div class="settings-section">
+        <div class="settings-section-title">התראות</div>
+        <div class="settings-row">
+          <div class="settings-label">
+            צליל התראה
+            <small>נגן צליל בקבלת הודעה חדשה</small>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="settingSound" checked onchange="saveSetting('soundEnabled', this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">עדכונים</div>
+        <div class="settings-row">
+          <div class="settings-label">
+            תדירות רענון
+            <small>כמה פעמים לבדוק הודעות חדשות</small>
+          </div>
+          <select class="settings-select" id="settingPollInterval" onchange="savePollSetting(this.value)">
+            <option value="5000">כל 5 שניות</option>
+            <option value="15000" selected>כל 15 שניות</option>
+            <option value="30000">כל 30 שניות</option>
+          </select>
+        </div>
+      </div>
+      <div class="settings-section">
+        <div class="settings-section-title">קישורים</div>
+        <a class="settings-link" href="/wa-inbox?token=" id="inboxLink" target="_blank">
+          &#128194; פתח ב-Desktop Inbox
+        </a>
+      </div>
+      <div class="version-info">360Shmikley v1.0</div>
     </div>
   </div>
 
@@ -632,7 +847,11 @@ const _urlToken = new URLSearchParams(window.location.search).get('token');
 if (_urlToken) localStorage.setItem('wa_token', _urlToken);
 const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
 const API = '/api/wa-manager';
-const POLL_INTERVAL = 15000;
+// Feature 8: Read poll interval from localStorage
+function getPollInterval() {
+  return parseInt(localStorage.getItem('pollInterval') || '15000', 10);
+}
+let POLL_INTERVAL = getPollInterval();
 const AVATAR_COLORS = ['#e17055','#00b894','#0088cc','#6c5ce7','#fdcb6e','#e84393','#00cec9','#2d3436','#d63031','#a29bfe'];
 
 let contacts = [];
@@ -838,11 +1057,23 @@ function openChat(phone) {
   document.getElementById('messagesArea').innerHTML = '<div class="spinner"></div>';
   document.getElementById('msgInput').value = '';
   document.getElementById('sendBtn').disabled = true;
+  showTypingIndicator(false);
+
+  // Feature 4: Mark messages as read when opening chat
+  api('/leads/' + encodeURIComponent(phone), {
+    method: 'PATCH',
+    body: JSON.stringify({ unread_count: 0 })
+  }).then(() => {
+    const c = contacts.find(x => x.phone === phone);
+    if (c) c.unread_count = 0;
+    updateUnreadBadge();
+  }).catch(() => {});
+
   loadMessages(phone);
 
   // Poll for new messages
   clearInterval(chatPollTimer);
-  chatPollTimer = setInterval(() => loadMessages(phone, true), POLL_INTERVAL);
+  chatPollTimer = setInterval(() => loadMessages(phone, true), getPollInterval());
 }
 
 function goBack() {
@@ -946,10 +1177,30 @@ async function sendMessage() {
   renderMessages();
   scrollToBottom();
 
+  // Feature 5: Show typing indicator
+  showTypingIndicator(true);
+
   try {
     await api('/send', { method: 'POST', body: JSON.stringify({ phone: currentPhone, message: msg }) });
+    // Poll after short delay then hide typing indicator
+    setTimeout(async () => {
+      await loadMessages(currentPhone, true);
+      showTypingIndicator(false);
+    }, 2000);
   } catch (e) {
     toast('שגיאה בשליחה');
+    showTypingIndicator(false);
+  }
+}
+
+function showTypingIndicator(visible) {
+  const indicator = document.getElementById('typingIndicator');
+  if (!indicator) return;
+  if (visible) {
+    indicator.classList.add('visible');
+    scrollToBottom();
+  } else {
+    indicator.classList.remove('visible');
   }
 }
 
@@ -967,7 +1218,33 @@ function autoGrow(el) {
 }
 
 function showAttach() {
-  toast('צירוף קבצים — בקרוב');
+  // Feature 2: Open file picker and upload image
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = 'image/*,video/*';
+  fileInput.onchange = async () => {
+    const file = fileInput.files[0];
+    if (!file || !currentPhone) return;
+    toast('שולח תמונה...');
+    try {
+      const formData = new FormData();
+      formData.append('phone', currentPhone);
+      formData.append('file', file);
+      let url = API + '/send-media';
+      if (TOKEN) url += '?token=' + TOKEN;
+      const res = await fetch(url, {
+        method: 'POST',
+        credentials: 'same-origin',
+        body: formData
+      });
+      if (!res.ok) throw new Error('Upload failed');
+      toast('תמונה נשלחה ✓');
+      setTimeout(() => loadMessages(currentPhone, true), 1000);
+    } catch (e) {
+      toast('שגיאה בשליחת תמונה');
+    }
+  };
+  fileInput.click();
 }
 
 /* ===== CONTACT DETAILS ===== */
@@ -1105,6 +1382,176 @@ async function saveNotes(phone) {
   }
 }
 
+/* ===== CHAT SEARCH (Feature 3) ===== */
+let chatSearchActive = false;
+
+function toggleChatSearch() {
+  chatSearchActive = !chatSearchActive;
+  const bar = document.getElementById('chatSearchBar');
+  const input = document.getElementById('chatSearchInput');
+  if (chatSearchActive) {
+    bar.classList.add('visible');
+    input.value = '';
+    input.focus();
+  } else {
+    bar.classList.remove('visible');
+    input.value = '';
+    renderMessages(); // restore full view
+  }
+}
+
+function filterMessages() {
+  const q = (document.getElementById('chatSearchInput').value || '').trim().toLowerCase();
+  const area = document.getElementById('messagesArea');
+  if (!q) { renderMessages(); return; }
+
+  const filtered = currentMessages.filter(m => {
+    const body = (m.content || m.body || '').toLowerCase();
+    return body.includes(q);
+  });
+
+  if (!filtered.length) {
+    area.innerHTML = '<div class="empty-state"><p>לא נמצאו תוצאות</p></div>';
+    return;
+  }
+
+  let html = '';
+  filtered.forEach(m => {
+    const ts = m.created_at || m.timestamp;
+    const isOut = m.role === 'assistant' || m.direction === 'outgoing';
+    const cls = isOut ? 'outgoing' : 'incoming';
+    const body = m.content || m.body || '';
+    // Highlight the match
+    const safe = esc(body);
+    const highlighted = safe.replace(new RegExp(esc(q), 'gi'), match => `<mark style="background:#f59e0b;color:#000;border-radius:2px;">${match}</mark>`);
+    html += `<div class="message ${cls}">
+      <div class="msg-text">${highlighted}</div>
+      <div class="msg-footer"><span class="msg-time">${msgTime(ts)}</span></div>
+    </div>`;
+  });
+  area.innerHTML = html;
+}
+
+/* ===== TOOLS FUNCTIONS (Feature 6) ===== */
+function toggleBroadcastForm() {
+  const form = document.getElementById('broadcastForm');
+  form.classList.toggle('visible');
+}
+
+async function sendBroadcast() {
+  const msg = document.getElementById('broadcastMsg').value.trim();
+  if (!msg) { toast('כתוב הודעה לשידור'); return; }
+  const count = contacts.length;
+  if (!count) { toast('אין אנשי קשר'); return; }
+
+  const confirmed = confirm(`שליחת הודעה ל-${count} אנשי קשר?\n\n"${msg.slice(0,80)}"`);
+  if (!confirmed) return;
+
+  toast('שולח שידור...');
+  let sent = 0;
+  let failed = 0;
+
+  for (const c of contacts) {
+    try {
+      await api('/send', {
+        method: 'POST',
+        body: JSON.stringify({ phone: c.phone, message: msg })
+      });
+      sent++;
+    } catch (e) {
+      failed++;
+    }
+  }
+
+  document.getElementById('broadcastMsg').value = '';
+  document.getElementById('broadcastForm').classList.remove('visible');
+  toast(`נשלח ל-${sent} אנשי קשר${failed ? ` | ${failed} נכשלו` : ''}`);
+}
+
+function exportCSV() {
+  let url = API + '/export-csv';
+  if (TOKEN) url += '?token=' + TOKEN;
+  window.location.href = url;
+  toast('מוריד CSV...');
+}
+
+async function toggleTagsList() {
+  const wrap = document.getElementById('tagsListWrap');
+  wrap.classList.toggle('visible');
+  if (!wrap.classList.contains('visible')) return;
+
+  // Count tags from contacts
+  const tagCounts = {};
+  for (const c of contacts) {
+    if (c.tags) {
+      const tags = Array.isArray(c.tags) ? c.tags : (c.tags || '').split(',').filter(Boolean);
+      tags.forEach(t => {
+        t = t.trim();
+        if (t) tagCounts[t] = (tagCounts[t] || 0) + 1;
+      });
+    }
+  }
+
+  // Also try to load from API
+  try {
+    const data = await api('/tags');
+    if (data.success && data.tags) {
+      data.tags.forEach(({ tag, count }) => {
+        tagCounts[tag] = count;
+      });
+    }
+  } catch (e) {}
+
+  const entries = Object.entries(tagCounts).sort((a, b) => b[1] - a[1]);
+  const content = document.getElementById('tagsListContent');
+  if (!entries.length) {
+    content.innerHTML = '<div style="color:var(--text-muted);font-size:13px;">אין תגיות עדיין</div>';
+    return;
+  }
+  content.innerHTML = entries.map(([tag, count]) =>
+    `<div class="tag-stat-row">
+      <span class="tag-stat-name">${esc(tag)}</span>
+      <span class="tag-stat-count">${count}</span>
+    </div>`
+  ).join('');
+}
+
+/* ===== SETTINGS FUNCTIONS (Features 7 & 8) ===== */
+function saveSetting(key, value) {
+  localStorage.setItem(key, JSON.stringify(value));
+  if (key === 'soundEnabled') {
+    toast(value ? 'צליל פעיל' : 'צליל כבוי');
+  }
+}
+
+function savePollSetting(ms) {
+  localStorage.setItem('pollInterval', ms);
+  POLL_INTERVAL = parseInt(ms, 10);
+  // Restart main poll with new interval
+  clearInterval(window._mainPollTimer);
+  window._mainPollTimer = setInterval(loadContacts, POLL_INTERVAL);
+  toast('תדירות עודכנה');
+}
+
+function initSettings() {
+  // Load saved settings into UI
+  const soundEl = document.getElementById('settingSound');
+  const pollEl = document.getElementById('settingPollInterval');
+  const inboxLink = document.getElementById('inboxLink');
+
+  if (soundEl) {
+    const saved = localStorage.getItem('soundEnabled');
+    if (saved !== null) soundEl.checked = JSON.parse(saved);
+  }
+  if (pollEl) {
+    const savedPoll = localStorage.getItem('pollInterval') || '15000';
+    pollEl.value = savedPoll;
+  }
+  if (inboxLink && TOKEN) {
+    inboxLink.href = '/wa-inbox?token=' + TOKEN;
+  }
+}
+
 /* ===== PULL TO REFRESH ===== */
 let startY = 0;
 let pulling = false;
@@ -1178,6 +1625,9 @@ document.addEventListener('touchstart', unlockAudio, { once: true });
 document.addEventListener('click', unlockAudio, { once: true });
 
 function playNotifSound() {
+  // Respect sound setting
+  const soundEnabled = localStorage.getItem('soundEnabled');
+  if (soundEnabled !== null && !JSON.parse(soundEnabled)) return;
   if (!notifCtx || !audioUnlocked) return;
   try {
     if (notifCtx.state === 'suspended') notifCtx.resume();
@@ -1239,11 +1689,12 @@ function checkNewMessages() {
 }
 
 /* ===== INIT ===== */
+initSettings();
 if (!TOKEN) {
   document.getElementById('contactList').innerHTML = '<div class="empty-state" style="padding:40px 20px;text-align:center;"><div class="em-icon">&#128274;</div><p style="color:var(--text);font-size:16px;margin:12px 0;">נדרש טוקן</p><p style="color:var(--text-muted);font-size:14px;">פתח את הלינק עם ?token=xxx בספארי ואז שמור למסך הבית</p></div>';
 } else {
   loadContacts();
-  setInterval(loadContacts, POLL_INTERVAL);
+  window._mainPollTimer = setInterval(loadContacts, getPollInterval());
 }
 </script>
 </body>
