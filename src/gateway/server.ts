@@ -1019,6 +1019,53 @@ function externalAuth(req: any, res: any, next: any) {
   next();
 }
 
+// Bulk sync: import leads + messages from another instance
+app.post('/api/sync/import', externalAuth, (req, res) => {
+  try {
+    const { leads = [], messages = [] } = req.body;
+    let leadsUpserted = 0, msgsInserted = 0;
+
+    const upsertLead = db.prepare(`
+      INSERT INTO leads (phone, name, source, lead_status, last_call_summary, last_call_sentiment, last_call_duration_sec, was_booked, call_mode, monday_item_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(phone) DO UPDATE SET
+        name = COALESCE(excluded.name, leads.name),
+        source = COALESCE(excluded.source, leads.source),
+        lead_status = COALESCE(excluded.lead_status, leads.lead_status),
+        last_call_summary = COALESCE(excluded.last_call_summary, leads.last_call_summary),
+        last_call_sentiment = COALESCE(excluded.last_call_sentiment, leads.last_call_sentiment),
+        last_call_duration_sec = COALESCE(excluded.last_call_duration_sec, leads.last_call_duration_sec),
+        was_booked = COALESCE(excluded.was_booked, leads.was_booked),
+        call_mode = COALESCE(excluded.call_mode, leads.call_mode),
+        monday_item_id = COALESCE(excluded.monday_item_id, leads.monday_item_id),
+        updated_at = MAX(excluded.updated_at, leads.updated_at)
+    `);
+
+    const insertMsg = db.prepare(`
+      INSERT OR IGNORE INTO messages (channel, sender_id, sender_name, role, content, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+
+    const syncTx = db.transaction(() => {
+      for (const l of leads) {
+        upsertLead.run(l.phone, l.name, l.source, l.lead_status, l.last_call_summary, l.last_call_sentiment, l.last_call_duration_sec, l.was_booked ? 1 : 0, l.call_mode, l.monday_item_id, l.created_at, l.updated_at);
+        leadsUpserted++;
+      }
+      for (const m of messages) {
+        insertMsg.run(m.channel, m.sender_id, m.sender_name || '', m.role, m.content, m.created_at);
+        msgsInserted++;
+      }
+    });
+    syncTx();
+
+    log.info({ leadsUpserted, msgsInserted }, 'sync import completed');
+    res.json({ success: true, leadsUpserted, msgsInserted });
+  } catch (e: any) {
+    log.error({ error: e.message }, 'sync import failed');
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
   const { phone, message, leadName, leadContext } = req.body;
   if (!phone || !message) {
