@@ -633,6 +633,7 @@ async function api(path, opts = {}) {
   let url = API + path;
   if (TOKEN) url += (url.includes('?') ? '&' : '?') + 'token=' + TOKEN;
   const res = await fetch(url, {
+    credentials: 'same-origin',
     headers: { 'Content-Type': 'application/json', ...opts.headers },
     ...opts
   });
