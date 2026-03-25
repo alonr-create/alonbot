@@ -22,7 +22,7 @@ export async function createMondayLead(
     return null;
   }
 
-  // Check if lead already exists in Monday (by phone)
+  // Check if lead already exists in local DB
   try {
     const existing = db.prepare('SELECT monday_item_id FROM leads WHERE phone = ?').get(phone) as any;
     if (existing?.monday_item_id) {
@@ -30,6 +30,32 @@ export async function createMondayLead(
       return existing.monday_item_id;
     }
   } catch { /* continue */ }
+
+  // Check if lead already exists in Monday.com board (created by campaign etc.)
+  try {
+    const searchQuery = `query { boards(ids: ${ALON_DEV_BOARD_ID}) { items_page(limit: 5, query_params: { rules: [{ column_id: "phone_mm16hqz2", compare_value: ["${phone}"] }] }) { items { id name } } } }`;
+    const searchRes = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: searchQuery }),
+    });
+    const searchData = await searchRes.json() as any;
+    const existingItem = searchData.data?.boards?.[0]?.items_page?.items?.[0];
+    if (existingItem?.id) {
+      // Found in Monday but not in local DB — link it
+      db.prepare(`
+        INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
+        VALUES (?, ?, 'campaign', ?, 'active', datetime('now'), datetime('now'))
+        ON CONFLICT(phone) DO UPDATE SET
+          monday_item_id = excluded.monday_item_id,
+          updated_at = datetime('now')
+      `).run(phone, name !== phone ? name : null, existingItem.id);
+      log.info({ phone, itemId: existingItem.id }, 'existing Monday.com lead linked to local DB');
+      return existingItem.id;
+    }
+  } catch (e: any) {
+    log.debug({ err: e.message, phone }, 'Monday.com search failed, will create new');
+  }
 
   const itemName = name !== phone ? `${name} — ${phone}` : phone;
 
@@ -107,14 +133,24 @@ export async function syncChatToMonday(
     const lead = db.prepare('SELECT monday_item_id, name FROM leads WHERE phone = ?')
       .get(phone) as { monday_item_id: string | null; name: string | null } | undefined;
 
-    if (!lead?.monday_item_id) return;
+    if (!lead?.monday_item_id) {
+      // Lead exists in Monday (created by campaign) but not in local DB — try to auto-create
+      const itemId = await createMondayLead(phone, phone, userMessage);
+      if (!itemId) return;
+      // Re-fetch after creation
+      const freshLead = db.prepare('SELECT monday_item_id, name FROM leads WHERE phone = ?')
+        .get(phone) as { monday_item_id: string | null; name: string | null } | undefined;
+      if (!freshLead?.monday_item_id) return;
+      Object.assign(lead ?? {}, freshLead);
+    }
 
+    const finalLead = lead as { monday_item_id: string; name: string | null };
     const timestamp = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
-    const name = lead.name || 'לקוח';
+    const name = finalLead.name || 'לקוח';
     const body = `💬 שיחת WhatsApp (${timestamp})\n\n📩 ${name}:\n${userMessage}\n\n🤖 יעל:\n${botResponse}`;
 
     const escaped = body.replace(/"/g, '\\"').replace(/\n/g, '\\n');
-    const mutation = `mutation { create_update(item_id: ${lead.monday_item_id}, body: "${escaped}") { id } }`;
+    const mutation = `mutation { create_update(item_id: ${finalLead.monday_item_id}, body: "${escaped}") { id } }`;
 
     await fetch('https://api.monday.com/v2', {
       method: 'POST',
