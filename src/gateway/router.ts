@@ -11,7 +11,7 @@ const adapters = new Map<string, ChannelAdapter>();
 
 // Deduplication: prevent processing the same message twice (e.g. Telegram polling restarts, webhook retries)
 const recentMessageIds = new Map<string, number>(); // messageKey -> timestamp
-const DEDUP_WINDOW_MS = 60_000; // 1 minute
+const DEDUP_WINDOW_MS = 300_000; // 5 minutes — Meta Cloud API retries webhooks
 
 // Cleanup stale dedup entries every 2 minutes
 setInterval(() => {
