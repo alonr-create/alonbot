@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { join } from 'path';
+import { existsSync } from 'fs';
 
 export const config = {
   mode: (process.env.MODE || 'local') as 'cloud' | 'local',
@@ -25,6 +26,6 @@ export const config = {
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
-  dataDir: process.env.DATA_DIR || (require('fs').existsSync('/data') ? '/data' : join(process.cwd(), 'data')),
+  dataDir: process.env.DATA_DIR || (existsSync('/data') ? '/data' : join(process.cwd(), 'data')),
   skillsDir: join(process.cwd(), 'skills'),
 };
