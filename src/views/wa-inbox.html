@@ -787,7 +787,44 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 // ===== CONFIG =====
 const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
 const API = '/api/wa-manager';
-const POLL_INTERVAL = 30000; // 30s — less aggressive to avoid constant UI refresh
+const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
+let seenPhones = new Set(); // phones we've opened at least once
+let lastKnownMsgCount = {}; // phone → msg count for notification detection
+let titleFlashTimer = null;
+
+// Notification sound (subtle WhatsApp-like chime)
+const notifSound = new Audio('data:audio/wav;base64,UklGRl9vT19telefonAQBGTVQgEAABAAEARKwAAIhYAQACABAAZGF0YV' + 'AAAA==');
+notifSound.volume = 0.4;
+function playNotifSound() {
+  try {
+    // Use Web Audio API for a clean notification beep
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(e) { /* silent if blocked by browser */ }
+}
+
+function flashTitle(msg) {
+  if (titleFlashTimer) return;
+  const orig = document.title;
+  let on = true;
+  titleFlashTimer = setInterval(() => {
+    document.title = on ? `💬 ${msg}` : orig;
+    on = !on;
+  }, 1000);
+  // Stop flashing on focus
+  window.addEventListener('focus', () => {
+    if (titleFlashTimer) { clearInterval(titleFlashTimer); titleFlashTimer = null; document.title = orig; }
+  }, { once: true });
+}
 
 // ===== STATE =====
 let contacts = [];
@@ -1071,20 +1108,25 @@ function renderContacts() {
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
 
     const biz = getBizLabel(c.source);
+    const isNew = c.hasNew && !isActive;
+    const nameStyle = isNew ? 'font-weight:800;color:var(--text);' : '';
+    const previewStyle = isNew ? 'font-weight:600;color:var(--text);' : '';
+    const timeStyle = isNew ? 'color:var(--accent);font-weight:700;' : '';
     return `
-      <div class="contact-item ${isActive ? 'active' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
-        <div class="contact-avatar" style="background:${color};pointer-events:none;">
+      <div class="contact-item ${isActive ? 'active' : ''} ${isNew ? 'has-new' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
+        <div class="contact-avatar" style="background:${color};pointer-events:none;position:relative;">
           ${initials}
           ${c.online ? '<div class="online-dot" style="pointer-events:none;"></div>' : ''}
+          ${isNew ? '<div style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#ea4335;border:2px solid #fff;pointer-events:none;"></div>' : ''}
         </div>
         <div class="contact-body" style="pointer-events:none;">
           <div class="contact-row" style="pointer-events:none;">
-            <span class="contact-name" style="pointer-events:none;"><span class="biz-tag ${biz.cls}">${biz.emoji} ${biz.label}</span>${esc(c.name)}</span>
-            <span class="${timeClass}" style="pointer-events:none;">${formatTime(c.lastTime)}</span>
+            <span class="contact-name" style="pointer-events:none;${nameStyle}"><span class="biz-tag ${biz.cls}">${biz.emoji} ${biz.label}</span>${esc(c.name)}</span>
+            <span class="${timeClass}" style="pointer-events:none;${timeStyle}">${formatTime(c.lastTime)}</span>
           </div>
-          <div class="contact-preview" style="pointer-events:none;">${preview}</div>
+          <div class="contact-preview" style="pointer-events:none;${previewStyle}">${preview}</div>
         </div>
-        ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
+        ${(c.unread > 0 || isNew) ? `<div class="unread-badge" style="pointer-events:none;">${c.unread || '!'}</div>` : ''}
       </div>
     `;
   }).join('');
@@ -1134,6 +1176,11 @@ const messageCache = {};
 
 function selectContact(phone) {
   activePhone = phone;
+  seenPhones.add(phone);
+  // Clear "new" flag
+  const c = contacts.find(c => c.phone === phone);
+  if (c) { c.hasNew = false; c.unread = 0; }
+  renderContacts();
 
   // Update URL
   try {
@@ -1666,13 +1713,54 @@ async function pollMessages() {
     }
   } catch(e) { /* silent */ }
 
-  // Also refresh contacts list periodically
+  // Also refresh contacts list periodically and detect new incoming messages
   try {
     const data = await api('/leads');
-    const newContacts = (data.leads || data || []);
-    if (newContacts.length !== contacts.length) {
-      await loadContacts();
+    const newContacts = (data.leads || data || []).map(c => ({
+      phone: c.phone || c.id,
+      name: c.name || c.pushName || c.phone || 'לא ידוע',
+      lastMessage: c.lastMessage || c.last_message || '',
+      lastTime: c.lastTime || c.last_time || c.last_message_at || c.updatedAt || c.updated_at || '',
+      unread: c.unread || 0,
+      isOutgoing: c.isOutgoing || c.is_outgoing || c.last_message_role === 'assistant' || false,
+      source: c.source || 'whatsapp',
+      status: c.status || c.lead_status || 'new',
+      messageCount: c.message_count || 0,
+    }));
+
+    // Detect new incoming messages
+    let hasNewIncoming = false;
+    for (const nc of newContacts) {
+      const old = contacts.find(c => c.phone === nc.phone);
+      const wasUnseen = !seenPhones.has(nc.phone);
+      // New message from someone we're not looking at
+      if (nc.phone !== activePhone && !nc.isOutgoing && nc.lastMessage) {
+        const oldTime = old ? old.lastTime : '';
+        if (nc.lastTime && nc.lastTime > oldTime) {
+          hasNewIncoming = true;
+          // Mark as having unseen messages
+          nc.hasNew = true;
+        }
+      }
+      // Preserve hasNew flag from previous state
+      if (old && old.hasNew && nc.phone !== activePhone) {
+        nc.hasNew = true;
+      }
     }
+
+    if (hasNewIncoming) {
+      playNotifSound();
+      if (document.hidden) flashTitle('הודעה חדשה!');
+      // Request browser notification permission
+      if (Notification.permission === 'default') Notification.requestPermission();
+      if (Notification.permission === 'granted') {
+        new Notification('360Shmikley', { body: 'הודעה חדשה נכנסה', icon: '/icon-wa-192.png' });
+      }
+    }
+
+    contacts = newContacts;
+    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    renderContacts();
   } catch(e) { /* silent */ }
 }
 
