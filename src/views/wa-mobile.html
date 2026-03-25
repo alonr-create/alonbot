@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="360Shmikley">
 <meta name="theme-color" content="#0088cc">
-<link rel="manifest" href="/manifest-wa.json">
+<link rel="manifest" href="/manifest-wa-mobile.json">
 <link rel="apple-touch-icon" href="/apple-touch-icon-wa-blue.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-blue-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-blue-192.png">
@@ -1205,8 +1205,12 @@ function checkNewMessages() {
 }
 
 /* ===== INIT ===== */
-loadContacts();
-setInterval(loadContacts, POLL_INTERVAL);
+if (!TOKEN) {
+  document.getElementById('contactList').innerHTML = '<div class="empty-state" style="padding:40px 20px;text-align:center;"><div class="em-icon">&#128274;</div><p style="color:var(--text);font-size:16px;margin:12px 0;">נדרש טוקן</p><p style="color:var(--text-muted);font-size:14px;">פתח את הלינק עם ?token=xxx בספארי ואז שמור למסך הבית</p></div>';
+} else {
+  loadContacts();
+  setInterval(loadContacts, POLL_INTERVAL);
+}
 </script>
 </body>
 </html>

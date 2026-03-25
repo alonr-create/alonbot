@@ -18,6 +18,7 @@ const waMobileHTML = readFileSync(join(import.meta.dirname, '../views/wa-mobile.
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const waManagerManifestJSON = readFileSync(join(import.meta.dirname, '../views/wa-manager-manifest.json'), 'utf-8');
+const manifestWaMobileJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa-mobile.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
 const iconWa192 = readFileSync(join(import.meta.dirname, '../views/icon-wa-192.png'));
@@ -73,6 +74,10 @@ app.get('/icon-512.png', (_req, res) => {
 app.get('/manifest-wa.json', (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
   res.send(manifestWaJSON);
+});
+app.get('/manifest-wa-mobile.json', (_req, res) => {
+  res.setHeader('Content-Type', 'application/manifest+json');
+  res.send(manifestWaMobileJSON);
 });
 app.get('/icon-wa-192.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
@@ -1165,8 +1170,9 @@ app.get('/wa-inbox', dashAuth, (_req, res) => {
   res.send(waInboxHTML);
 });
 
-// WA Mobile PWA (iPhone app)
-app.get('/wa-mobile', dashAuth, (_req, res) => {
+// WA Mobile PWA (iPhone app) — served without dashAuth so PWA home screen launch works
+// Auth is enforced on API calls; the HTML shell itself contains no sensitive data
+app.get('/wa-mobile', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(waMobileHTML);
 });
