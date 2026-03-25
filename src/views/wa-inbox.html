@@ -984,13 +984,12 @@ function renderContacts() {
         </div>
         <div class="contact-body" style="pointer-events:none;">
           <div class="contact-row" style="pointer-events:none;">
-            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}</span>
+            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}${c.isCampaign ? ' <span style="font-size:9px;background:#6366f1;color:#fff;border-radius:3px;padding:1px 5px;margin-right:4px;font-weight:400;">קמפיין</span>' : ''}</span>
             <span class="${timeClass}" style="pointer-events:none;">${formatTime(c.lastTime)}</span>
           </div>
           <div class="contact-preview" style="pointer-events:none;">${preview}</div>
         </div>
         ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
-        ${c.isCampaign ? `<div style="pointer-events:none;position:absolute;top:6px;left:6px;font-size:10px;background:#6366f1;color:#fff;border-radius:4px;padding:1px 4px;">🚀</div>` : ''}
       </div>
     `;
   }).join('');
@@ -1131,23 +1130,42 @@ function buildCampaignMessages(phone) {
   if (!info) return [];
   const msgs = [];
   for (const m of (info.messages || [])) {
+    // Extract name and link from update text
+    const nameMatch = m.text?.match(/שם:\s*(.+)/);
+    const linkMatch = m.text?.match(/לינק:\s*(https?:\/\/\S+)/);
+    const leadName = nameMatch?.[1] || m.name || '';
+    const siteLink = linkMatch?.[1] || '';
+
+    // Add the actual template message the lead received
+    if (leadName || siteLink) {
+      msgs.push({
+        role: 'assistant',
+        direction: 'outgoing',
+        fromMe: true,
+        body: `שלום ${leadName} 👋\nכאן יעל מ-alon dev.\nראיתי את העסק שלך בגוגל ובניתי לך אתר לדוגמא — בלי שום התחייבות.\n\n🔗 הנה הלינק:\n${siteLink}\n\n✅ תמונות מגוגל של העסק\n✅ ביקורות אמיתיות\n✅ כפתור וואטסאפ ישיר\n\nתסתכל ותגיד לי מה אתה חושב 😊`,
+        timestamp: m.time,
+        source: 'campaign'
+      });
+    }
+
+    // Add the system log entry
     msgs.push({
-      role: 'assistant',
+      role: 'system',
       direction: 'outgoing',
       fromMe: true,
-      body: m.text || '📱 הודעת וואטסאפ נשלחה',
+      body: '📱 ' + (m.text || 'הודעת וואטסאפ נשלחה'),
       timestamp: m.time,
-      source: 'campaign'
+      source: 'campaign-log'
     });
   }
   for (const c of (info.calls || [])) {
     msgs.push({
-      role: 'assistant',
+      role: 'system',
       direction: 'outgoing',
       fromMe: true,
       body: c.text || '📞 שיחה בוצעה',
       timestamp: c.time,
-      source: 'campaign'
+      source: 'campaign-log'
     });
   }
   // Sort by time
@@ -1173,17 +1191,24 @@ function renderMessages() {
       lastDate = msgDate;
     }
 
-    const isOut = msg.role === 'assistant' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    const isOut = msg.role === 'assistant' || msg.role === 'system' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
     const dir = isOut ? 'outgoing' : 'incoming';
     const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
     const checks = isOut ? `<span class="msg-check read">✓✓</span>` : '';
     const text = linkify(msg.body || msg.message || msg.text || msg.content || '');
-    const sender = isOut ? '🤖 בוט' : '';
+
+    // Campaign log entries as system notifications (like day dividers)
+    if (msg.source === 'campaign-log') {
+      html += `<div class="day-divider"><span style="background:#ede9fe;color:#6366f1;font-size:11px;">🚀 ${esc(msg.body || '')}</span></div>`;
+      return;
+    }
+
+    const sender = msg.source === 'campaign' ? '🚀 קמפיין' : (isOut ? '🤖 בוט' : '');
 
     html += `
       <div class="msg-wrapper ${dir}">
         <div class="msg-bubble ${dir}">
-          ${sender ? `<div style="font-size:10px;font-weight:600;color:${isOut ? '#128C7E' : '#e17076'};margin-bottom:2px;">${sender}</div>` : ''}
+          ${sender ? `<div style="font-size:10px;font-weight:600;color:${msg.source === 'campaign' ? '#6366f1' : (isOut ? '#128C7E' : '#e17076')};margin-bottom:2px;">${sender}</div>` : ''}
           <div class="msg-text">${text}</div>
           <div class="msg-meta">
             <span class="msg-time">${time}</span>
