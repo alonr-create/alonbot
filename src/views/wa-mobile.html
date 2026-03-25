@@ -8,7 +8,21 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="360Shmikley">
 <meta name="theme-color" content="#0088cc">
-<link rel="manifest" href="/manifest-wa-mobile.json">
+<script>
+// Dynamic manifest with token for PWA home screen
+const _t = new URLSearchParams(window.location.search).get('token');
+if (_t) {
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = '/manifest-wa-mobile.json?token=' + encodeURIComponent(_t);
+  document.head.appendChild(link);
+} else {
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = '/manifest-wa-mobile.json';
+  document.head.appendChild(link);
+}
+</script>
 <link rel="apple-touch-icon" href="/apple-touch-icon-wa-blue.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-blue-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-blue-192.png">

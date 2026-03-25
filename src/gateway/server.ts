@@ -75,9 +75,13 @@ app.get('/manifest-wa.json', (_req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
   res.send(manifestWaJSON);
 });
-app.get('/manifest-wa-mobile.json', (_req, res) => {
+app.get('/manifest-wa-mobile.json', (req, res) => {
   res.setHeader('Content-Type', 'application/manifest+json');
-  res.send(manifestWaMobileJSON);
+  // Inject token into start_url so PWA home screen launch includes it
+  const token = req.query.token || config.dashboardSecret;
+  const manifest = JSON.parse(manifestWaMobileJSON);
+  manifest.start_url = `/wa-mobile?token=${token}`;
+  res.send(JSON.stringify(manifest));
 });
 app.get('/icon-wa-192.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
