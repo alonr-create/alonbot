@@ -2,6 +2,7 @@ import express from 'express';
 import crypto from 'crypto';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import webpush from 'web-push';
 import { config } from '../utils/config.js';
 import { executeTool } from '../agent/tools.js';
 import { db } from '../utils/db.js';
@@ -160,6 +161,82 @@ function formatUptime(seconds: number): string {
   const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   return d > 0 ? `${d}d ${h}h ${m}m` : h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+// ===== Web Push Notifications (VAPID) =====
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BNI2cmVacqU-ko85HdAztRuHeIkcEkSkqtowzctVvRmlsaAVCLYq-SJ4rfHiHlJavEINc8dDieQGPA-fK2jaGOo';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'tJ2AEB-UTaKnLnHgeZbAJ8LOQv8NtpfK43o2JKoFQkc';
+webpush.setVapidDetails('mailto:alondevoffice@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+
+// Create push_subscriptions table
+try {
+  db.exec(`CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    endpoint TEXT UNIQUE NOT NULL,
+    keys_p256dh TEXT NOT NULL,
+    keys_auth TEXT NOT NULL,
+    created_at TEXT DEFAULT (datetime('now'))
+  )`);
+} catch { /* table may already exist */ }
+
+// Public key endpoint (no auth — needed before subscribing)
+app.get('/api/push/vapid-key', (_req, res) => {
+  res.json({ publicKey: VAPID_PUBLIC });
+});
+
+// Subscribe endpoint
+app.post('/api/push/subscribe', (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) {
+    res.status(400).json({ success: false, error: 'Invalid subscription' });
+    return;
+  }
+  try {
+    db.prepare('INSERT OR REPLACE INTO push_subscriptions (endpoint, keys_p256dh, keys_auth) VALUES (?, ?, ?)')
+      .run(endpoint, keys.p256dh, keys.auth);
+    log.info('push subscription saved');
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Unsubscribe
+app.post('/api/push/unsubscribe', (req, res) => {
+  const { endpoint } = req.body;
+  if (endpoint) {
+    db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?').run(endpoint);
+  }
+  res.json({ success: true });
+});
+
+// Send push notification to all subscribers
+export async function sendPushNotification(payload: { title: string; body: string; phone?: string; url?: string; tag?: string }) {
+  try {
+    const subs = db.prepare('SELECT * FROM push_subscriptions').all() as any[];
+    if (!subs.length) return;
+    const data = JSON.stringify(payload);
+    const stale: string[] = [];
+    await Promise.allSettled(subs.map(async (sub) => {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
+        }, data);
+      } catch (e: any) {
+        if (e.statusCode === 410 || e.statusCode === 404) {
+          stale.push(sub.endpoint);
+        }
+      }
+    }));
+    // Clean up expired subscriptions
+    if (stale.length) {
+      const placeholders = stale.map(() => '?').join(',');
+      db.prepare(`DELETE FROM push_subscriptions WHERE endpoint IN (${placeholders})`).run(...stale);
+    }
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'push notification dispatch failed');
+  }
 }
 
 // Cloud mode: allow local Mac to register its tunnel URL

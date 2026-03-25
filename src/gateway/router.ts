@@ -108,6 +108,18 @@ export function registerAdapter(adapter: ChannelAdapter) {
       notifyLeadMessage(msg).catch(() => {});
     }
 
+    // Push notification to PWA subscribers for all inbound WhatsApp messages
+    if (msg.channel === 'whatsapp') {
+      import('./server.js').then(({ sendPushNotification }) => {
+        sendPushNotification({
+          title: msg.senderName || msg.senderId,
+          body: (msg.text || '(מדיה)').slice(0, 200),
+          phone: msg.senderId,
+          tag: `wa-${msg.senderId}`,
+        });
+      }).catch(() => {});
+    }
+
     // Check for keyword workflows (fire-and-forget, don't block response)
     try {
       const matched = matchKeywordWorkflows(msg.text);
