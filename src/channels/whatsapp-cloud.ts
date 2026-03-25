@@ -82,47 +82,9 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
 
     // Direct Meta webhook format
     if (body.object === 'whatsapp_business_account') {
-      // Cloud mode: forward OWNER messages to local Mac (has local tools: shell, files, camera)
-      // Lead messages are always handled on cloud (they only need calendar/monday/Claude)
-      if (config.mode === 'cloud' && (config as any).localApiUrl) {
-        // Check if any message in this webhook is from the owner
-        const isOwnerMessage = (body.entry || []).some((entry: any) =>
-          (entry.changes || []).some((change: any) =>
-            (change.value?.messages || []).some((msg: any) => {
-              const from = (msg.from || '').replace(/^\+/, '');
-              return config.allowedWhatsApp.includes(from);
-            })
-          )
-        );
-
-        if (isOwnerMessage) {
-          // Owner message — forward to local for full tool access
-          const localUrl = (config as any).localApiUrl;
-          fetch(`${localUrl}/whatsapp-cloud-webhook`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-            signal: AbortSignal.timeout(30000),
-          }).then(r => {
-            if (r.ok) {
-              log.info('owner message forwarded to local');
-            } else {
-              log.warn({ status: r.status }, 'local returned error — processing on cloud');
-              processWebhookEntries(body);
-            }
-          }).catch(err => {
-            log.warn({ err: err.message }, 'local unreachable — processing on cloud (fallback)');
-            processWebhookEntries(body);
-          });
-        } else {
-          // Lead message — handle directly on cloud (saves to cloud DB for dashboard)
-          log.info('lead message — processing on cloud');
-          processWebhookEntries(body);
-        }
-      } else {
-        // Local mode or no local connected: process directly
-        processWebhookEntries(body);
-      }
+      // Always process on this instance (cloud or local) — keeps all messages in one DB
+      // Local tools (shell, camera) are proxied via localApiUrl when needed
+      processWebhookEntries(body);
       res.sendStatus(200);
       return;
     }

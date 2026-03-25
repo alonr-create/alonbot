@@ -71,6 +71,15 @@ export function registerAdapter(adapter: ChannelAdapter) {
 
     log.info({ channel: msg.channel, sender: msg.senderName, text: msg.text.slice(0, 80) }, 'incoming message');
 
+    // Log ALL WhatsApp messages to DB for dashboard visibility
+    if (msg.channel === 'whatsapp') {
+      try {
+        const { db: logDb } = await import('../utils/db.js');
+        logDb.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at) VALUES ('whatsapp-inbound', ?, ?, 'user', ?, datetime('now'))`)
+          .run(msg.senderId, msg.senderName || msg.senderId, (msg.text || '(מדיה)').substring(0, 2000));
+      } catch { /* non-critical */ }
+    }
+
     // Notify Alon on Telegram when a lead/non-Alon sends a WhatsApp message
     if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
       notifyLeadMessage(msg).catch(() => {});
@@ -150,14 +159,17 @@ export function registerAdapter(adapter: ChannelAdapter) {
       }
       log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback }, 'reply sent');
 
-      // Log bot reply to leads for flow tracking + Monday.com sync
-      if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
+      // Log bot reply for ALL WhatsApp conversations (dashboard visibility)
+      if (msg.channel === 'whatsapp') {
         try {
           const { db } = await import('../utils/db.js');
           db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
             .run(msg.senderId, reply.text.substring(0, 2000));
         } catch { /* non-critical */ }
+      }
 
+      // Monday.com sync for leads only
+      if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
         // Sync chat to Monday.com (fire-and-forget)
         import('../utils/monday-leads.js').then(({ syncChatToMonday, extractLeadName, updateMondayItemName }) => {
           syncChatToMonday(msg.senderId, msg.text, reply.text).catch(() => {});
@@ -241,12 +253,7 @@ async function notifyLeadMessage(msg: UnifiedMessage) {
     log.debug({ err: e.message }, 'lead notification failed');
   }
 
-  // Log to DB for flow tracking
-  try {
-    const { db } = await import('../utils/db.js');
-    db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'user', ?, datetime('now'))`)
-      .run(msg.senderId, msg.text || '(מדיה)');
-  } catch { /* non-critical */ }
+  // User message logging is now handled centrally in registerAdapter (all WhatsApp messages)
 }
 
 export async function sendToChannel(channel: string, targetId: string, text: string) {
