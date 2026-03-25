@@ -9,6 +9,25 @@ const log = createLogger('router');
 
 const adapters = new Map<string, ChannelAdapter>();
 
+// Sync messages to cloud DB when running in local mode
+// This ensures the dashboard on Render can see all conversations
+async function syncToCloud(messages: Array<{ channel: string; sender_id: string; sender_name?: string; role: string; content: string; created_at: string }>) {
+  if (config.mode !== 'local') return; // only local syncs to cloud
+  const cloudUrl = process.env.RENDER_URL || 'https://alonbot.onrender.com';
+  const secret = process.env.LOCAL_API_SECRET;
+  if (!secret) return;
+  try {
+    await fetch(`${cloudUrl}/api/sync/import`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-api-secret': secret },
+      body: JSON.stringify({ messages }),
+      signal: AbortSignal.timeout(5000),
+    });
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'cloud sync failed');
+  }
+}
+
 // Deduplication: prevent processing the same message twice (e.g. Telegram polling restarts, webhook retries)
 const recentMessageIds = new Map<string, number>(); // messageKey -> timestamp
 const DEDUP_WINDOW_MS = 300_000; // 5 minutes — Meta Cloud API retries webhooks
@@ -73,11 +92,15 @@ export function registerAdapter(adapter: ChannelAdapter) {
 
     // Log ALL WhatsApp messages to DB for dashboard visibility
     if (msg.channel === 'whatsapp') {
+      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const content = (msg.text || '(מדיה)').substring(0, 2000);
       try {
         const { db: logDb } = await import('../utils/db.js');
-        logDb.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at) VALUES ('whatsapp-inbound', ?, ?, 'user', ?, datetime('now'))`)
-          .run(msg.senderId, msg.senderName || msg.senderId, (msg.text || '(מדיה)').substring(0, 2000));
+        logDb.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at) VALUES ('whatsapp-inbound', ?, ?, 'user', ?, ?)`)
+          .run(msg.senderId, msg.senderName || msg.senderId, content, now);
       } catch { /* non-critical */ }
+      // Sync user message to cloud dashboard
+      syncToCloud([{ channel: 'whatsapp-inbound', sender_id: msg.senderId, sender_name: msg.senderName || msg.senderId, role: 'user', content, created_at: now }]).catch(() => {});
     }
 
     // Notify Alon on Telegram when a lead/non-Alon sends a WhatsApp message
@@ -161,11 +184,15 @@ export function registerAdapter(adapter: ChannelAdapter) {
 
       // Log bot reply for ALL WhatsApp conversations (dashboard visibility)
       if (msg.channel === 'whatsapp') {
+        const replyNow = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const replyContent = reply.text.substring(0, 2000);
         try {
           const { db } = await import('../utils/db.js');
-          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
-            .run(msg.senderId, reply.text.substring(0, 2000));
+          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, ?)`)
+            .run(msg.senderId, replyContent, replyNow);
         } catch { /* non-critical */ }
+        // Sync bot reply to cloud dashboard
+        syncToCloud([{ channel: 'whatsapp-inbound', sender_id: msg.senderId, role: 'assistant', content: replyContent, created_at: replyNow }]).catch(() => {});
       }
 
       // Monday.com sync for leads only
