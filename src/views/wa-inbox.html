@@ -822,11 +822,12 @@ async function loadContacts() {
       phone: c.phone || c.id,
       name: c.name || c.pushName || c.phone || 'לא ידוע',
       lastMessage: c.lastMessage || c.last_message || '',
-      lastTime: c.lastTime || c.last_time || c.updatedAt || '',
+      lastTime: c.lastTime || c.last_time || c.last_message_at || c.updatedAt || c.updated_at || '',
       unread: c.unread || 0,
-      isOutgoing: c.isOutgoing || c.is_outgoing || false,
+      isOutgoing: c.isOutgoing || c.is_outgoing || c.last_message_role === 'assistant' || false,
       source: c.source || 'whatsapp',
-      status: c.status || 'new',
+      status: c.status || c.lead_status || 'new',
+      messageCount: c.message_count || 0,
       online: false
     }));
     // Sort by last message time desc
@@ -1003,15 +1004,17 @@ function renderMessages() {
       lastDate = msgDate;
     }
 
-    const isOut = msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    const isOut = msg.role === 'assistant' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
     const dir = isOut ? 'outgoing' : 'incoming';
     const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
-    const checks = isOut ? `<span class="msg-check ${msg.read ? 'read' : ''}">${msg.read ? '✓✓' : '✓✓'}</span>` : '';
+    const checks = isOut ? `<span class="msg-check read">✓✓</span>` : '';
     const text = linkify(msg.body || msg.message || msg.text || msg.content || '');
+    const sender = isOut ? '🤖 בוט' : '';
 
     html += `
       <div class="msg-wrapper ${dir}">
         <div class="msg-bubble ${dir}">
+          ${sender ? `<div style="font-size:10px;font-weight:600;color:${isOut ? '#128C7E' : '#e17076'};margin-bottom:2px;">${sender}</div>` : ''}
           <div class="msg-text">${text}</div>
           <div class="msg-meta">
             <span class="msg-time">${time}</span>
