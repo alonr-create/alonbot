@@ -128,6 +128,10 @@ export function initSchema(db: Database.Database): void {
         { name: 'ניהול רשתות חברתיות (Social media)', min: 2000, max: 5000, unit: 'חודש' },
         { name: 'קידום אורגני SEO', min: 3000, max: 8000, unit: 'חודש' },
       ]},
+      { category: 'תחזוקה חודשית', items: [
+        { name: 'תחזוקת אתר/אפליקציה (אחסון, עדכונים, גיבויים)', min: 300, max: 500, unit: 'חודש' },
+        { name: 'תחזוקת בוט/אוטומציה (אחסון, תמיכה, עדכוני AI)', min: 500, max: 800, unit: 'חודש' },
+      ]},
     ]),
 
     // Payment

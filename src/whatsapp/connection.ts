@@ -5,7 +5,7 @@ import { mkdirSync, rmSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
-import { setQR, clearQR, setConnectionStatus } from './qr.js';
+import { setQR, clearQR, setConnectionStatus, setPairingCode } from './qr.js';
 import { setupMessageHandler } from './message-handler.js';
 import { notifyAlon } from '../notifications/telegram.js';
 
@@ -133,6 +133,9 @@ export async function connectWhatsApp(): Promise<BotAdapter> {
   const puppeteerArgs = ['--no-sandbox', '--disable-setuid-sandbox', '--disable-gpu', '--single-process'];
   const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
 
+  // Use pairing code (phone number) instead of QR if env WHATSAPP_PAIR=1
+  const usePairing = process.env.WHATSAPP_PAIR === '1';
+
   client = new Client({
     authStrategy: new LocalAuth({ dataPath: config.sessionDir }),
     puppeteer: {
@@ -140,6 +143,14 @@ export async function connectWhatsApp(): Promise<BotAdapter> {
       args: puppeteerArgs,
       ...(execPath ? { executablePath: execPath } : {}),
     },
+    ...(usePairing ? { pairWithPhoneNumber: { phoneNumber: config.alonPhone, showNotification: true } } : {}),
+  } as any);
+
+  // Pairing code event (when using phone number pairing)
+  client.on('code' as any, (code: string) => {
+    setPairingCode(code);
+    setConnectionStatus('connecting');
+    log.info({ code }, 'pairing code received — enter in WhatsApp > Linked Devices > Link with phone number');
   });
 
   client.on('qr', async (qr: string) => {

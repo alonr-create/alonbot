@@ -18,7 +18,7 @@ const log = createLogger('message-handler');
 const IMAGE_MEDIA_RESPONSE =
   'קיבלתי! כרגע אני עובד רק עם הודעות טקסט ואודיו, אבל אשמח לעזור - ספר לי במילים מה אתה מחפש';
 const VOICE_FAIL_RESPONSE =
-  'קיבלתי את ההודעה הקולית אבל לא הצלחתי לתמלל אותה. אפשר לנסות שוב או לכתוב בטקסט?';
+  'קיבלתי את ההודעה הקולית 🎤 אבל לא הצלחתי לתמלל אותה. אפשר לנסות שוב או לכתוב בטקסט?';
 
 /**
  * Create a new lead in local DB + Monday.com board.
@@ -104,8 +104,8 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
       log.info({ phone, cancelled }, 'follow-ups cancelled on reply');
     }
 
-    // Use original chat ID for sending (whatsapp-web.js native format)
-    const jid = from;
+    // Use real phone number for sending (chat registry handles LID resolution)
+    const jid = phone;
 
     // Handle media messages
     if (msg.hasMedia) {
@@ -125,16 +125,20 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
               // Fall through to text handling below
               msg._transcribedText = transcribed;
             } else {
-              await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+              try { await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE); } catch (e) { log.error({ err: e, phone }, 'send fail'); }
               return;
             }
           } else {
-            await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+            try { await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE); } catch (e) { log.error({ err: e, phone }, 'send fail'); }
             return;
           }
         } catch (err) {
           log.error({ err, phone }, 'voice transcription failed');
-          await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+          try {
+            await sendWithTyping(adapter, jid, VOICE_FAIL_RESPONSE);
+          } catch (sendErr) {
+            log.error({ err: sendErr, phone }, 'failed to send voice fail response');
+          }
           return;
         }
       } else if (msgType === 'image' || msgType === 'sticker') {

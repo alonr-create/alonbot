@@ -61,7 +61,7 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
     const db = getDb();
     const jid = getAdminPhone() + '@s.whatsapp.net';
 
-    // ── Pipeline from Monday.com (source of truth) ──
+    // ── Pipeline from Monday.com — compact numbers only ──
     const allStats = await getAllBoardsStats();
     const pipelineLines: string[] = [];
     for (const [boardName, stats] of Object.entries(allStats)) {
@@ -69,25 +69,21 @@ async function sendDailySummary(sock: BotAdapter): Promise<void> {
       const activeCount = Object.entries(stats.byStatus)
         .filter(([status]) => !CLOSED_STATUSES.has(status))
         .reduce((sum, [, count]) => sum + count, 0);
-      const statusLines = Object.entries(stats.byStatus)
-        .sort(([, a], [, b]) => b - a)
-        .map(([status, count]) => `  ${status}: ${count}`)
-        .join('\n');
-      pipelineLines.push(`📊 ${boardName} (${activeCount} פעילים מתוך ${stats.total}):`);
-      pipelineLines.push(statusLines);
+      const hotCount = Object.entries(stats.byStatus)
+        .filter(([status]) => HOT_STATUSES.has(status))
+        .reduce((sum, [, count]) => sum + count, 0);
+      pipelineLines.push(`📊 ${boardName}: ${activeCount} פעילים | ${hotCount} חמים | ${stats.total} סה״כ`);
     }
 
-    // ── Hot leads from Monday.com ──
-    const hotLeads: string[] = [];
-    for (const [boardName, stats] of Object.entries(allStats)) {
+    // ── Hot leads — count only ──
+    let totalHot = 0;
+    for (const [, stats] of Object.entries(allStats)) {
       for (const item of stats.recentItems) {
-        if (HOT_STATUSES.has(item.status)) {
-          hotLeads.push(`  🔥 ${item.name} — ${item.status}`);
-        }
+        if (HOT_STATUSES.has(item.status)) totalHot++;
       }
     }
-    const hotLines = hotLeads.length > 0
-      ? hotLeads.join('\n')
+    const hotLines = totalHot > 0
+      ? `  🔥 ${totalHot} לידים חמים`
       : '  אין לידים חמים כרגע';
 
     // ── Yesterday's activity (from local DB) ──

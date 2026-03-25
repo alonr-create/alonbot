@@ -391,7 +391,7 @@ body {
     ${esc(businessName)} — שירותי טכנולוגיה ודיגיטל
     <div class="footer-contacts">
       <span>054-630-0783</span>
-      <span>alon12@gmail.com</span>
+      <span>alondevoffice@gmail.com</span>
       <span>alon.dev</span>
     </div>
   </div>

@@ -43,9 +43,10 @@ export async function synthesizeSpeech(text: string): Promise<Buffer | null> {
         text: cleanText,
         model_id: 'eleven_v3',
         voice_settings: {
-          stability: 0.5,
-          similarity_boost: 0.75,
-          style: 0.3,
+          stability: 0.7,
+          similarity_boost: 0.9,
+          style: 0.4,
+          use_speaker_boost: true,
         },
       }),
     });

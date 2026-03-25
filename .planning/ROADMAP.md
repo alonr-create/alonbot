@@ -92,4 +92,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 1. Foundation | 3/3 | Complete    | 2026-03-09 |
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
-| 4. Follow-up | 2/2 | Complete   | 2026-03-09 |
+| 4. Follow-up | 2/2 | Complete    | 2026-03-09 |

@@ -203,7 +203,10 @@ export async function handleConversation(
 
     if (bookResult.success) {
       const ownerLabel = isDekel ? 'אלון מדקל לפרישה' : getOwnerName();
-      await sendWithTyping(sock, jid, `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${ownerLabel} יתקשר אליך ✅`);
+      const meetingMsg = isDekel
+        ? `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${ownerLabel} יתקשר אליך ✅`
+        : `מעולה! שיחת הזום נקבעה ל-${date} בשעה ${time} 🎥 ${ownerLabel} ישלח לך לינק לפני הפגישה ✅`;
+      await sendWithTyping(sock, jid, meetingMsg);
       newStatus = 'meeting-scheduled';
       cancelFollowUps(phone);
 
@@ -736,6 +739,31 @@ async function processBossMarkers(
     const task = browseMatch[1].trim();
     cleaned = cleaned.replace(/\[BROWSE:[^\]]+\]/, '').trim();
 
+    // Detect "screenshot desktop/screen" requests (no URL = capture local screen)
+    const isDesktopScreenshot = !task.match(/https?:\/\//) &&
+      /screenshot|screen.?capture|desktop|צלם|מסך/i.test(task);
+
+    if (isDesktopScreenshot) {
+      // macOS screencapture — take a real screenshot of the desktop
+      import('child_process').then(({ execSync }) => {
+        try {
+          const tmpPath = `/tmp/screenshot-${Date.now()}.png`;
+          execSync(`screencapture -x ${tmpPath}`, { timeout: 5000 });
+          import('fs').then(({ readFileSync, unlinkSync }) => {
+            const screenshotBuf = readFileSync(tmpPath);
+            try { unlinkSync(tmpPath); } catch {}
+            sock.sendImage(jid, screenshotBuf, '🖥️ צילום מסך').then(() => {
+              log.info('desktop screenshot sent');
+            }).catch((err: any) => {
+              log.error({ err }, 'failed to send desktop screenshot');
+            });
+          });
+        } catch (err) {
+          log.error({ err }, 'screencapture failed');
+          sendWithTyping(sock, jid, '❌ לא הצלחתי לצלם מסך — ייתכן שחסרות הרשאות').catch(() => {});
+        }
+      });
+    } else {
     // Extract URL from task if present
     const urlMatch = task.match(/https?:\/\/[^\s]+/);
     const startUrl = urlMatch ? urlMatch[0] : undefined;
@@ -782,6 +810,7 @@ async function processBossMarkers(
         await sendWithTyping(sock, jid, `❌ הגלישה נכשלה: ${err.message}`);
       });
     });
+    } // end else (not desktop screenshot)
   }
 
   // ── [RULE:content] — boss teaches the bot a new rule ──

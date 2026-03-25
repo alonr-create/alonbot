@@ -1,37 +1,98 @@
 /**
- * Transcribe WhatsApp voice messages using OpenAI Whisper API.
- * Supports Hebrew, English, and auto-detection.
+ * Transcribe WhatsApp voice messages.
+ * Primary: Groq Whisper (free, fast).
+ * Fallback: OpenAI Whisper.
  */
-import OpenAI from 'openai';
 import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('voice-transcribe');
 
-let openaiClient: OpenAI | null = null;
-
-function getClient(): OpenAI {
-  if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey) throw new Error('OPENAI_API_KEY not configured');
-    openaiClient = new OpenAI({ apiKey });
-  }
-  return openaiClient;
-}
-
 /**
- * Transcribe audio buffer to text using Whisper.
- * @param audioBuffer - Raw audio data (ogg/opus from WhatsApp)
- * @param mimeType - MIME type of the audio (e.g. 'audio/ogg; codecs=opus')
- * @returns Transcribed text, or null on failure
+ * Transcribe audio buffer to text.
+ * Tries Groq first (free), falls back to OpenAI Whisper.
  */
 export async function transcribeAudio(
   audioBuffer: Buffer,
   mimeType?: string,
 ): Promise<string | null> {
-  try {
-    const client = getClient();
+  // Try Groq Whisper first (free tier)
+  const groqResult = await transcribeWithGroq(audioBuffer, mimeType);
+  if (groqResult) return groqResult;
 
-    // WhatsApp voice messages are typically ogg/opus
+  // Fallback to OpenAI Whisper
+  const whisperResult = await transcribeWithWhisper(audioBuffer, mimeType);
+  if (whisperResult) return whisperResult;
+
+  return null;
+}
+
+/**
+ * Transcribe with Groq Whisper API (free, fast).
+ */
+async function transcribeWithGroq(
+  audioBuffer: Buffer,
+  mimeType?: string,
+): Promise<string | null> {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) {
+    log.debug('GROQ_API_KEY not configured, skipping Groq');
+    return null;
+  }
+
+  try {
+    const ext = mimeType?.includes('ogg') ? 'ogg' : 'mp3';
+    const blob = new Blob([new Uint8Array(audioBuffer)], { type: mimeType || 'audio/ogg' });
+
+    const formData = new FormData();
+    formData.append('file', blob, `voice.${ext}`);
+    formData.append('model', 'whisper-large-v3');
+    formData.append('language', 'he');
+
+    const response = await fetch('https://api.groq.com/openai/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: formData,
+      signal: AbortSignal.timeout(30000),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      log.error({ status: response.status, body: errText.slice(0, 200) }, 'Groq Whisper API error');
+      return null;
+    }
+
+    const data = await response.json() as { text?: string };
+    const text = data.text?.trim();
+
+    if (!text) {
+      log.warn('Groq returned empty transcription');
+      return null;
+    }
+
+    log.info({ textLength: text.length, preview: text.slice(0, 60) }, 'voice transcribed via Groq');
+    return text;
+  } catch (err) {
+    log.error({ err }, 'Groq transcription failed');
+    return null;
+  }
+}
+
+/**
+ * Fallback: transcribe with OpenAI Whisper.
+ */
+async function transcribeWithWhisper(
+  audioBuffer: Buffer,
+  mimeType?: string,
+): Promise<string | null> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) return null;
+
+  try {
+    const OpenAI = (await import('openai')).default;
+    const client = new OpenAI({ apiKey });
+
     const ext = mimeType?.includes('ogg') ? 'ogg' : 'mp3';
     const file = new File([audioBuffer as unknown as BlobPart], `voice.${ext}`, {
       type: mimeType || 'audio/ogg',
@@ -40,19 +101,16 @@ export async function transcribeAudio(
     const response = await client.audio.transcriptions.create({
       model: 'whisper-1',
       file,
-      language: 'he', // Default to Hebrew; Whisper handles mixed languages well
+      language: 'he',
     });
 
     const text = response.text?.trim();
-    if (!text) {
-      log.warn('Whisper returned empty transcription');
-      return null;
-    }
+    if (!text) return null;
 
-    log.info({ textLength: text.length, preview: text.slice(0, 60) }, 'voice transcribed');
+    log.info({ textLength: text.length, preview: text.slice(0, 60) }, 'voice transcribed via Whisper');
     return text;
   } catch (err) {
-    log.error({ err }, 'voice transcription failed');
+    log.error({ err }, 'Whisper transcription failed');
     return null;
   }
 }

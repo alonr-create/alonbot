@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>מדריך הבוט — Alon.dev</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;800;900&display=swap');
+
+  :root {
+    --bg: #0f0a1e;
+    --card: #1a1333;
+    --card-hover: #231a45;
+    --accent: #B026FF;
+    --accent2: #06B6D4;
+    --accent3: #10B981;
+    --gold: #F59E0B;
+    --red: #EF4444;
+    --text: #e8e0f0;
+    --text-muted: #9b8fc0;
+    --border: rgba(176, 38, 255, 0.15);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Heebo', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  /* ── Slide system ── */
+  .slide {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 60px 40px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .slide::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle at 30% 40%, rgba(176, 38, 255, 0.06) 0%, transparent 50%),
+                radial-gradient(circle at 70% 60%, rgba(6, 182, 212, 0.04) 0%, transparent 50%);
+    pointer-events: none;
+  }
+
+  .slide-content {
+    max-width: 1000px;
+    width: 100%;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── Navigation ── */
+  .nav {
+    position: fixed;
+    left: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 100;
+  }
+
+  .nav-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-muted);
+    opacity: 0.3;
+    cursor: pointer;
+    transition: all 0.3s;
+    border: none;
+  }
+
+  .nav-dot.active, .nav-dot:hover {
+    opacity: 1;
+    background: var(--accent);
+    transform: scale(1.3);
+    box-shadow: 0 0 10px var(--accent);
+  }
+
+  /* ── Typography ── */
+  .slide-number {
+    font-size: 0.8rem;
+    color: var(--accent);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+    font-weight: 600;
+  }
+
+  h1 {
+    font-size: clamp(2.5rem, 6vw, 4rem);
+    font-weight: 900;
+    background: linear-gradient(135deg, #B026FF, #06B6D4);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 20px;
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: clamp(1.8rem, 4vw, 2.5rem);
+    font-weight: 800;
+    margin-bottom: 30px;
+    color: #fff;
+  }
+
+  h3 {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: var(--accent2);
+    margin-bottom: 12px;
+  }
+
+  .subtitle {
+    font-size: 1.3rem;
+    color: var(--text-muted);
+    margin-bottom: 40px;
+    line-height: 1.8;
+    max-width: 700px;
+  }
+
+  /* ── Cards ── */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-top: 20px;
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    transition: all 0.3s;
+  }
+
+  .card:hover {
+    background: var(--card-hover);
+    border-color: rgba(176, 38, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  .card-icon {
+    font-size: 2rem;
+    margin-bottom: 12px;
+    display: block;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 8px;
+  }
+
+  .card-desc {
+    font-size: 0.95rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+  }
+
+  /* ── Status badge ── */
+  .badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .badge-green { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+  .badge-yellow { background: rgba(245, 158, 11, 0.15); color: #F59E0B; }
+  .badge-red { background: rgba(239, 68, 68, 0.15); color: #EF4444; }
+  .badge-purple { background: rgba(176, 38, 255, 0.15); color: #B026FF; }
+  .badge-cyan { background: rgba(6, 182, 212, 0.15); color: #06B6D4; }
+
+  /* ── Flow diagram ── */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 30px 0;
+  }
+
+  .flow-step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 32px;
+    text-align: center;
+    font-weight: 600;
+    min-width: 300px;
+    position: relative;
+  }
+
+  .flow-arrow {
+    font-size: 1.5rem;
+    color: var(--accent);
+    margin: -4px 0;
+  }
+
+  /* ── Table ── */
+  .table-wrap {
+    overflow-x: auto;
+    margin-top: 20px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    background: var(--card);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  th {
+    background: rgba(176, 38, 255, 0.1);
+    padding: 14px 20px;
+    text-align: right;
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--accent);
+    border-bottom: 1px solid var(--border);
+  }
+
+  td {
+    padding: 12px 20px;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    font-size: 0.95rem;
+  }
+
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(176, 38, 255, 0.03); }
+
+  /* ── Command list ── */
+  .cmd-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 20px;
+  }
+
+  .cmd {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    transition: all 0.3s;
+  }
+
+  .cmd:hover {
+    border-color: rgba(6, 182, 212, 0.4);
+    background: var(--card-hover);
+  }
+
+  .cmd-text {
+    background: rgba(6, 182, 212, 0.1);
+    color: var(--accent2);
+    font-weight: 700;
+    padding: 6px 14px;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+
+  .cmd-result {
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  /* ── Pipeline steps ── */
+  .pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 20px 0;
+    justify-content: center;
+  }
+
+  .pipe-step {
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    position: relative;
+  }
+
+  .pipe-step::after {
+    content: '←';
+    position: absolute;
+    left: -18px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+    font-size: 0.9rem;
+  }
+
+  .pipe-step:last-child::after { display: none; }
+
+  /* ── Hero ── */
+  .hero-logo {
+    font-size: 4rem;
+    margin-bottom: 20px;
+  }
+
+  .hero-features {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-top: 30px;
+    justify-content: center;
+  }
+
+  .hero-feat {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255,255,255,0.04);
+    padding: 10px 20px;
+    border-radius: 30px;
+    font-size: 0.9rem;
+  }
+
+  /* ── Pricing grid ── */
+  .price-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 14px;
+    margin-top: 20px;
+  }
+
+  .price-item {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    text-align: center;
+  }
+
+  .price-name {
+    font-weight: 700;
+    margin-bottom: 8px;
+    color: #fff;
+  }
+
+  .price-range {
+    font-size: 1.1rem;
+    font-weight: 800;
+    background: linear-gradient(135deg, var(--gold), #F97316);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .price-unit {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+  }
+
+  /* ── Section divider ── */
+  .divider {
+    width: 60px;
+    height: 3px;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 3px;
+    margin: 20px 0;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    text-align: center;
+    padding: 40px;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  /* ── Animations ── */
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .slide-content > * {
+    animation: fadeInUp 0.6s ease-out both;
+  }
+
+  .slide-content > *:nth-child(2) { animation-delay: 0.1s; }
+  .slide-content > *:nth-child(3) { animation-delay: 0.2s; }
+  .slide-content > *:nth-child(4) { animation-delay: 0.3s; }
+  .slide-content > *:nth-child(5) { animation-delay: 0.4s; }
+
+  /* ── Responsive ── */
+  @media (max-width: 768px) {
+    .slide { padding: 40px 20px; }
+    .nav { display: none; }
+    .cards { grid-template-columns: 1fr; }
+    .cmd { flex-direction: column; align-items: flex-start; }
+    .pipeline { flex-direction: column; align-items: center; }
+    .pipe-step::after { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Navigation Dots -->
+<nav class="nav" id="nav"></nav>
+
+<!-- ═══════════════════ SLIDE 1: Hero ═══════════════════ -->
+<section class="slide" id="slide-1">
+  <div class="slide-content" style="text-align:center">
+    <div class="hero-logo">🤖</div>
+    <h1>הבוט של Alon.dev</h1>
+    <p class="subtitle">
+      עוזר אישי חכם לעסק — מדבר עם לקוחות, קובע פגישות,<br>
+      עוקב אחרי לידים, ונותן לך סיכומים בזמן אמת
+    </p>
+    <div class="hero-features">
+      <div class="hero-feat">💬 WhatsApp</div>
+      <div class="hero-feat">📊 Monday.com</div>
+      <div class="hero-feat">📅 Google Calendar</div>
+      <div class="hero-feat">🧠 Claude AI</div>
+      <div class="hero-feat">📱 Telegram</div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 2: Connections ═══════════════════ -->
+<section class="slide" id="slide-2">
+  <div class="slide-content">
+    <span class="slide-number">01 — חיבורים</span>
+    <h2>מחובר לכל המערכות</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="card-icon">💬</span>
+        <div class="card-title">WhatsApp <span class="badge badge-green">מחובר</span></div>
+        <div class="card-desc">מגיב ללקוחות אוטומטית, שולח פולואפים, מדמה הקלדה אנושית</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">📊</span>
+        <div class="card-title">Monday.com <span class="badge badge-green">מחובר</span></div>
+        <div class="card-desc">לידים נכנסים אוטומטית, עדכון סטטוסים, חיפוש, הערות, סטטיסטיקות</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">📅</span>
+        <div class="card-title">Google Calendar <span class="badge badge-green">מחובר</span></div>
+        <div class="card-desc">רואה זמנים פנויים, קובע פגישות Zoom אוטומטית</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">🧠</span>
+        <div class="card-title">Claude AI <span class="badge badge-green">מחובר</span></div>
+        <div class="card-desc">ניהול שיחות מכירה, יצירת תשובות, סיכומים, פולואפים מותאמים</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">📱</span>
+        <div class="card-title">Telegram <span class="badge badge-yellow">צריך הגדרה</span></div>
+        <div class="card-desc">התראות לאלון כשליד מועבר לטיפול ידני</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 3: Flow ═══════════════════ -->
+<section class="slide" id="slide-3">
+  <div class="slide-content">
+    <span class="slide-number">02 — תהליך</span>
+    <h2>מה קורה כשליד חדש נכנס?</h2>
+    <div class="flow">
+      <div class="flow-step">🌐 לקוח ממלא טופס באתר alon-dev.vercel.app</div>
+      <div class="flow-arrow">⬇️</div>
+      <div class="flow-step">📊 הליד נכנס לבורד ב-Monday.com</div>
+      <div class="flow-arrow">⬇️</div>
+      <div class="flow-step">🔔 Webhook מתריע לבוט</div>
+      <div class="flow-arrow">⬇️</div>
+      <div class="flow-step">💬 הבוט שולח הודעת WhatsApp מותאמת אישית</div>
+      <div class="flow-arrow">⬇️</div>
+      <div class="flow-step">🧠 Claude AI מנהל שיחת מכירה</div>
+      <div class="flow-arrow">⬇️</div>
+      <div class="flow-step" style="border-color: var(--accent3)">
+        📅 קובע פגישה&nbsp;&nbsp;|&nbsp;&nbsp;👤 מעביר לאלון&nbsp;&nbsp;|&nbsp;&nbsp;⏰ שולח פולואפים
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 4: Pipeline ═══════════════════ -->
+<section class="slide" id="slide-4">
+  <div class="slide-content">
+    <span class="slide-number">03 — סטטוסים</span>
+    <h2>מסע הליד — מהתחלה ועד סגירה</h2>
+    <div class="pipeline">
+      <span class="pipe-step badge-purple">חדש</span>
+      <span class="pipe-step badge-cyan">נוצר קשר</span>
+      <span class="pipe-step" style="background:rgba(99,102,241,0.15);color:#818CF8">בשיחה</span>
+      <span class="pipe-step badge-yellow">הצעה נשלחה</span>
+      <span class="pipe-step badge-green">פגישה נקבעה</span>
+      <span class="pipe-step badge-red">הועבר לטיפול</span>
+    </div>
+    <div style="text-align:center;margin:10px 0 30px">
+      <span class="pipe-step badge-green" style="margin:0 5px">✅ נסגר בהצלחה</span>
+      <span class="pipe-step badge-red" style="margin:0 5px">❌ נסגר ללא עסקה</span>
+    </div>
+    <div class="divider" style="margin:20px auto"></div>
+    <div class="cards" style="grid-template-columns: repeat(auto-fit, minmax(250px, 1fr))">
+      <div class="card">
+        <h3>🔄 מעברים אוטומטיים</h3>
+        <div class="card-desc">
+          חדש → נוצר קשר (הודעה ראשונה)<br>
+          נוצר קשר → בשיחה (הלקוח ענה)<br>
+          בשיחה → הצעה נשלחה (הבוט ציין מחיר ₪)<br>
+          → פגישה נקבעה (Zoom נקבע ביומן)
+        </div>
+      </div>
+      <div class="card">
+        <h3>⚠️ הסלמה לאלון</h3>
+        <div class="card-desc">
+          • הלקוח כותב "תעביר לאלון" / "רוצה אדם"<br>
+          • 3 הודעות קצרות ברצף<br>
+          • הבוט מרגיש שהשיחה תקועה<br>
+          → התראה בטלגרם + סיכום 3 שורות
+        </div>
+      </div>
+      <div class="card">
+        <h3>⏰ פולואפים אוטומטיים</h3>
+        <div class="card-desc">
+          #1: אחרי 24 שעות — ידידותי<br>
+          #2: אחרי יומיים — דחיפות<br>
+          #3: אחרי 4 ימים — אחרון<br>
+          → רק בשעות פעילות, מתאפס כשהלקוח עונה
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 5: Boss Mode ═══════════════════ -->
+<section class="slide" id="slide-5">
+  <div class="slide-content">
+    <span class="slide-number">04 — מצב בוס</span>
+    <h2>👑 כשאלון כותב לבוט</h2>
+    <p class="subtitle">הבוט הופך לעוזר אישי עם נתונים חיים מכל המערכות</p>
+
+    <div class="cards" style="margin-bottom:30px">
+      <div class="card">
+        <span class="card-icon">📊</span>
+        <div class="card-title">Pipeline בזמן אמת</div>
+        <div class="card-desc">כמה לידים בכל סטטוס, סה"כ פעילים</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">🔥</span>
+        <div class="card-title">לידים חמים</div>
+        <div class="card-desc">בשיחה / הצעה נשלחה — עם ההודעה האחרונה</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">📈</span>
+        <div class="card-title">פעילות היום</div>
+        <div class="card-desc">כמה הודעות, כמה לידים חדשים</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">⚠️</span>
+        <div class="card-title">מחכים לטיפול</div>
+        <div class="card-desc">לידים שהועברו לאלון ועדיין פתוחים</div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:20px">💬 פקודות שאפשר לכתוב:</h3>
+    <div class="cmd-list">
+      <div class="cmd">
+        <span class="cmd-text">"מה קורה?"</span>
+        <span class="cmd-result">סיכום כללי — pipeline, לידים חמים, פעילות</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"מה עם דוד?"</span>
+        <span class="cmd-result">חיפוש ליד לפי שם — סטטוס, הודעות, עניין</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"הכנה לפגישה עם 054..."</span>
+        <span class="cmd-result">סיכום השיחה המלאה עם הליד</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"תרשום על דוד שהוא רציני"</span>
+        <span class="cmd-result">הערה נשמרת על הפריט ב-Monday.com</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"תוסיף ליד: משה 054... אתר"</span>
+        <span class="cmd-result">ליד חדש נוצר ב-DB + Monday.com</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"מה המצב במאנדי?"</span>
+        <span class="cmd-result">סטטיסטיקות מלאות מהבורד</span>
+      </div>
+      <div class="cmd">
+        <span class="cmd-text">"תסגור את דוד כ-won"</span>
+        <span class="cmd-result">סגירת ליד + עדכון בכל המערכות</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 6: Daily Summary ═══════════════════ -->
+<section class="slide" id="slide-6">
+  <div class="slide-content">
+    <span class="slide-number">05 — סיכום יומי</span>
+    <h2>☀️ בוקר טוב בוס!</h2>
+    <p class="subtitle">כל בוקר ב-09:00 הבוט שולח הודעת WhatsApp עם סיכום</p>
+
+    <div class="card" style="max-width:500px;margin:0 auto;font-size:0.95rem;line-height:2;padding:30px 35px;background:linear-gradient(135deg, #1a1333, #1f1a3a)">
+      <div style="font-weight:800;font-size:1.1rem;margin-bottom:10px">☀️ בוקר טוב בוס! הנה הסיכום שלך:</div>
+      <div style="margin-bottom:12px">
+        <strong>📊 Pipeline (12 פעילים מתוך 18):</strong><br>
+        &nbsp;&nbsp;חדש: 2 | בשיחה: 4 | הצעה: 3 | פגישה: 2 | הועבר: 1
+      </div>
+      <div style="margin-bottom:12px">
+        <strong>📈 אתמול:</strong><br>
+        &nbsp;&nbsp;47 הודעות | 3 לידים חדשים
+      </div>
+      <div style="margin-bottom:12px">
+        <strong>🔥 לידים חמים:</strong><br>
+        &nbsp;&nbsp;🔥 דוד — הצעה נשלחה (אפליקציה)<br>
+        &nbsp;&nbsp;🔥 שרה — בשיחה (אתר עסקי)
+      </div>
+      <div style="margin-bottom:12px">
+        <strong>⚠️ מחכים לטיפולך:</strong><br>
+        &nbsp;&nbsp;⚠️ יוסי (ביקש לדבר איתך)
+      </div>
+      <div>
+        <strong>⏰ פולואפים היום:</strong> 5
+      </div>
+      <div style="margin-top:12px;text-align:center;font-weight:700">יום מוצלח! 💪</div>
+    </div>
+
+    <div style="text-align:center;margin-top:20px;color:var(--text-muted);font-size:0.9rem">
+      ימים א'–ו' | לא שבת | רק בשעות פעילות
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 7: Pricing ═══════════════════ -->
+<section class="slide" id="slide-7">
+  <div class="slide-content">
+    <span class="slide-number">06 — מחירון</span>
+    <h2>💰 מחירון שהבוט יודע</h2>
+    <p class="subtitle">הבוט לעולם לא ייצא מהטווח. הנחה מקסימלית: 10%</p>
+    <div class="price-grid">
+      <div class="price-item">
+        <div class="price-name">דפי נחיתה</div>
+        <div class="price-range">₪2,000–₪5,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">אתרים עסקיים</div>
+        <div class="price-range">₪5,000–₪15,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">חנויות אונליין</div>
+        <div class="price-range">₪10,000–₪30,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">אפליקציות מובייל</div>
+        <div class="price-range">₪15,000–₪50,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">אפליקציות ווב</div>
+        <div class="price-range">₪10,000–₪40,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">משחקי דפדפן</div>
+        <div class="price-range">₪5,000–₪20,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">משחקי מובייל</div>
+        <div class="price-range">₪20,000–₪60,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">אוטומציה</div>
+        <div class="price-range">₪3,000–₪10,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">הקמת CRM</div>
+        <div class="price-range">₪5,000–₪15,000</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">ניהול רשתות</div>
+        <div class="price-range">₪2,000–₪5,000</div>
+        <div class="price-unit">לחודש</div>
+      </div>
+      <div class="price-item">
+        <div class="price-name">קידום SEO</div>
+        <div class="price-range">₪3,000–₪8,000</div>
+        <div class="price-unit">לחודש</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 8: Calendar ═══════════════════ -->
+<section class="slide" id="slide-8">
+  <div class="slide-content">
+    <span class="slide-number">07 — פגישות</span>
+    <h2>📅 קביעת פגישות אוטומטית</h2>
+    <div class="cards">
+      <div class="card">
+        <span class="card-icon">👁️</span>
+        <div class="card-title">רואה זמנים פנויים</div>
+        <div class="card-desc">מביא 3 ימים קדימה מהיומן של אלון, רואה מה פנוי ומה תפוס</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">💬</span>
+        <div class="card-title">מציע ללקוח</div>
+        <div class="card-desc">"יש לי פנוי מחר ב-10:00, רביעי ב-14:00, או חמישי ב-11:00 — מה מתאים?"</div>
+      </div>
+      <div class="card">
+        <span class="card-icon">✅</span>
+        <div class="card-title">קובע אוטומטית</div>
+        <div class="card-desc">כשהלקוח מאשר — האירוע נוצר ביומן, הסטטוס מתעדכן, הפולואפים נעצרים</div>
+      </div>
+    </div>
+    <div class="divider" style="margin:30px auto"></div>
+    <div style="text-align:center">
+      <h3>⏰ שעות פעילות</h3>
+      <div class="table-wrap" style="max-width:400px;margin:10px auto">
+        <table>
+          <tr><td>ראשון — חמישי</td><td style="font-weight:700">09:00 — 16:00</td></tr>
+          <tr><td>שישי</td><td style="font-weight:700">09:00 — 13:00</td></tr>
+          <tr><td>שבת</td><td style="color:var(--red)">סגור</td></tr>
+        </table>
+      </div>
+      <p style="color:var(--text-muted);font-size:0.9rem;margin-top:10px">סוג הפגישה: שיחת Zoom עם אלון (30 דקות)</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 9: Admin ═══════════════════ -->
+<section class="slide" id="slide-9">
+  <div class="slide-content">
+    <span class="slide-number">08 — ניהול טכני</span>
+    <h2>🔧 כתובות וכלים</h2>
+    <div class="cards" style="grid-template-columns: repeat(auto-fit, minmax(300px, 1fr))">
+      <div class="card">
+        <h3>🔗 כתובות חשובות</h3>
+        <div class="card-desc" style="line-height:2.2">
+          <strong>QR Code:</strong><br>
+          <code style="color:var(--accent2);font-size:0.85rem">/qr</code><br>
+          <strong>Health Check:</strong><br>
+          <code style="color:var(--accent2);font-size:0.85rem">/health</code><br>
+          <strong>מחיקת היסטוריה:</strong><br>
+          <code style="color:var(--accent2);font-size:0.85rem">POST /admin/clear-history/:phone</code>
+        </div>
+      </div>
+      <div class="card">
+        <h3>🚨 אם הבוט לא מגיב</h3>
+        <div class="card-desc" style="line-height:2">
+          1. בדוק <code style="color:var(--accent2)">/health</code> → צריך <code style="color:var(--accent3)">status: ok</code><br>
+          2. אם WhatsApp מנותק → כנס ל-<code style="color:var(--accent2)">/qr</code> וסרוק<br>
+          3. אם הכל תקוע → Redeploy ב-Railway
+        </div>
+      </div>
+      <div class="card">
+        <h3>📁 מבנה הפרויקט</h3>
+        <div class="card-desc" style="font-family:monospace;font-size:0.85rem;line-height:1.8">
+          src/ai/ — מוח הבוט (Claude)<br>
+          src/monday/ — Monday.com API<br>
+          src/calendar/ — Google Calendar<br>
+          src/whatsapp/ — חיבור WhatsApp<br>
+          src/follow-up/ — פולואפים<br>
+          src/escalation/ — העברה לאלון<br>
+          src/schedulers/ — סיכום יומי
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ SLIDE 10: Summary ═══════════════════ -->
+<section class="slide" id="slide-10">
+  <div class="slide-content" style="text-align:center">
+    <div class="hero-logo">🚀</div>
+    <h1>הבוט מוכן לפעולה</h1>
+    <p class="subtitle">
+      עוזר אישי אוטומטי שעובד 24/7 —<br>
+      מדבר עם לקוחות, מוכר, קובע פגישות,<br>
+      ומעדכן אותך על הכל
+    </p>
+    <div class="hero-features">
+      <div class="hero-feat">💬 שיחות מכירה</div>
+      <div class="hero-feat">📊 Monday.com מלא</div>
+      <div class="hero-feat">📅 פגישות אוטומטיות</div>
+      <div class="hero-feat">⏰ פולואפים</div>
+      <div class="hero-feat">☀️ סיכום יומי</div>
+      <div class="hero-feat">👑 מצב בוס</div>
+    </div>
+    <div style="margin-top:40px;color:var(--text-muted)">
+      <p>Alon.dev — AI-Powered Business Assistant</p>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  Built with 🧠 Claude AI + ❤️ by Alon
+</footer>
+
+<script>
+  // Navigation dots
+  const slides = document.querySelectorAll('.slide');
+  const nav = document.getElementById('nav');
+
+  slides.forEach((slide, i) => {
+    const dot = document.createElement('button');
+    dot.className = 'nav-dot';
+    dot.title = `Slide ${i + 1}`;
+    dot.onclick = () => slide.scrollIntoView({ behavior: 'smooth' });
+    nav.appendChild(dot);
+  });
+
+  // Active dot tracking
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        const index = [...slides].indexOf(entry.target);
+        document.querySelectorAll('.nav-dot').forEach((d, i) => {
+          d.classList.toggle('active', i === index);
+        });
+      }
+    });
+  }, { threshold: 0.5 });
+
+  slides.forEach(s => observer.observe(s));
+
+  // Keyboard navigation
+  let currentSlide = 0;
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowDown' || e.key === ' ' || e.key === 'PageDown') {
+      e.preventDefault();
+      currentSlide = Math.min(currentSlide + 1, slides.length - 1);
+      slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp') {
+      e.preventDefault();
+      currentSlide = Math.max(currentSlide - 1, 0);
+      slides[currentSlide].scrollIntoView({ behavior: 'smooth' });
+    }
+  });
+
+  // Update currentSlide on scroll
+  const scrollObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        currentSlide = [...slides].indexOf(entry.target);
+      }
+    });
+  }, { threshold: 0.5 });
+
+  slides.forEach(s => scrollObserver.observe(s));
+</script>
+</body>
+</html>

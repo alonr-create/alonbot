@@ -46,7 +46,7 @@ Every lead that enters Monday.com gets a fast, personalized WhatsApp conversatio
 - AlonBot (existing Telegram bot) already has Baileys WhatsApp integration as reference
 - Monday.com MCP server available for API interaction
 - Google Calendar API already used in AlonBot
-- Contact: 054-630-0783, alon12@gmail.com
+- Contact: 054-630-0783, alondevoffice@gmail.com
 
 ## Constraints
 
