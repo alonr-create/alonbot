@@ -108,14 +108,23 @@ export function registerAdapter(adapter: ChannelAdapter) {
       notifyLeadMessage(msg).catch(() => {});
     }
 
-    // Push notification to PWA subscribers for all inbound WhatsApp messages
+    // Push notification + WebSocket broadcast for all inbound WhatsApp messages
     if (msg.channel === 'whatsapp') {
-      import('./server.js').then(({ sendPushNotification }) => {
-        sendPushNotification({
+      import('./server.js').then(({ sendPushNotification, wsBroadcast }) => {
+        const payload = {
           title: msg.senderName || msg.senderId,
           body: (msg.text || '(מדיה)').slice(0, 200),
           phone: msg.senderId,
           tag: `wa-${msg.senderId}`,
+        };
+        sendPushNotification(payload);
+        wsBroadcast({
+          type: 'new_message',
+          phone: msg.senderId,
+          name: msg.senderName || msg.senderId,
+          text: (msg.text || '(מדיה)').slice(0, 200),
+          role: 'user',
+          timestamp: new Date().toISOString(),
         });
       }).catch(() => {});
     }
@@ -205,6 +214,17 @@ export function registerAdapter(adapter: ChannelAdapter) {
         } catch { /* non-critical */ }
         // Sync bot reply to cloud dashboard
         syncToCloud([{ channel: 'whatsapp-inbound', sender_id: msg.senderId, role: 'assistant', content: replyContent, created_at: replyNow }]).catch(() => {});
+        // WebSocket broadcast for bot reply
+        import('./server.js').then(({ wsBroadcast }) => {
+          wsBroadcast({
+            type: 'new_message',
+            phone: msg.senderId,
+            name: 'Bot',
+            text: replyContent.slice(0, 200),
+            role: 'assistant',
+            timestamp: replyNow,
+          });
+        }).catch(() => {});
       }
 
       // Monday.com sync for leads only

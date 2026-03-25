@@ -1767,6 +1767,61 @@ async function loadLeadStats() {
   } catch {}
 }
 
+/* ===== WEBSOCKET REAL-TIME ===== */
+let ws = null;
+let wsRetries = 0;
+
+function connectWebSocket() {
+  if (!TOKEN) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const url = `${proto}//${location.host}/ws?token=${TOKEN}`;
+  try {
+    ws = new WebSocket(url);
+  } catch { return; }
+
+  ws.onopen = () => {
+    wsRetries = 0;
+    // Reduce polling when WS is active (fallback only)
+    clearInterval(window._mainPollTimer);
+    window._mainPollTimer = setInterval(loadContacts, 60000); // slow poll as backup
+    console.log('WebSocket connected');
+  };
+
+  ws.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'new_message') {
+        // If we're viewing this chat, reload messages
+        if (currentPhone === data.phone) {
+          loadMessages(data.phone, true);
+          showTypingIndicator(false);
+        }
+        // Refresh contact list for unread badges
+        loadContacts();
+        // Play notification sound
+        if (data.role === 'user') {
+          playNotifSound();
+        }
+      }
+    } catch {}
+  };
+
+  ws.onclose = () => {
+    ws = null;
+    // Restore fast polling
+    clearInterval(window._mainPollTimer);
+    window._mainPollTimer = setInterval(loadContacts, getPollInterval());
+    // Reconnect with backoff
+    wsRetries++;
+    const delay = Math.min(3000 * Math.pow(1.5, wsRetries), 30000);
+    setTimeout(connectWebSocket, delay);
+  };
+
+  ws.onerror = () => {
+    if (ws) ws.close();
+  };
+}
+
 /* ===== INIT ===== */
 initSettings();
 if (!TOKEN) {
@@ -1774,6 +1829,8 @@ if (!TOKEN) {
 } else {
   loadContacts();
   window._mainPollTimer = setInterval(loadContacts, getPollInterval());
+  // Connect WebSocket for real-time updates
+  connectWebSocket();
   // Request push permission after short delay (better UX)
   setTimeout(requestNotifPermission, 3000);
   // Load lead stats after contacts load

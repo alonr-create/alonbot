@@ -1,7 +1,9 @@
 import express from 'express';
 import crypto from 'crypto';
+import http from 'http';
 import { readFileSync } from 'fs';
 import { join } from 'path';
+import { WebSocketServer, WebSocket } from 'ws';
 import webpush from 'web-push';
 import { config } from '../utils/config.js';
 import { executeTool } from '../agent/tools.js';
@@ -570,6 +572,34 @@ function wsSourceSQL(workspace: string | undefined): { clause: string; params: s
 }
 
 // === WA Manager API Endpoints ===
+// Import campaign messages for leads that have no messages logged
+app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
+  try {
+    const leadsWithoutMsgs = db.prepare(`
+      SELECT l.phone, l.name FROM leads l
+      WHERE NOT EXISTS (
+        SELECT 1 FROM messages m WHERE m.sender_id = l.phone
+        AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      )
+    `).all() as any[];
+    if (!leadsWithoutMsgs.length) {
+      res.json({ success: true, imported: 0 });
+      return;
+    }
+    const stmt = db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
+      VALUES ('whatsapp-outbound', ?, ?, 'assistant', ?, datetime('now'))`);
+    let count = 0;
+    for (const lead of leadsWithoutMsgs) {
+      stmt.run(lead.phone, lead.name || lead.phone, 'הודעת קמפיין נשלחה');
+      count++;
+    }
+    log.info({ count }, 'campaign messages imported');
+    res.json({ success: true, imported: count });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/wa-manager/leads', dashAuth, (req, res) => {
   try {
     const workspace = req.query.workspace as string | undefined;
@@ -1539,9 +1569,54 @@ export function registerWebhook(path: string, handler: (req: any, res: any) => v
 import { mondayWebhookHandler } from '../utils/monday-leads.js';
 app.post('/monday-webhook', mondayWebhookHandler());
 
+// ===== WebSocket Real-Time =====
+const httpServer = http.createServer(app);
+const wss = new WebSocketServer({ server: httpServer, path: '/ws' });
+
+const wsClients = new Set<WebSocket>();
+
+wss.on('connection', (ws, req) => {
+  // Validate token from query string
+  const url = new URL(req.url || '/', `http://${req.headers.host}`);
+  const token = url.searchParams.get('token');
+  if (token !== config.dashboardSecret) {
+    ws.close(4001, 'Unauthorized');
+    return;
+  }
+  wsClients.add(ws);
+  log.info({ clients: wsClients.size }, 'WebSocket client connected');
+
+  ws.on('close', () => {
+    wsClients.delete(ws);
+  });
+  ws.on('error', () => {
+    wsClients.delete(ws);
+  });
+
+  // Send heartbeat every 30s to keep connection alive
+  const heartbeat = setInterval(() => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.ping();
+    } else {
+      clearInterval(heartbeat);
+    }
+  }, 30000);
+  ws.on('close', () => clearInterval(heartbeat));
+});
+
+// Broadcast event to all connected WebSocket clients
+export function wsBroadcast(event: { type: string; [key: string]: any }) {
+  const data = JSON.stringify(event);
+  for (const ws of wsClients) {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(data);
+    }
+  }
+}
+
 export function startServer() {
-  app.listen(config.port, () => {
-    log.info({ port: config.port }, 'health check server started');
+  httpServer.listen(config.port, () => {
+    log.info({ port: config.port }, 'server started (HTTP + WebSocket)');
     log.info({ url: `http://localhost:${config.port}/chat?token=${config.dashboardSecret}` }, 'chat URL');
     log.info({ url: `http://localhost:${config.port}/dashboard?token=${config.dashboardSecret}` }, 'dashboard URL');
     if (config.mode === 'local') {
