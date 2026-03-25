@@ -235,6 +235,12 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_flow_runs_phone ON flow_runs(phone, status);
 
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

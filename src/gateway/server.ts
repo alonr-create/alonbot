@@ -101,6 +101,15 @@ function formatUptime(seconds: number): string {
 
 // Cloud mode: allow local Mac to register its tunnel URL
 if (config.mode === 'cloud') {
+  // Restore local URL from DB on startup (survives restarts)
+  try {
+    const row = db.prepare('SELECT value FROM settings WHERE key = ?').get('local_api_url') as any;
+    if (row?.value) {
+      (config as any).localApiUrl = row.value;
+      log.info({ url: row.value }, 'local URL restored from DB');
+    }
+  } catch { /* settings table may not exist yet */ }
+
   app.post('/api/register-local', (req, res) => {
     const authHeader = req.headers['authorization'];
     if (authHeader !== `Bearer ${config.localApiSecret}`) {
@@ -112,9 +121,10 @@ if (config.mode === 'cloud') {
       res.status(400).json({ error: 'Missing url' });
       return;
     }
-    // Update config in memory (no restart needed)
+    // Update config in memory + persist to DB
     (config as any).localApiUrl = url;
-    log.info({ url }, 'local Mac registered');
+    db.prepare('INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, datetime(\'now\'))').run('local_api_url', url);
+    log.info({ url }, 'local Mac registered (persisted)');
     res.json({ ok: true, registered: url });
   });
 }
