@@ -223,6 +223,24 @@ if (config.mode === 'local') {
 const sessions = new Map<string, { createdAt: number }>();
 const SESSION_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 const SESSION_COOKIE = 'alonbot_session';
+// Signed auth cookie that survives server restarts (HMAC-based, no server state needed)
+const AUTH_COOKIE = 'alonbot_auth';
+function signToken(secret: string): string {
+  const expires = Date.now() + SESSION_TTL;
+  const payload = `${secret}:${expires}`;
+  const sig = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+  return `${expires}:${sig}`;
+}
+function verifyAuthCookie(cookieVal: string, secret: string): boolean {
+  try {
+    const [expiresStr, sig] = cookieVal.split(':');
+    const expires = parseInt(expiresStr);
+    if (Date.now() > expires) return false;
+    const payload = `${secret}:${expires}`;
+    const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
+    return sig === expected;
+  } catch { return false; }
+}
 
 const authFailures = new Map<string, { count: number; firstAttempt: number }>();
 const MAX_AUTH_FAILURES = 5;
@@ -276,8 +294,14 @@ function dashAuth(req: any, res: any, next: any) {
     return;
   }
 
-  // 2. Check session cookie
+  // 2. Check signed auth cookie (survives server restarts)
   const cookies = parseCookies(req);
+  if (cookies[AUTH_COOKIE] && verifyAuthCookie(cookies[AUTH_COOKIE], config.dashboardSecret)) {
+    next();
+    return;
+  }
+
+  // 3. Check in-memory session cookie (legacy, cleared on restart)
   const sessionId = cookies[SESSION_COOKIE];
   if (sessionId) {
     const session = sessions.get(sessionId);
@@ -285,18 +309,19 @@ function dashAuth(req: any, res: any, next: any) {
       next();
       return;
     }
-    // Expired or invalid — clean up
     if (session) sessions.delete(sessionId);
   }
 
-  // 3. Check query token
+  // 4. Check query token
   if (req.query.token === config.dashboardSecret) {
     const newSession = crypto.randomBytes(32).toString('hex');
     sessions.set(newSession, { createdAt: Date.now() });
 
     const isSecure = req.headers['x-forwarded-proto'] === 'https' || req.secure;
-    const cookieFlags = `${SESSION_COOKIE}=${newSession}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${isSecure ? '; Secure' : ''}`;
-    res.setHeader('Set-Cookie', cookieFlags);
+    // Set both: signed cookie (persists across restarts) + session cookie (legacy)
+    const authCookie = `${AUTH_COOKIE}=${signToken(config.dashboardSecret)}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${isSecure ? '; Secure' : ''}`;
+    const sessionCookie = `${SESSION_COOKIE}=${newSession}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${isSecure ? '; Secure' : ''}`;
+    res.setHeader('Set-Cookie', [authCookie, sessionCookie]);
 
     // For HTML page requests, redirect to strip token from URL (except wa-inbox which needs it for JS API calls)
     const path = req.path;
