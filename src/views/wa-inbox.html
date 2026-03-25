@@ -776,9 +776,13 @@ function getInitials(name) {
 
 // ===== API HELPERS =====
 async function api(path, opts = {}) {
-  const sep = path.includes('?') ? '&' : '?';
-  const url = API + path + sep + 'token=' + TOKEN;
+  let url = API + path;
+  if (TOKEN) {
+    const sep = path.includes('?') ? '&' : '?';
+    url += sep + 'token=' + TOKEN;
+  }
   const res = await fetch(url, {
+    credentials: 'same-origin',
     headers: {'Content-Type': 'application/json', ...opts.headers},
     ...opts
   });

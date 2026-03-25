@@ -225,9 +225,9 @@ function dashAuth(req: any, res: any, next: any) {
     const cookieFlags = `${SESSION_COOKIE}=${newSession}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${7 * 24 * 60 * 60}${isSecure ? '; Secure' : ''}`;
     res.setHeader('Set-Cookie', cookieFlags);
 
-    // For HTML page requests, redirect to strip token from URL
+    // For HTML page requests, redirect to strip token from URL (except wa-inbox which needs it for JS API calls)
     const path = req.path;
-    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager' || path === '/wa-inbox') {
+    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager') {
       res.redirect(302, path);
       return;
     }
