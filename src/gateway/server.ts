@@ -18,6 +18,10 @@ const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.j
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
+const iconWa192 = readFileSync(join(import.meta.dirname, '../views/icon-wa-192.png'));
+const iconWa512 = readFileSync(join(import.meta.dirname, '../views/icon-wa-512.png'));
+const appleTouchIconWa = readFileSync(join(import.meta.dirname, '../views/apple-touch-icon-wa.png'));
+const faviconWa32 = readFileSync(join(import.meta.dirname, '../views/favicon-wa-32.png'));
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -63,11 +67,19 @@ app.get('/manifest-wa.json', (_req, res) => {
 });
 app.get('/icon-wa-192.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
-  res.send(iconPNG);
+  res.send(iconWa192);
 });
 app.get('/icon-wa-512.png', (_req, res) => {
   res.setHeader('Content-Type', 'image/png');
-  res.send(iconPNG);
+  res.send(iconWa512);
+});
+app.get('/apple-touch-icon-wa.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.send(appleTouchIconWa);
+});
+app.get('/favicon-wa-32.png', (_req, res) => {
+  res.setHeader('Content-Type', 'image/png');
+  res.send(faviconWa32);
 });
 
 app.get('/health', (_req, res) => {
