@@ -877,7 +877,15 @@ async function loadContacts() {
     try {
       const campRes = await fetch(CAMPAIGN_API + '/api/campaign-messages');
       const campData = await campRes.json();
-      const existingPhones = new Set(contacts.map(c => c.phone));
+      // Normalize phone: 972xxx → 0xxx for consistent matching
+      function normPhone(p) {
+        let d = (p || '').replace(/\D/g, '');
+        if (d.startsWith('972')) d = '0' + d.slice(3);
+        if (!d.startsWith('0') && d.length === 9) d = '0' + d;
+        return d;
+      }
+      // Build set of existing phones (normalized)
+      const existingPhonesNorm = new Set(contacts.map(c => normPhone(c.phone)));
       campaignCache = {};
 
       // Convert campaign UTC times to local (matching AalonBot format)
@@ -902,35 +910,46 @@ async function loadContacts() {
         if (m.item_id && m.phone) itemPhoneMap[m.item_id] = m.phone;
       }
 
-      // Index campaign messages/calls by phone
+      // Index campaign messages/calls by normalized phone
       for (const m of (campData.messages || [])) {
-        const ph = m.phone || '';
+        const ph = normPhone(m.phone);
+        if (!ph) continue;
         if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: m.name, site_link: m.site_link};
         campaignCache[ph].messages.push(m);
       }
       for (const c of (campData.calls || [])) {
-        const ph = c.phone || itemPhoneMap[c.item_id] || '';
+        const ph = normPhone(c.phone || itemPhoneMap[c.item_id] || '');
+        if (!ph) continue;
         if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: c.name, site_link: ''};
         campaignCache[ph].calls.push(c);
       }
 
-      // Add campaign-only contacts to the list
+      // Also index by 972-format so loadMessages can find by either format
       for (const [ph, info] of Object.entries(campaignCache)) {
-        if (!ph || existingPhones.has(ph)) continue;
-        // Find the most recent activity (message or call)
-        const allTimes = [...(info.messages||[]), ...(info.calls||[])]
-          .map(x => x.time).filter(Boolean).sort((a,b) => new Date(b) - new Date(a));
-        const lastTime = allTimes[0] || '';
-        const lastCall = info.calls?.slice(-1)[0];
-        const lastWa = info.messages?.slice(-1)[0];
-        const lastActivity = lastCall && lastWa
-          ? (new Date(lastCall.time) > new Date(lastWa.time) ? '📞 שיחה בוצעה' : '📱 הודעה נשלחה')
-          : (lastCall ? '📞 שיחה בוצעה' : '📱 הודעה נשלחה');
+        const intl = '972' + ph.slice(1);
+        if (!campaignCache[intl]) campaignCache[intl] = info;
+      }
+
+      // Add campaign-only contacts to the list (skip if already in AalonBot)
+      for (const [ph, info] of Object.entries(campaignCache)) {
+        // Skip 972-format duplicates (we only add 0-format)
+        if (ph.startsWith('972')) continue;
+        if (existingPhonesNorm.has(ph)) {
+          // Contact exists in AalonBot — just update campaign cache for message merge
+          continue;
+        }
+        // Use the FIRST WA message time (when lead was initially contacted)
+        const waTimes = (info.messages||[]).map(x => x.time).filter(Boolean)
+          .sort((a,b) => new Date(a) - new Date(b));
+        const firstWaTime = waTimes[0] || '';
+        const callCount = (info.calls||[]).length;
+        const waCount = (info.messages||[]).length;
+        const lastActivity = callCount > 0 ? `📞 ${callCount} שיחות, 📱 ${waCount} הודעות` : `📱 ${waCount} הודעות`;
         contacts.push({
           phone: ph,
           name: info.name || ph,
-          lastMessage: '🚀 קמפיין — ' + lastActivity,
-          lastTime: lastTime,
+          lastMessage: '🚀 ' + lastActivity,
+          lastTime: firstWaTime,
           unread: 0,
           isOutgoing: true,
           source: 'campaign',
@@ -1124,18 +1143,31 @@ function selectContact(phone) {
   renderContacts();
 }
 
+// ===== CAMPAIGN PHONE LOOKUP =====
+function getCampaignInfo(phone) {
+  // Try exact, then normalized, then 972-format
+  if (campaignCache[phone]) return campaignCache[phone];
+  let norm = phone.replace(/\D/g, '');
+  if (norm.startsWith('972')) norm = '0' + norm.slice(3);
+  if (!norm.startsWith('0') && norm.length === 9) norm = '0' + norm;
+  if (campaignCache[norm]) return campaignCache[norm];
+  const intl = '972' + norm.slice(1);
+  if (campaignCache[intl]) return campaignCache[intl];
+  return null;
+}
+
 // ===== LOAD MESSAGES =====
 async function loadMessages(phone) {
+  const campInfo = getCampaignInfo(phone);
   try {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
     // Merge campaign messages if available
-    if (campaignCache[phone]) {
+    if (campInfo) {
       const campMsgs = buildCampaignMessages(phone);
       if (activeMessages.length === 0) {
         activeMessages = campMsgs;
       } else {
-        // Prepend campaign messages (they happened before bot conversation)
         activeMessages = [...campMsgs, ...activeMessages];
       }
     }
@@ -1144,7 +1176,7 @@ async function loadMessages(phone) {
   } catch(e) {
     console.error('Failed to load messages:', e);
     // Fallback to campaign messages
-    if (campaignCache[phone]) {
+    if (campInfo) {
       activeMessages = buildCampaignMessages(phone);
       messageCache[phone] = activeMessages;
       if (activePhone === phone) renderMessages();
@@ -1155,18 +1187,28 @@ async function loadMessages(phone) {
 }
 
 function buildCampaignMessages(phone) {
-  const info = campaignCache[phone];
+  const info = getCampaignInfo(phone);
   if (!info) return [];
   const msgs = [];
-  for (const m of (info.messages || [])) {
-    // Extract name and link from update text
+  let templateAdded = false;
+
+  // Sort messages by time (oldest first) and deduplicate
+  const sortedMsgs = [...(info.messages || [])].sort((a,b) => new Date(a.time) - new Date(b.time));
+  const sortedCalls = [...(info.calls || [])].sort((a,b) => new Date(a.time) - new Date(b.time));
+  const seenMsgIds = new Set();
+  const seenCallIds = new Set();
+
+  for (const m of sortedMsgs) {
+    if (m.id && seenMsgIds.has(m.id)) continue;
+    if (m.id) seenMsgIds.add(m.id);
+
     const nameMatch = m.text?.match(/שם:\s*(.+)/);
     const linkMatch = m.text?.match(/לינק:\s*(https?:\/\/\S+)/);
     const leadName = nameMatch?.[1] || m.name || '';
     const siteLink = linkMatch?.[1] || '';
 
-    // Add the actual template message the lead received
-    if (leadName || siteLink) {
+    // Show the actual template message only once (first time)
+    if (!templateAdded && (leadName || siteLink)) {
       msgs.push({
         role: 'assistant',
         direction: 'outgoing',
@@ -1175,30 +1217,28 @@ function buildCampaignMessages(phone) {
         timestamp: m.time,
         source: 'campaign'
       });
+      templateAdded = true;
+    } else {
+      // Subsequent sends as log entries
+      msgs.push({
+        role: 'system', direction: 'outgoing', fromMe: true,
+        body: '📱 ' + (m.text || 'הודעת וואטסאפ נשלחה'),
+        timestamp: m.time, source: 'campaign-log'
+      });
     }
+  }
 
-    // Add the system log entry
+  for (const c of sortedCalls) {
+    if (c.id && seenCallIds.has(c.id)) continue;
+    if (c.id) seenCallIds.add(c.id);
     msgs.push({
-      role: 'system',
-      direction: 'outgoing',
-      fromMe: true,
-      body: '📱 ' + (m.text || 'הודעת וואטסאפ נשלחה'),
-      timestamp: m.time,
-      source: 'campaign-log'
-    });
-  }
-  for (const c of (info.calls || [])) {
-    msgs.push({
-      role: 'system',
-      direction: 'outgoing',
-      fromMe: true,
+      role: 'system', direction: 'outgoing', fromMe: true,
       body: c.text || '📞 שיחה בוצעה',
-      timestamp: c.time,
-      source: 'campaign-log'
+      timestamp: c.time, source: 'campaign-log'
     });
   }
-  // Sort by time
-  msgs.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+
+  // Already sorted chronologically
   return msgs;
 }
 
@@ -1553,7 +1593,8 @@ async function pollMessages() {
     const data = await api('/conversations/' + encodeURIComponent(activePhone));
     let msgs = data.messages || data || [];
     // Merge campaign messages (same logic as loadMessages)
-    if (campaignCache[activePhone]) {
+    const campInfo = getCampaignInfo(activePhone);
+    if (campInfo) {
       const campMsgs = buildCampaignMessages(activePhone);
       if (msgs.length === 0) {
         msgs = campMsgs;
