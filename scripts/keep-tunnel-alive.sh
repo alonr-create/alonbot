@@ -4,6 +4,7 @@
 
 LOCAL_PORT="${PORT:-3700}"
 RAILWAY_PROJECT_DIR="/Users/oakhome/קלוד עבודות/voice-agent"
+RAILWAY_WEBHOOK_DIR="/Users/oakhome/קלוד עבודות/evolution-api"
 ALONBOT_CLOUD_URL="https://chic-forgiveness-production.up.railway.app"
 ALONBOT_SECRET="alonbot-secret-2026"
 CHECK_INTERVAL=300  # 5 minutes
@@ -38,6 +39,10 @@ start_tunnel() {
   # Update Railway voice-agent
   log "Updating Railway voice-agent..."
   cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
+
+  # Update Railway wa-webhook FORWARD_URL
+  log "Updating Railway wa-webhook..."
+  cd "$RAILWAY_WEBHOOK_DIR" && railway variables --set "FORWARD_URL=$TUNNEL_URL/whatsapp-cloud-webhook" 2>&1
 
   # Register with AalonBot cloud (in-memory update, no redeploy needed)
   log "Registering with AalonBot cloud..."

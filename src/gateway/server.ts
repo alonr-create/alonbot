@@ -14,6 +14,7 @@ const log = createLogger('server');
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
 const waManagerHTML = readFileSync(join(import.meta.dirname, '../views/wa-manager.html'), 'utf-8');
+const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
 const iconPNG = readFileSync(join(import.meta.dirname, '../views/icon.png'));
@@ -227,7 +228,7 @@ function dashAuth(req: any, res: any, next: any) {
 
     // For HTML page requests, redirect to strip token from URL
     const path = req.path;
-    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager') {
+    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager' || path === '/wa-inbox') {
       res.redirect(302, path);
       return;
     }
@@ -869,6 +870,95 @@ app.delete('/api/wa-manager/workspaces/:id', dashAuth, (req, res) => {
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// API Costs tracking
+app.get('/api/wa-manager/costs', dashAuth, (req, res) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const daily = db.prepare(`
+      SELECT date(created_at) as day, model,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cost_usd) as cost_usd,
+        COUNT(*) as calls
+      FROM api_usage
+      WHERE created_at >= datetime('now', '-' || ? || ' days')
+      GROUP BY day, model ORDER BY day DESC
+    `).all(days) as any[];
+
+    const totals = db.prepare(`
+      SELECT
+        SUM(cost_usd) as total_cost,
+        SUM(input_tokens) as total_input,
+        SUM(output_tokens) as total_output,
+        COUNT(*) as total_calls
+      FROM api_usage
+      WHERE created_at >= datetime('now', '-' || ? || ' days')
+    `).get(days) as any;
+
+    const today = db.prepare(`
+      SELECT model,
+        SUM(input_tokens) as input_tokens,
+        SUM(output_tokens) as output_tokens,
+        SUM(cost_usd) as cost_usd,
+        COUNT(*) as calls
+      FROM api_usage
+      WHERE date(created_at) = date('now')
+      GROUP BY model
+    `).all() as any[];
+
+    res.json({ success: true, daily, totals, today });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// WA Templates API — proxy to Meta Graph API
+app.get('/api/wa-manager/templates', dashAuth, async (_req, res) => {
+  try {
+    const wabaId = '1289908013100682';
+    const token = config.waCloudToken;
+    if (!token) { res.json({ templates: [] }); return; }
+    const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
+      headers: { 'Authorization': `Bearer ${token}` }
+    });
+    const data = await r.json() as any;
+    res.json({ templates: data.data || [] });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Send template message via Cloud API
+app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
+  try {
+    const { phone, templateName, language } = req.body;
+    const token = config.waCloudToken;
+    const phoneId = config.waCloudPhoneId;
+    if (!token || !phoneId) { res.status(400).json({ success: false, error: 'Cloud API not configured' }); return; }
+    const to = phone.replace(/\D/g, '');
+    const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to,
+        type: 'template',
+        template: { name: templateName, language: { code: language || 'he' } }
+      })
+    });
+    const data = await r.json();
+    res.json({ success: true, data });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// WA Inbox HTML
+app.get('/wa-inbox', dashAuth, (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(waInboxHTML);
 });
 
 // WA Manager HTML

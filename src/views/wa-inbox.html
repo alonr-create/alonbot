@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhatsApp Inbox — AalonBot</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#f0f2f5;--bg2:#ffffff;--bg3:#f5f6f8;
+  --border:#e0e0e0;--border-light:#eee;
+  --accent:#25D366;--accent2:#128C7E;--accent-light:#e7fce9;
+  --text:#1a1a1a;--text2:#667781;--text3:#8696a0;--text4:#b0b6ba;
+  --danger:#ea4335;--warning:#f59e0b;--success:#25D366;
+  --bubble-out:#d9fdd3;--bubble-in:#ffffff;
+  --chat-bg:#efeae2;
+  --sidebar-w:320px;--details-w:280px;
+}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;overflow:hidden;}
+
+/* ===== TOP BAR ===== */
+.topbar{
+  height:54px;background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100;
+}
+.topbar-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--text);white-space:nowrap;}
+.topbar-logo .wa-circle{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;}
+.topbar-search{flex:1;max-width:400px;position:relative;}
+.topbar-search input{width:100%;padding:8px 14px 8px 36px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;color:var(--text);outline:none;transition:border .2s;}
+.topbar-search input:focus{border-color:var(--accent);}
+.topbar-search .search-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none;}
+.topbar-channel{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-size:12px;color:var(--text2);cursor:default;white-space:nowrap;}
+.topbar-channel .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+.topbar-spacer{flex:1;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.topbar-btn{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text2);transition:all .15s;}
+.topbar-btn:hover{background:var(--bg3);color:var(--accent);}
+.nav-tab{
+  padding:6px 16px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);cursor:pointer;font-family:inherit;font-size:13px;
+  font-weight:500;color:var(--text2);transition:all .15s;display:flex;
+  align-items:center;gap:4px;white-space:nowrap;
+}
+.nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+.nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* ===== MAIN LAYOUT ===== */
+.app{display:flex;height:calc(100vh - 54px);overflow:hidden;}
+
+/* ===== LEFT: CONTACT LIST ===== */
+.contacts-panel{
+  width:var(--sidebar-w);min-width:260px;background:var(--bg2);
+  border-left:1px solid var(--border);display:flex;flex-direction:column;
+  overflow:hidden;flex-shrink:0;
+}
+.contacts-filters{display:flex;gap:4px;padding:10px 12px;border-bottom:1px solid var(--border-light);}
+.filter-tab{
+  padding:5px 12px;border-radius:16px;font-size:12px;font-weight:500;
+  cursor:pointer;background:var(--bg3);color:var(--text2);border:none;
+  transition:all .15s;white-space:nowrap;
+}
+.filter-tab:hover{background:var(--bg);color:var(--text);}
+.filter-tab.active{background:var(--accent);color:#fff;}
+.filter-tab .count{
+  display:inline-block;background:rgba(255,255,255,.3);padding:0 5px;
+  border-radius:8px;font-size:10px;margin-right:4px;font-weight:700;
+}
+.filter-tab.active .count{background:rgba(255,255,255,.25);}
+.contacts-list{flex:1;overflow-y:auto;overflow-x:hidden;}
+.contacts-list::-webkit-scrollbar{width:4px;}
+.contacts-list::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+
+.contact-item{
+  display:flex;gap:10px;padding:12px 14px;cursor:pointer;
+  border-bottom:1px solid var(--border-light);transition:background .12s;
+  align-items:center;position:relative;
+}
+.contact-item:hover{background:var(--bg3);}
+.contact-item.active{background:var(--accent-light);border-right:3px solid var(--accent);}
+.contact-avatar{
+  width:44px;height:44px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:16px;color:#fff;position:relative;
+}
+.contact-avatar .online-dot{
+  position:absolute;bottom:1px;left:1px;width:10px;height:10px;
+  border-radius:50%;background:var(--accent);border:2px solid var(--bg2);
+}
+.contact-body{flex:1;overflow:hidden;min-width:0;}
+.contact-row{display:flex;justify-content:space-between;align-items:center;}
+.contact-name{font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.contact-time{font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0;}
+.contact-time.unread{color:var(--accent);font-weight:600;}
+.contact-preview{font-size:12px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;}
+.contact-preview .check{color:var(--accent);font-size:11px;}
+.unread-badge{
+  background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+  padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;
+  flex-shrink:0;
+}
+
+/* ===== CENTER: CHAT AREA ===== */
+.chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.chat-header{
+  height:56px;padding:0 20px;background:var(--bg2);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;
+}
+.chat-header-right{display:flex;align-items:center;gap:10px;}
+.chat-header-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;}
+.chat-header-info h3{font-size:15px;font-weight:600;color:var(--text);}
+.chat-header-info .status{font-size:11px;color:var(--accent);}
+.chat-header-left{display:flex;gap:6px;}
+.chat-header-btn{
+  width:34px;height:34px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--text2);transition:background .15s;
+}
+.chat-header-btn:hover{background:var(--bg3);}
+
+.chat-messages{
+  flex:1;overflow-y:auto;padding:16px 60px;
+  background:var(--chat-bg);
+  background-image:url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 5c1.5 0 2.7 1.2 2.7 2.7S31.5 10.4 30 10.4 27.3 9.2 27.3 7.7 28.5 5 30 5z' fill='%23d4cfc4' fill-opacity='.08'/%3E%3C/svg%3E");
+  display:flex;flex-direction:column;gap:3px;
+}
+.chat-messages::-webkit-scrollbar{width:5px;}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;}
+
+.chat-empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--text3);gap:12px;
+}
+.chat-empty-state .empty-icon{font-size:60px;opacity:.4;}
+.chat-empty-state p{font-size:14px;}
+
+/* Day divider */
+.day-divider{
+  display:flex;align-items:center;justify-content:center;padding:12px 0;
+}
+.day-divider span{
+  background:rgba(225,218,208,.88);padding:4px 14px;border-radius:8px;
+  font-size:11px;color:var(--text2);font-weight:500;
+}
+
+/* Message bubbles */
+.msg-wrapper{display:flex;margin-bottom:1px;}
+.msg-wrapper.outgoing{justify-content:flex-end;}
+.msg-wrapper.incoming{justify-content:flex-start;}
+.msg-bubble{
+  max-width:65%;padding:6px 10px 2px;border-radius:8px;
+  font-size:13.5px;line-height:1.55;word-wrap:break-word;
+  position:relative;box-shadow:0 1px 1px rgba(0,0,0,.06);
+}
+.msg-bubble.incoming{background:var(--bubble-in);border-radius:0 8px 8px 8px;}
+.msg-bubble.outgoing{background:var(--bubble-out);border-radius:8px 0 8px 8px;}
+.msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:1px;}
+.msg-time{font-size:10.5px;color:var(--text3);}
+.msg-check{font-size:12px;color:var(--text4);}
+.msg-check.read{color:#53bdeb;}
+.msg-text{white-space:pre-wrap;}
+
+/* Typing indicator */
+.typing-indicator{
+  display:none;align-self:flex-start;background:var(--bubble-in);
+  padding:10px 14px;border-radius:0 12px 12px 12px;
+  box-shadow:0 1px 1px rgba(0,0,0,.06);
+}
+.typing-indicator.show{display:flex;}
+.typing-dots{display:flex;gap:3px;}
+.typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:typingBounce .8s infinite;}
+.typing-dots span:nth-child(2){animation-delay:.15s;}
+.typing-dots span:nth-child(3){animation-delay:.3s;}
+@keyframes typingBounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-4px);}}
+
+/* Chat input */
+.chat-input-area{
+  padding:10px 16px;background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;gap:8px;align-items:flex-end;flex-shrink:0;
+}
+.input-btn{
+  width:38px;height:38px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--text2);transition:color .15s;flex-shrink:0;
+}
+.input-btn:hover{color:var(--accent);}
+.chat-textarea{
+  flex:1;padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text);font-family:inherit;font-size:13.5px;
+  resize:none;outline:none;max-height:120px;min-height:38px;line-height:1.4;
+}
+.chat-textarea:focus{border-color:var(--accent);background:var(--bg2);}
+.send-btn{
+  width:38px;height:38px;border-radius:50%;background:var(--accent);
+  border:none;color:#fff;cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:background .15s;
+}
+.send-btn:hover{background:var(--accent2);}
+.send-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Quick replies bar */
+.quick-replies-bar{
+  padding:6px 16px;background:var(--bg2);border-top:1px solid var(--border-light);
+  display:flex;gap:6px;overflow-x:auto;flex-shrink:0;
+}
+.quick-replies-bar::-webkit-scrollbar{height:0;}
+.qr-chip{
+  padding:5px 12px;border-radius:16px;border:1px solid var(--border);
+  background:var(--bg3);font-size:11px;color:var(--text2);
+  cursor:pointer;white-space:nowrap;transition:all .15s;font-family:inherit;
+}
+.qr-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light);}
+
+/* ===== RIGHT: DETAILS PANEL ===== */
+.details-panel{
+  width:var(--details-w);min-width:240px;background:var(--bg2);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  overflow:hidden;flex-shrink:0;
+}
+.details-panel.hidden{display:none;}
+.details-header{
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.details-header h4{font-size:14px;font-weight:600;color:var(--text);}
+.details-close{
+  width:28px;height:28px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;font-size:16px;color:var(--text2);display:flex;align-items:center;
+  justify-content:center;transition:background .15s;
+}
+.details-close:hover{background:var(--bg3);}
+.details-body{flex:1;overflow-y:auto;padding:0;}
+.details-body::-webkit-scrollbar{width:4px;}
+.details-body::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+
+.detail-profile{text-align:center;padding:24px 16px 16px;border-bottom:1px solid var(--border-light);}
+.detail-avatar{
+  width:72px;height:72px;border-radius:50%;margin:0 auto 10px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:26px;color:#fff;
+}
+.detail-name{font-size:16px;font-weight:700;color:var(--text);}
+.detail-phone{font-size:13px;color:var(--text2);margin-top:2px;direction:ltr;unicode-bidi:embed;}
+.detail-channel{
+  display:inline-flex;align-items:center;gap:4px;margin-top:8px;
+  padding:3px 10px;border-radius:12px;background:var(--accent-light);
+  font-size:11px;color:var(--accent2);font-weight:500;
+}
+
+.detail-section{padding:14px 16px;border-bottom:1px solid var(--border-light);}
+.detail-section-title{
+  font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;
+  justify-content:space-between;
+}
+.detail-section-title .add-btn{
+  font-size:18px;cursor:pointer;color:var(--accent);background:none;border:none;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;transition:background .15s;
+}
+.detail-section-title .add-btn:hover{background:var(--bg3);}
+
+/* Tags */
+.tags-container{display:flex;flex-wrap:wrap;gap:5px;}
+.tag-chip{
+  padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;
+  display:flex;align-items:center;gap:4px;cursor:default;
+}
+.tag-chip .remove-tag{cursor:pointer;font-size:13px;opacity:.6;transition:opacity .15s;}
+.tag-chip .remove-tag:hover{opacity:1;}
+.tag-hot{background:#fde8e8;color:#c0392b;}
+.tag-warm{background:#fef3cd;color:#856404;}
+.tag-cold{background:#d1ecf1;color:#0c5460;}
+.tag-vip{background:#e8daef;color:#6c3483;}
+.tag-new{background:#d4efdf;color:#1e8449;}
+.tag-default{background:var(--bg3);color:var(--text2);border:1px solid var(--border);}
+.tag-input{
+  display:none;padding:4px 8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-size:11px;font-family:inherit;outline:none;width:100%;
+  margin-top:6px;
+}
+.tag-input.show{display:block;}
+.tag-input:focus{border-color:var(--accent);}
+
+/* Notes */
+.notes-list{display:flex;flex-direction:column;gap:6px;}
+.note-item{
+  padding:8px 10px;background:var(--bg3);border-radius:8px;
+  font-size:12px;color:var(--text);line-height:1.4;position:relative;
+}
+.note-item .note-date{font-size:10px;color:var(--text3);margin-top:4px;display:block;}
+.note-input{
+  display:none;padding:6px 8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-size:12px;font-family:inherit;outline:none;
+  width:100%;resize:none;min-height:50px;margin-top:6px;
+}
+.note-input.show{display:block;}
+.note-input:focus{border-color:var(--accent);}
+
+/* Status */
+.status-select{
+  width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-family:inherit;font-size:12px;color:var(--text);
+  cursor:pointer;outline:none;
+}
+.status-select:focus{border-color:var(--accent);}
+
+/* Status history */
+.status-history{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
+.status-history-item{font-size:11px;color:var(--text3);display:flex;gap:6px;}
+.status-history-item .sh-status{font-weight:600;color:var(--text2);}
+
+/* ===== EMOJI PICKER ===== */
+.emoji-picker{
+  display:none;position:absolute;bottom:60px;right:60px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 4px 20px rgba(0,0,0,.12);padding:10px;z-index:50;
+  width:280px;
+}
+.emoji-picker.show{display:block;}
+.emoji-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-height:200px;overflow-y:auto;}
+.emoji-grid button{
+  width:32px;height:32px;border:none;background:transparent;cursor:pointer;
+  font-size:20px;border-radius:6px;transition:background .1s;display:flex;
+  align-items:center;justify-content:center;
+}
+.emoji-grid button:hover{background:var(--bg3);}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+  .details-panel{display:none!important;}
+  .chat-messages{padding:12px 16px;}
+}
+@media(max-width:700px){
+  .app{flex-direction:column;}
+  .contacts-panel{width:100%;height:50%;border-left:none;border-bottom:1px solid var(--border);}
+  .contacts-panel.hidden-mobile{display:none;}
+  .chat-panel{height:100%;}
+  .chat-panel.hidden-mobile{display:none;}
+  .topbar-search{max-width:180px;}
+  .topbar-channel{display:none;}
+  .mobile-back{display:flex!important;}
+}
+.mobile-back{display:none!important;margin-left:8px;}
+
+/* ===== SCROLLBAR GLOBAL ===== */
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#aaa;}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.msg-wrapper{animation:fadeIn .2s ease;}
+.contact-item{animation:fadeIn .15s ease;}
+
+/* Notification badge pulse */
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5);}100%{box-shadow:0 0 0 8px rgba(37,211,102,0);}}
+.unread-badge{animation:pulse 1.5s infinite;}
+
+/* ===== TEMPLATES ===== */
+.tpl-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:16px 20px;display:flex;gap:16px;align-items:flex-start;
+  transition:box-shadow .15s;
+}
+.tpl-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.06);}
+.tpl-icon{
+  width:44px;height:44px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;
+}
+.tpl-icon.utility{background:#e8f4fd;color:#1976d2;}
+.tpl-icon.marketing{background:#fff3e0;color:#e65100;}
+.tpl-body{flex:1;min-width:0;}
+.tpl-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.tpl-name{font-size:14px;font-weight:600;color:var(--text);direction:ltr;unicode-bidi:embed;}
+.tpl-badge{
+  padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;
+}
+.tpl-badge.approved{background:#d4edda;color:#155724;}
+.tpl-badge.pending{background:#fff3cd;color:#856404;}
+.tpl-badge.rejected{background:#f8d7da;color:#721c24;}
+.tpl-text{
+  font-size:13px;color:var(--text2);line-height:1.5;
+  background:var(--bg3);border-radius:8px;padding:10px 14px;
+  margin-top:4px;white-space:pre-wrap;border:1px solid var(--border-light);
+}
+.tpl-meta{display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--text3);}
+.tpl-actions{display:flex;gap:6px;flex-shrink:0;align-self:center;}
+.tpl-btn{
+  padding:6px 14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);cursor:pointer;font-family:inherit;font-size:12px;
+  color:var(--text2);transition:all .15s;
+}
+.tpl-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tpl-btn.send{background:var(--accent);color:#fff;border-color:var(--accent);}
+.tpl-btn.send:hover{background:var(--accent2);}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">
+    <div class="wa-circle">💬</div>
+    <span>WhatsApp Inbox</span>
+  </div>
+  <div class="topbar-search">
+    <input type="text" id="globalSearch" placeholder="חיפוש אנשי קשר, הודעות..." oninput="handleSearch(this.value)">
+    <span class="search-icon">🔍</span>
+  </div>
+  <div class="topbar-channel">
+    <span class="dot"></span>
+    דקל לפרישה
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-actions">
+    <button class="nav-tab active" id="navInbox" onclick="showView('inbox')">💬 שיחות</button>
+    <button class="nav-tab" id="navTemplates" onclick="showView('templates')">📋 תבניות</button>
+    <button class="nav-tab" id="navCosts" onclick="showView('costs')">💰 עלויות</button>
+    <button class="topbar-btn" title="רענון" onclick="refreshAll()">🔄</button>
+    <button class="topbar-btn" title="הגדרות" onclick="window.open('/wa-manager?token='+TOKEN,'_blank')">⚙️</button>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div class="app">
+
+  <!-- LEFT: CONTACTS -->
+  <div class="contacts-panel" id="contactsPanel">
+    <div class="contacts-filters">
+      <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+      <button class="filter-tab" data-filter="unanswered" onclick="setFilter('unanswered',this)">ממתינים</button>
+      <button class="filter-tab" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו</button>
+    </div>
+    <div class="contacts-list" id="contactsList">
+      <!-- dynamically populated -->
+    </div>
+  </div>
+
+  <!-- CENTER: CHAT -->
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-header" id="chatHeader" style="display:none;">
+      <div class="chat-header-right" style="display:flex;align-items:center;gap:10px;">
+        <button class="chat-header-btn mobile-back" onclick="showMobileContacts()">→</button>
+        <div class="chat-header-avatar" id="chatHeaderAvatar"></div>
+        <div class="chat-header-info">
+          <h3 id="chatHeaderName"></h3>
+          <div class="status" id="chatHeaderStatus">מקוון</div>
+        </div>
+      </div>
+      <div class="chat-header-left">
+        <button class="chat-header-btn" title="פרטים" onclick="toggleDetails()">ℹ️</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-empty-state" id="emptyState">
+        <div class="empty-icon">💬</div>
+        <p>בחר שיחה מהרשימה כדי להתחיל</p>
+      </div>
+    </div>
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    </div>
+    <div class="quick-replies-bar" id="quickRepliesBar" style="display:none;"></div>
+    <div class="chat-input-area" id="chatInputArea" style="display:none;">
+      <button class="input-btn" title="אמוג'י" onclick="toggleEmoji()">😊</button>
+      <button class="input-btn" title="קובץ מצורף">📎</button>
+      <textarea class="chat-textarea" id="chatInput" rows="1" placeholder="הקלד הודעה..." oninput="autoResize(this)" onkeydown="handleInputKey(event)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
+      <div class="emoji-picker" id="emojiPicker"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: DETAILS -->
+  <div class="details-panel hidden" id="detailsPanel">
+    <div class="details-header">
+      <h4>פרטי איש קשר</h4>
+      <button class="details-close" onclick="toggleDetails()">✕</button>
+    </div>
+    <div class="details-body">
+      <div class="detail-profile">
+        <div class="detail-avatar" id="detailAvatar"></div>
+        <div class="detail-name" id="detailName"></div>
+        <div class="detail-phone" id="detailPhone"></div>
+        <div class="detail-channel">
+          <span>📱</span> WhatsApp
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="detail-section">
+        <div class="detail-section-title">סטטוס</div>
+        <select class="status-select" id="detailStatus" onchange="updateStatus(this.value)">
+          <option value="new">חדש</option>
+          <option value="lead">ליד</option>
+          <option value="qualified">מאומת</option>
+          <option value="meeting">פגישה</option>
+          <option value="proposal">הצעת מחיר</option>
+          <option value="won">זכייה</option>
+          <option value="lost">אבוד</option>
+        </select>
+        <div class="status-history" id="statusHistory"></div>
+      </div>
+
+      <!-- Tags -->
+      <div class="detail-section">
+        <div class="detail-section-title">
+          תגיות
+          <button class="add-btn" onclick="showTagInput()">+</button>
+        </div>
+        <div class="tags-container" id="tagsContainer"></div>
+        <input type="text" class="tag-input" id="tagInput" placeholder="הקלד תגית ולחץ Enter..." onkeydown="handleTagKey(event)">
+      </div>
+
+      <!-- Notes -->
+      <div class="detail-section">
+        <div class="detail-section-title">
+          הערות
+          <button class="add-btn" onclick="showNoteInput()">+</button>
+        </div>
+        <div class="notes-list" id="notesList"></div>
+        <textarea class="note-input" id="noteInput" placeholder="הוסף הערה..." onkeydown="handleNoteKey(event)"></textarea>
+      </div>
+
+      <!-- Assign -->
+      <div class="detail-section">
+        <div class="detail-section-title">שיוך</div>
+        <select class="status-select" id="detailAssign">
+          <option value="">לא משויך</option>
+          <option value="alon">אלון</option>
+          <option value="bot">בוט</option>
+          <option value="yael">יעל</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TEMPLATES VIEW (hidden by default) -->
+<div id="templatesView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">📋 תבניות הודעה (Message Templates)</h2>
+      <a href="https://business.facebook.com/latest/whatsapp_manager/message_templates/?business_id=296034178660107" target="_blank"
+         style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;font-size:13px;font-weight:500;">
+        ניהול ב-Meta →
+      </a>
+    </div>
+    <div id="templatesList" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="text-align:center;padding:40px;color:var(--text3);">טוען תבניות...</div>
+    </div>
+    <!-- Send template modal -->
+    <div id="templateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;">
+      <div style="background:var(--bg2);border-radius:16px;padding:24px;width:360px;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+        <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">שליחת תבנית</h3>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">שם התבנית</label>
+          <input id="modalTemplateName" readonly style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">מספר טלפון (עם קידומת מדינה)</label>
+          <input id="modalPhone" placeholder="972546300783" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;direction:ltr;">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-start;">
+          <button onclick="doSendTemplate()" style="padding:8px 20px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;">שלח</button>
+          <button onclick="closeTemplateModal()" style="padding:8px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
+        </div>
+        <div id="modalResult" style="margin-top:12px;font-size:12px;display:none;"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COSTS VIEW -->
+<div id="costsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">💰 מעקב עלויות API</h2>
+      <select id="costsDaysFilter" onchange="loadCosts()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:13px;">
+        <option value="7">7 ימים</option>
+        <option value="14">14 ימים</option>
+        <option value="30" selected>30 ימים</option>
+      </select>
+    </div>
+    <!-- Today summary cards -->
+    <div id="costsTodayCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:24px;"></div>
+    <!-- Chart area -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:20px;margin-bottom:24px;">
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);">עלות יומית ($)</h3>
+      <div id="costsChart" style="height:200px;display:flex;align-items:flex-end;gap:4px;"></div>
+    </div>
+    <!-- Daily breakdown table -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg3);text-align:right;">
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">תאריך</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">מודל</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">קריאות</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">טוקנים נכנסים</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">טוקנים יוצאים</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">עלות</th>
+          </tr>
+        </thead>
+        <tbody id="costsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+const API = '/api/wa-manager';
+const POLL_INTERVAL = 5000;
+
+// ===== STATE =====
+let contacts = [];
+let activePhone = null;
+let activeMessages = [];
+let currentFilter = 'all';
+let searchQuery = '';
+let quickReplies = [];
+let allTags = [];
+let pollTimer = null;
+let lastMessageCount = 0;
+
+// ===== AVATAR COLORS =====
+const AVATAR_COLORS = [
+  '#e17076','#7bc862','#e5a84e','#65aadd','#a695e7',
+  '#ee7aae','#6ec9cb','#faa774','#b48bf2','#85c18b'
+];
+function getAvatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < (name||'').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0,2).toUpperCase();
+}
+
+// ===== API HELPERS =====
+async function api(path, opts = {}) {
+  const sep = path.includes('?') ? '&' : '?';
+  const url = API + path + sep + 'token=' + TOKEN;
+  const res = await fetch(url, {
+    headers: {'Content-Type': 'application/json', ...opts.headers},
+    ...opts
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+// ===== FORMAT TIME =====
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  if (diffDays === 0) return timeStr;
+  if (diffDays === 1) return 'אתמול';
+  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short'});
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric'});
+}
+function formatFullTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+}
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'היום';
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return 'אתמול';
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+}
+
+// ===== LOAD CONTACTS =====
+async function loadContacts() {
+  try {
+    const data = await api('/leads');
+    contacts = (data.leads || data || []).map(c => ({
+      phone: c.phone || c.id,
+      name: c.name || c.pushName || c.phone || 'לא ידוע',
+      lastMessage: c.lastMessage || c.last_message || '',
+      lastTime: c.lastTime || c.last_time || c.updatedAt || '',
+      unread: c.unread || 0,
+      isOutgoing: c.isOutgoing || c.is_outgoing || false,
+      source: c.source || 'whatsapp',
+      status: c.status || 'new',
+      online: false
+    }));
+    // Sort by last message time desc
+    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    renderContacts();
+  } catch(e) {
+    console.error('Failed to load contacts:', e);
+  }
+}
+
+// ===== RENDER CONTACTS =====
+function renderContacts() {
+  const list = document.getElementById('contactsList');
+  let filtered = [...contacts];
+
+  // Apply filter
+  if (currentFilter === 'unanswered') {
+    filtered = filtered.filter(c => !c.isOutgoing && c.lastMessage);
+  } else if (currentFilter === 'unread') {
+    filtered = filtered.filter(c => c.unread > 0);
+  }
+
+  // Apply search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.name||'').toLowerCase().includes(q) ||
+      (c.phone||'').includes(q)
+    );
+  }
+
+  // Update filter counts
+  const allCount = contacts.length;
+  const unansweredCount = contacts.filter(c => !c.isOutgoing && c.lastMessage).length;
+  const unreadCount = contacts.filter(c => c.unread > 0).length;
+  document.querySelectorAll('.filter-tab').forEach(tab => {
+    const f = tab.dataset.filter;
+    const countEl = tab.querySelector('.count');
+    if (f === 'unanswered' && unansweredCount > 0) {
+      if (!countEl) tab.innerHTML = `<span class="count">${unansweredCount}</span>` + tab.textContent;
+    }
+    if (f === 'unread' && unreadCount > 0) {
+      if (!countEl) tab.innerHTML = `<span class="count">${unreadCount}</span>` + tab.textContent;
+    }
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text3);font-size:13px;">אין שיחות</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const color = getAvatarColor(c.name);
+    const initials = getInitials(c.name);
+    const isActive = c.phone === activePhone;
+    const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
+    const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
+
+    return `
+      <div class="contact-item ${isActive ? 'active' : ''}" onclick="selectContact('${c.phone}')">
+        <div class="contact-avatar" style="background:${color}">
+          ${initials}
+          ${c.online ? '<div class="online-dot"></div>' : ''}
+        </div>
+        <div class="contact-body">
+          <div class="contact-row">
+            <span class="contact-name">${esc(c.name)}</span>
+            <span class="${timeClass}">${formatTime(c.lastTime)}</span>
+          </div>
+          <div class="contact-preview">${preview}</div>
+        </div>
+        ${c.unread > 0 ? `<div class="unread-badge">${c.unread}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+function truncate(s, n) {
+  if (!s) return '';
+  return s.length > n ? s.substring(0, n) + '...' : s;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function linkify(text) {
+  // Convert URLs to clickable links
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  return esc(text).replace(urlRegex, '<a href="$1" target="_blank" rel="noopener" style="color:#1a73e8;text-decoration:underline;word-break:break-all;">$1</a>');
+}
+
+// ===== FILTER =====
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderContacts();
+}
+
+// ===== SEARCH =====
+function handleSearch(val) {
+  searchQuery = val;
+  renderContacts();
+}
+
+// ===== SELECT CONTACT =====
+async function selectContact(phone) {
+  activePhone = phone;
+  renderContacts();
+
+  const contact = contacts.find(c => c.phone === phone);
+  if (!contact) return;
+
+  // Update header
+  document.getElementById('chatHeader').style.display = 'flex';
+  document.getElementById('chatInputArea').style.display = 'flex';
+  document.getElementById('emptyState').style.display = 'none';
+
+  const color = getAvatarColor(contact.name);
+  const initials = getInitials(contact.name);
+  document.getElementById('chatHeaderAvatar').style.background = color;
+  document.getElementById('chatHeaderAvatar').textContent = initials;
+  document.getElementById('chatHeaderName').textContent = contact.name;
+  document.getElementById('chatHeaderStatus').textContent = 'מקוון';
+
+  // Load quick replies
+  loadQuickReplies();
+
+  // Load messages
+  await loadMessages(phone);
+
+  // Load details
+  loadContactDetails(phone, contact);
+
+  // Mobile: show chat
+  document.getElementById('contactsPanel').classList.add('hidden-mobile');
+  document.getElementById('chatPanel').classList.remove('hidden-mobile');
+
+  // Mark read
+  contact.unread = 0;
+  renderContacts();
+}
+
+// ===== LOAD MESSAGES =====
+async function loadMessages(phone) {
+  try {
+    const data = await api('/conversations/' + encodeURIComponent(phone));
+    activeMessages = data.messages || data || [];
+    renderMessages();
+  } catch(e) {
+    console.error('Failed to load messages:', e);
+    document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><p>שגיאה בטעינת השיחה</p></div>';
+  }
+}
+
+// ===== RENDER MESSAGES =====
+function renderMessages() {
+  const container = document.getElementById('chatMessages');
+  if (!activeMessages || activeMessages.length === 0) {
+    container.innerHTML = '<div class="chat-empty-state"><div class="empty-icon">💬</div><p>אין הודעות עדיין</p></div>';
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+
+  activeMessages.forEach(msg => {
+    const msgDate = formatDate(msg.timestamp || msg.time || msg.created_at);
+    if (msgDate !== lastDate) {
+      html += `<div class="day-divider"><span>${msgDate}</span></div>`;
+      lastDate = msgDate;
+    }
+
+    const isOut = msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    const dir = isOut ? 'outgoing' : 'incoming';
+    const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
+    const checks = isOut ? `<span class="msg-check ${msg.read ? 'read' : ''}">${msg.read ? '✓✓' : '✓✓'}</span>` : '';
+    const text = linkify(msg.body || msg.message || msg.text || msg.content || '');
+
+    html += `
+      <div class="msg-wrapper ${dir}">
+        <div class="msg-bubble ${dir}">
+          <div class="msg-text">${text}</div>
+          <div class="msg-meta">
+            <span class="msg-time">${time}</span>
+            ${checks}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('chatMessages');
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+}
+
+// ===== SEND MESSAGE =====
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !activePhone) return;
+
+  input.value = '';
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = true;
+
+  // Show typing
+  document.getElementById('typingIndicator').classList.add('show');
+
+  // Optimistic add
+  const now = new Date().toISOString();
+  activeMessages.push({
+    body: text,
+    direction: 'outgoing',
+    fromMe: true,
+    timestamp: now,
+    read: false
+  });
+  renderMessages();
+
+  try {
+    await api('/send', {
+      method: 'POST',
+      body: JSON.stringify({ phone: activePhone, message: text })
+    });
+    // Update contact
+    const c = contacts.find(c => c.phone === activePhone);
+    if (c) {
+      c.lastMessage = text;
+      c.lastTime = now;
+      c.isOutgoing = true;
+    }
+    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    renderContacts();
+  } catch(e) {
+    console.error('Send failed:', e);
+    // Mark last message as failed
+    activeMessages[activeMessages.length - 1].failed = true;
+  }
+
+  document.getElementById('typingIndicator').classList.remove('show');
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+function handleInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+  // Enable/disable send button
+  setTimeout(() => {
+    document.getElementById('sendBtn').disabled = !document.getElementById('chatInput').value.trim();
+  }, 0);
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ===== QUICK REPLIES =====
+async function loadQuickReplies() {
+  try {
+    const data = await api('/quick-replies');
+    quickReplies = data.replies || data || [];
+    renderQuickReplies();
+  } catch(e) {
+    quickReplies = [];
+  }
+}
+
+function renderQuickReplies() {
+  const bar = document.getElementById('quickRepliesBar');
+  if (!quickReplies.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = quickReplies.map(qr => {
+    const label = qr.name || qr.label || qr.title || truncate(qr.message || qr.text || '', 25);
+    const msg = qr.message || qr.text || qr.content || '';
+    return `<button class="qr-chip" onclick="useQuickReply('${msg.replace(/'/g,"\\'")}')">⚡ ${esc(label)}</button>`;
+  }).join('');
+}
+
+function useQuickReply(text) {
+  const input = document.getElementById('chatInput');
+  input.value = text;
+  input.focus();
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// ===== DETAILS =====
+function toggleDetails() {
+  const panel = document.getElementById('detailsPanel');
+  panel.classList.toggle('hidden');
+}
+
+async function loadContactDetails(phone, contact) {
+  const color = getAvatarColor(contact.name);
+  const initials = getInitials(contact.name);
+  document.getElementById('detailAvatar').style.background = color;
+  document.getElementById('detailAvatar').textContent = initials;
+  document.getElementById('detailName').textContent = contact.name;
+  document.getElementById('detailPhone').textContent = phone;
+  document.getElementById('detailStatus').value = contact.status || 'new';
+
+  // Load tags
+  loadTags(phone);
+  // Load notes
+  loadNotes(phone);
+  // Load status history
+  loadStatusHistory(phone);
+}
+
+// ===== TAGS =====
+async function loadTags(phone) {
+  try {
+    const data = await api('/tags/' + encodeURIComponent(phone));
+    const tags = data.tags || data || [];
+    renderTags(tags);
+  } catch(e) {
+    renderTags([]);
+  }
+}
+
+function renderTags(tags) {
+  const container = document.getElementById('tagsContainer');
+  if (!tags.length) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--text3);">אין תגיות</span>';
+    return;
+  }
+  const tagClasses = {
+    'חם': 'tag-hot', 'hot': 'tag-hot',
+    'חמים': 'tag-warm', 'warm': 'tag-warm',
+    'קר': 'tag-cold', 'cold': 'tag-cold',
+    'VIP': 'tag-vip', 'vip': 'tag-vip',
+    'חדש': 'tag-new', 'new': 'tag-new'
+  };
+  container.innerHTML = tags.map(t => {
+    const tagName = typeof t === 'string' ? t : t.tag || t.name || '';
+    const cls = tagClasses[tagName] || 'tag-default';
+    return `<span class="tag-chip ${cls}">${esc(tagName)}<span class="remove-tag" onclick="removeTag('${tagName.replace(/'/g,"\\'")}')">×</span></span>`;
+  }).join('');
+}
+
+function showTagInput() {
+  const input = document.getElementById('tagInput');
+  input.classList.toggle('show');
+  if (input.classList.contains('show')) input.focus();
+}
+
+async function handleTagKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (!val || !activePhone) return;
+    try {
+      await api('/tags/' + encodeURIComponent(activePhone), {
+        method: 'POST',
+        body: JSON.stringify({ tag: val })
+      });
+      e.target.value = '';
+      e.target.classList.remove('show');
+      loadTags(activePhone);
+    } catch(err) { console.error('Add tag failed:', err); }
+  }
+  if (e.key === 'Escape') {
+    e.target.value = '';
+    e.target.classList.remove('show');
+  }
+}
+
+async function removeTag(tag) {
+  // No delete endpoint defined — we just reload. If API supports DELETE, add here.
+  console.log('Remove tag:', tag);
+}
+
+// ===== NOTES =====
+async function loadNotes(phone) {
+  try {
+    const data = await api('/notes/' + encodeURIComponent(phone));
+    const notes = data.notes || data || [];
+    renderNotes(notes);
+  } catch(e) {
+    renderNotes([]);
+  }
+}
+
+function renderNotes(notes) {
+  const container = document.getElementById('notesList');
+  if (!notes.length) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--text3);">אין הערות</span>';
+    return;
+  }
+  container.innerHTML = notes.map(n => {
+    const text = typeof n === 'string' ? n : n.note || n.text || n.content || '';
+    const date = n.created_at || n.date || '';
+    return `<div class="note-item">${esc(text)}${date ? `<span class="note-date">${formatTime(date)}</span>` : ''}</div>`;
+  }).join('');
+}
+
+function showNoteInput() {
+  const input = document.getElementById('noteInput');
+  input.classList.toggle('show');
+  if (input.classList.contains('show')) input.focus();
+}
+
+async function handleNoteKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (!val || !activePhone) return;
+    try {
+      await api('/notes/' + encodeURIComponent(activePhone), {
+        method: 'POST',
+        body: JSON.stringify({ note: val })
+      });
+      e.target.value = '';
+      e.target.classList.remove('show');
+      loadNotes(activePhone);
+    } catch(err) { console.error('Add note failed:', err); }
+  }
+  if (e.key === 'Escape') {
+    e.target.value = '';
+    e.target.classList.remove('show');
+  }
+}
+
+// ===== STATUS HISTORY =====
+async function loadStatusHistory(phone) {
+  try {
+    const data = await api('/status-history/' + encodeURIComponent(phone));
+    const history = data.history || data || [];
+    const container = document.getElementById('statusHistory');
+    if (!history.length) { container.innerHTML = ''; return; }
+    container.innerHTML = history.slice(0,5).map(h => {
+      const status = h.status || h.to || '';
+      const time = formatTime(h.timestamp || h.date || h.created_at || '');
+      return `<div class="status-history-item"><span class="sh-status">${esc(status)}</span><span>${time}</span></div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('statusHistory').innerHTML = '';
+  }
+}
+
+function updateStatus(val) {
+  // Status update — could POST to an endpoint if available
+  const c = contacts.find(c => c.phone === activePhone);
+  if (c) c.status = val;
+}
+
+// ===== EMOJI PICKER =====
+const EMOJIS = ['😀','😂','❤️','👍','🙏','🔥','✅','💪','👏','🎉','😍','🤔','💯','⭐','🚀','💰','📞','📱','💬','✨','🎯','👋','😊','🤝','💡','📌','⏰','🏆','💎','🌟','❌','⚠️','📝','🔗','👀','💵','🎁','🛒','📊','🔔','💼','🏠','🎓','🙌','😎','🤩','💐','🥳'];
+
+function toggleEmoji() {
+  const picker = document.getElementById('emojiPicker');
+  picker.classList.toggle('show');
+  if (picker.classList.contains('show') && !picker.innerHTML) {
+    picker.innerHTML = '<div class="emoji-grid">' + EMOJIS.map(e =>
+      `<button onclick="insertEmoji('${e}')">${e}</button>`
+    ).join('') + '</div>';
+  }
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById('chatInput');
+  input.value += emoji;
+  input.focus();
+  document.getElementById('emojiPicker').classList.remove('show');
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// Close emoji on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.emoji-picker') && !e.target.closest('.input-btn[title="אמוג\'י"]')) {
+    document.getElementById('emojiPicker').classList.remove('show');
+  }
+});
+
+// ===== MOBILE =====
+function showMobileContacts() {
+  document.getElementById('contactsPanel').classList.remove('hidden-mobile');
+  document.getElementById('chatPanel').classList.add('hidden-mobile');
+}
+
+// ===== POLLING =====
+async function pollMessages() {
+  if (!activePhone) return;
+  try {
+    const data = await api('/conversations/' + encodeURIComponent(activePhone));
+    const msgs = data.messages || data || [];
+    if (msgs.length !== activeMessages.length) {
+      activeMessages = msgs;
+      renderMessages();
+      // Update contact
+      const c = contacts.find(c => c.phone === activePhone);
+      if (c && msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        c.lastMessage = last.body || last.message || last.text || '';
+        c.lastTime = last.timestamp || last.time || '';
+        c.isOutgoing = last.direction === 'outgoing' || last.fromMe || last.from_me;
+      }
+    }
+  } catch(e) { /* silent */ }
+
+  // Also refresh contacts list periodically
+  try {
+    const data = await api('/leads');
+    const newContacts = (data.leads || data || []);
+    if (newContacts.length !== contacts.length) {
+      await loadContacts();
+    }
+  } catch(e) { /* silent */ }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollMessages, POLL_INTERVAL);
+}
+
+// ===== REFRESH =====
+async function refreshAll() {
+  await loadContacts();
+  if (activePhone) {
+    await loadMessages(activePhone);
+    const contact = contacts.find(c => c.phone === activePhone);
+    if (contact) loadContactDetails(activePhone, contact);
+  }
+}
+
+// ===== INIT =====
+async function init() {
+  if (!TOKEN) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
+    return;
+  }
+  await loadContacts();
+  startPolling();
+}
+
+// ===== VIEW SWITCHING =====
+let currentView = 'inbox';
+
+function showView(view) {
+  currentView = view;
+  const appEl = document.querySelector('.app');
+  const tplView = document.getElementById('templatesView');
+  const costsView = document.getElementById('costsView');
+  const navInbox = document.getElementById('navInbox');
+  const navTemplates = document.getElementById('navTemplates');
+  const navCosts = document.getElementById('navCosts');
+
+  // Hide all
+  appEl.style.display = 'none';
+  tplView.style.display = 'none';
+  costsView.style.display = 'none';
+  navInbox.classList.remove('active');
+  navTemplates.classList.remove('active');
+  navCosts.classList.remove('active');
+
+  if (view === 'templates') {
+    tplView.style.display = 'block';
+    navTemplates.classList.add('active');
+    loadTemplates();
+  } else if (view === 'costs') {
+    costsView.style.display = 'block';
+    navCosts.classList.add('active');
+    loadCosts();
+  } else {
+    appEl.style.display = 'flex';
+    navInbox.classList.add('active');
+  }
+}
+
+// ===== TEMPLATES =====
+let templates = [];
+
+async function loadTemplates() {
+  try {
+    const data = await api('/templates');
+    templates = data.templates || [];
+    renderTemplates();
+  } catch(e) {
+    console.error('Failed to load templates:', e);
+    document.getElementById('templatesList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">שגיאה בטעינת תבניות</div>';
+  }
+}
+
+function renderTemplates() {
+  const container = document.getElementById('templatesList');
+  if (!templates.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">אין תבניות</div>';
+    return;
+  }
+
+  // Sort: approved first, then pending, then rejected
+  const order = { APPROVED: 0, PENDING: 1, REJECTED: 2 };
+  const sorted = [...templates].sort((a,b) => (order[a.status] || 9) - (order[b.status] || 9));
+
+  container.innerHTML = sorted.map(tpl => {
+    const status = (tpl.status || '').toLowerCase();
+    const category = (tpl.category || 'UTILITY').toLowerCase();
+    const categoryIcon = category === 'marketing' ? '📢' : '🔧';
+    const categoryLabel = category === 'marketing' ? 'שיווקית' : 'שירות';
+    const lang = tpl.language || 'he';
+
+    // Get template body text
+    const bodyComp = (tpl.components || []).find(c => c.type === 'BODY');
+    const headerComp = (tpl.components || []).find(c => c.type === 'HEADER');
+    const footerComp = (tpl.components || []).find(c => c.type === 'FOOTER');
+    const bodyText = bodyComp ? bodyComp.text : '';
+
+    const canSend = status === 'approved';
+
+    return `
+      <div class="tpl-card">
+        <div class="tpl-icon ${category}">${categoryIcon}</div>
+        <div class="tpl-body">
+          <div class="tpl-header">
+            <span class="tpl-name">${esc(tpl.name)}</span>
+            <span class="tpl-badge ${status}">${status === 'approved' ? '✅ מאושר' : status === 'pending' ? '⏳ ממתין' : '❌ נדחה'}</span>
+          </div>
+          ${headerComp ? `<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px;">${esc(headerComp.text || '')}</div>` : ''}
+          <div class="tpl-text">${esc(bodyText)}</div>
+          ${footerComp ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;">${esc(footerComp.text || '')}</div>` : ''}
+          <div class="tpl-meta">
+            <span>📁 ${categoryLabel}</span>
+            <span>🌐 ${lang}</span>
+            <span>🆔 ${tpl.id || ''}</span>
+          </div>
+        </div>
+        <div class="tpl-actions">
+          ${canSend ? `<button class="tpl-btn send" onclick="openSendTemplate('${tpl.name}','${lang}')">📤 שלח</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSendTemplate(name, lang) {
+  document.getElementById('modalTemplateName').value = name;
+  document.getElementById('modalPhone').value = '';
+  document.getElementById('modalResult').style.display = 'none';
+  const modal = document.getElementById('templateModal');
+  modal.style.display = 'flex';
+}
+
+function closeTemplateModal() {
+  document.getElementById('templateModal').style.display = 'none';
+}
+
+async function doSendTemplate() {
+  const name = document.getElementById('modalTemplateName').value;
+  const phone = document.getElementById('modalPhone').value.trim();
+  const resultEl = document.getElementById('modalResult');
+
+  if (!phone) {
+    resultEl.style.display = 'block';
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = 'נא להזין מספר טלפון';
+    return;
+  }
+
+  resultEl.style.display = 'block';
+  resultEl.style.color = 'var(--text2)';
+  resultEl.textContent = 'שולח...';
+
+  try {
+    const data = await api('/send-template', {
+      method: 'POST',
+      body: JSON.stringify({ phone, templateName: name, language: 'he' })
+    });
+    if (data.success) {
+      resultEl.style.color = 'var(--success)';
+      resultEl.textContent = '✅ נשלח בהצלחה!';
+      setTimeout(closeTemplateModal, 1500);
+    } else {
+      resultEl.style.color = 'var(--danger)';
+      resultEl.textContent = '❌ ' + (data.error || JSON.stringify(data.data));
+    }
+  } catch(e) {
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '❌ שגיאה: ' + e.message;
+  }
+}
+
+// ===== COSTS =====
+async function loadCosts() {
+  const days = document.getElementById('costsDaysFilter')?.value || 30;
+  try {
+    const data = await api('/costs?days=' + days);
+    renderCostCards(data.today || [], data.totals || {});
+    renderCostChart(data.daily || [], parseInt(days));
+    renderCostTable(data.daily || []);
+  } catch(e) {
+    document.getElementById('costsTodayCards').innerHTML = '<div style="color:var(--danger);padding:20px;">שגיאה: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderCostCards(today, totals) {
+  const todayCost = today.reduce((s,r) => s + (r.cost_usd || 0), 0);
+  const todayCalls = today.reduce((s,r) => s + (r.calls || 0), 0);
+  const cards = document.getElementById('costsTodayCards');
+  cards.innerHTML = `
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">עלות היום</div>
+      <div style="font-size:24px;font-weight:700;color:var(--text);direction:ltr;">$${todayCost.toFixed(3)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">₪${(todayCost * 3.6).toFixed(2)}</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">קריאות היום</div>
+      <div style="font-size:24px;font-weight:700;color:var(--text);">${todayCalls}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${today.map(t => t.model).join(', ') || '—'}</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">סה״כ תקופה</div>
+      <div style="font-size:24px;font-weight:700;color:var(--text);direction:ltr;">$${(totals.total_cost || 0).toFixed(2)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">₪${((totals.total_cost || 0) * 3.6).toFixed(1)} | ${totals.total_calls || 0} קריאות</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">ממוצע יומי</div>
+      <div style="font-size:24px;font-weight:700;color:${todayCost > 1 ? 'var(--danger)' : 'var(--accent)'};direction:ltr;">$${((totals.total_cost || 0) / Math.max(1, new Set(document.querySelectorAll('#costsTableBody tr')).size || 1)).toFixed(3)}</div>
+    </div>
+  `;
+}
+
+function renderCostChart(daily, days) {
+  // Aggregate by day
+  const byDay = {};
+  for (const r of daily) {
+    byDay[r.day] = (byDay[r.day] || 0) + r.cost_usd;
+  }
+  const sortedDays = Object.keys(byDay).sort();
+  const maxCost = Math.max(...Object.values(byDay), 0.01);
+  const chartEl = document.getElementById('costsChart');
+  if (sortedDays.length === 0) {
+    chartEl.innerHTML = '<div style="color:var(--text3);text-align:center;width:100%;padding:40px;">אין נתונים</div>';
+    return;
+  }
+  chartEl.innerHTML = sortedDays.map(day => {
+    const cost = byDay[day];
+    const pct = Math.max(4, (cost / maxCost) * 100);
+    const color = cost > 1 ? 'var(--danger)' : cost > 0.5 ? 'var(--warning)' : 'var(--accent)';
+    const label = day.slice(5); // MM-DD
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;">
+      <div style="font-size:10px;color:var(--text2);direction:ltr;">$${cost.toFixed(2)}</div>
+      <div style="width:100%;max-width:32px;height:${pct}%;background:${color};border-radius:4px 4px 0 0;min-height:4px;transition:height .3s;"></div>
+      <div style="font-size:9px;color:var(--text3);white-space:nowrap;">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderCostTable(daily) {
+  const tbody = document.getElementById('costsTableBody');
+  if (daily.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">אין נתונים</td></tr>';
+    return;
+  }
+  tbody.innerHTML = daily.map(r => `
+    <tr style="border-top:1px solid var(--border-light);">
+      <td style="padding:8px 14px;direction:ltr;">${r.day}</td>
+      <td style="padding:8px 14px;font-size:12px;color:var(--text2);">${esc(r.model)}</td>
+      <td style="padding:8px 14px;direction:ltr;">${r.calls}</td>
+      <td style="padding:8px 14px;direction:ltr;">${(r.input_tokens || 0).toLocaleString()}</td>
+      <td style="padding:8px 14px;direction:ltr;">${(r.output_tokens || 0).toLocaleString()}</td>
+      <td style="padding:8px 14px;font-weight:600;direction:ltr;color:${r.cost_usd > 0.5 ? 'var(--danger)' : 'var(--text)'};">$${r.cost_usd.toFixed(4)}</td>
+    </tr>
+  `).join('');
+}
+
+init();
+</script>
+</body>
+</html>
