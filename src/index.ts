@@ -384,9 +384,9 @@ cron.schedule('0 10,16 * * 0-4', async () => {
 }, { timezone: 'Asia/Jerusalem' });
 
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
-cron.schedule('0 3 * * *', () => {
+cron.schedule('0 3 * * *', async () => {
   log.info('memory maintenance starting');
-  const stats = runMemoryMaintenance();
+  const stats = await runMemoryMaintenance();
   log.info({ decayed: stats.decayed, consolidated: stats.consolidated, deleted: stats.deleted }, 'memory maintenance done');
 }, { timezone: 'Asia/Jerusalem' });
 

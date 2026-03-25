@@ -241,6 +241,21 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS entities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    subject TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    object TEXT NOT NULL,
+    confidence REAL NOT NULL DEFAULT 0.8,
+    source TEXT DEFAULT 'extracted',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(subject, predicate, object)
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_entities_subject ON entities(subject);
+  CREATE INDEX IF NOT EXISTS idx_entities_predicate ON entities(predicate);
+
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,

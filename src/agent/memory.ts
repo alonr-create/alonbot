@@ -4,7 +4,7 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('memory');
 
-const CONTEXT_LIMIT = 20; // reduced from 50 — summaries fill the gap
+const CONTEXT_LIMIT = 35; // increased from 20 — better context retention
 
 // --- Types ---
 
@@ -138,6 +138,45 @@ export function getHistory(channel: string, senderId: string): Array<{ role: str
 export function getMessageCount(channel: string, senderId: string): number {
   const row = stmtMessageCount.get(channel, senderId) as { count: number };
   return row.count;
+}
+
+// --- Smart Context: pull relevant old messages beyond the context window ---
+
+const stmtOldMessages = db.prepare(
+  `SELECT role, content, created_at FROM messages
+   WHERE channel = ? AND sender_id = ?
+   AND id NOT IN (
+     SELECT id FROM messages WHERE channel = ? AND sender_id = ?
+     ORDER BY id DESC LIMIT ?
+   )
+   AND content LIKE ?
+   ORDER BY id DESC LIMIT 5`
+);
+
+export function getSmartContext(channel: string, senderId: string, userMessage: string): Array<{ role: string; content: string }> {
+  const results: Array<{ role: string; content: string }> = [];
+  const seen = new Set<string>();
+
+  // Extract meaningful keywords (3+ chars, skip common Hebrew words)
+  const stopWords = new Set(['את', 'של', 'על', 'עם', 'זה', 'היא', 'הוא', 'אני', 'לא', 'כן', 'מה', 'איך', 'למה', 'the', 'and', 'for', 'that', 'this']);
+  const words = userMessage.split(/\s+/).filter(w => w.length >= 3 && !stopWords.has(w));
+
+  for (const word of words.slice(0, 3)) {
+    try {
+      const rows = stmtOldMessages.all(channel, senderId, channel, senderId, CONTEXT_LIMIT, `%${word}%`) as MessageRow[];
+      for (const r of rows) {
+        const key = `${r.role}:${r.content.slice(0, 50)}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          results.push({ role: r.role, content: `[הקשר ישן - ${r.created_at}] ${r.content}` });
+        }
+      }
+    } catch (e: any) {
+      log.error({ err: e.message }, 'smart context search failed');
+    }
+  }
+
+  return results.slice(0, 5);
 }
 
 // --- Memories (replaces old facts) ---
@@ -304,7 +343,7 @@ const stmtDuplicateCheck = db.prepare(
   `SELECT id, content FROM memories WHERE content LIKE ? AND id != ? LIMIT 5`
 );
 
-export function runMemoryMaintenance(): { decayed: number; consolidated: number; deleted: number } {
+export async function runMemoryMaintenance(): Promise<{ decayed: number; consolidated: number; deleted: number }> {
   // 1. Decay: reduce importance of untouched memories (60+ days)
   const decayResult = stmtDecayMemories.run();
   const decayed = decayResult.changes;
@@ -322,27 +361,181 @@ export function runMemoryMaintenance(): { decayed: number; consolidated: number;
   }
   if (deleted > 0) log.info({ deleted }, 'deleted stale events');
 
-  // 3. Consolidate: merge near-duplicate memories (keep highest importance)
+  // 3. Consolidate: merge near-duplicate memories using text similarity + vector similarity
   let consolidated = 0;
   const allMemories = stmtAllMemories.all() as Memory[];
+  const deletedIds = new Set<number>();
+
   for (const m of allMemories) {
-    // Use first 30 chars as key phrase for duplicate check (15 is too short for Hebrew)
+    if (deletedIds.has(m.id)) continue;
+
+    // Strategy A: text prefix match (fast, catches exact-ish duplicates)
     const keyPhrase = m.content.slice(0, 30);
-    if (keyPhrase.length < 10) continue;
-    const dupes = stmtDuplicateCheck.all(`%${keyPhrase}%`, m.id) as Memory[];
-    for (const dupe of dupes) {
-      // Only merge if content length is similar (within 50%) to avoid false positives
-      const lenRatio = Math.min(m.content.length, dupe.content.length) / Math.max(m.content.length, dupe.content.length);
-      if (lenRatio > 0.5 && dupe.importance <= m.importance) {
-        stmtDeleteMemory.run(dupe.id);
-        stmtDeleteVector.run(BigInt(dupe.id));
-        consolidated++;
+    if (keyPhrase.length >= 10) {
+      const dupes = stmtDuplicateCheck.all(`%${keyPhrase}%`, m.id) as Memory[];
+      for (const dupe of dupes) {
+        if (deletedIds.has(dupe.id)) continue;
+        const lenRatio = Math.min(m.content.length, dupe.content.length) / Math.max(m.content.length, dupe.content.length);
+        if (lenRatio > 0.5 && dupe.importance <= m.importance) {
+          stmtDeleteMemory.run(dupe.id);
+          stmtDeleteVector.run(BigInt(dupe.id));
+          deletedIds.add(dupe.id);
+          consolidated++;
+        }
       }
+    }
+
+    // Strategy B: vector similarity (catches semantic duplicates)
+    try {
+      const embedding = await getEmbedding(m.content);
+      const similar = stmtVectorSearch.all(Buffer.from(embedding.buffer), 5) as (Memory & { memory_id: number; distance: number })[];
+      for (const sim of similar) {
+        if (sim.id === m.id || deletedIds.has(sim.id)) continue;
+        // Very close semantic match (distance < 0.3 = nearly identical meaning)
+        if (sim.distance < 0.3 && sim.importance <= m.importance) {
+          stmtDeleteMemory.run(sim.id);
+          stmtDeleteVector.run(BigInt(sim.id));
+          deletedIds.add(sim.id);
+          consolidated++;
+          log.info({ kept: m.id, removed: sim.id, distance: sim.distance }, 'semantic dedup');
+        }
+      }
+    } catch {
+      // Vector search failed — skip semantic dedup for this memory
     }
   }
   if (consolidated > 0) log.info({ consolidated }, 'consolidated duplicate memories');
 
   return { decayed, consolidated, deleted };
+}
+
+// --- Document Indexing to Memory ---
+
+export function indexDocumentToMemory(content: string, source: string, docType: 'pdf' | 'image' | 'text' = 'text'): number[] {
+  const ids: number[] = [];
+  const maxChunkSize = 500;
+
+  // Split content into chunks
+  const chunks = [];
+  if (content.length <= maxChunkSize) {
+    chunks.push(content);
+  } else {
+    // Split by paragraphs first, then by size
+    const paragraphs = content.split(/\n\n+/);
+    let current = '';
+    for (const p of paragraphs) {
+      if ((current + '\n\n' + p).length > maxChunkSize && current) {
+        chunks.push(current.trim());
+        current = p;
+      } else {
+        current = current ? current + '\n\n' + p : p;
+      }
+    }
+    if (current.trim()) chunks.push(current.trim());
+  }
+
+  for (const chunk of chunks) {
+    if (chunk.length < 10) continue; // skip tiny chunks
+    const id = saveMemory(
+      'document',
+      detectCategory(chunk),
+      `[${docType}:${source}] ${chunk}`,
+      4, // medium importance — can be boosted later
+      `document_${docType}`
+    );
+    ids.push(id);
+  }
+
+  log.info({ source, docType, chunks: ids.length }, 'indexed document to memory');
+  return ids;
+}
+
+// --- Entity Extraction ---
+
+const stmtUpsertEntity = db.prepare(
+  `INSERT INTO entities (subject, predicate, object, confidence, source)
+   VALUES (?, ?, ?, ?, ?)
+   ON CONFLICT(subject, predicate, object) DO UPDATE SET
+     confidence = MAX(entities.confidence, excluded.confidence),
+     updated_at = datetime('now')`
+);
+
+const stmtGetEntities = db.prepare(
+  `SELECT * FROM entities WHERE subject = ? ORDER BY confidence DESC, updated_at DESC LIMIT 30`
+);
+
+const stmtSearchEntities = db.prepare(
+  `SELECT * FROM entities WHERE subject LIKE ? OR object LIKE ? ORDER BY confidence DESC LIMIT 20`
+);
+
+const stmtDeleteEntity = db.prepare(
+  `DELETE FROM entities WHERE id = ?`
+);
+
+const stmtDeleteEntityByContent = db.prepare(
+  `DELETE FROM entities WHERE object LIKE ?`
+);
+
+// Hebrew entity extraction patterns
+const ENTITY_PATTERNS: Array<{ regex: RegExp; subject: string; predicate: string; objectGroup: number }> = [
+  // "אני אוהב X" / "אני שונא X"
+  { regex: /אני (?:אוהב|מעדיף|חושב ש|רוצה|צריך|לא אוהב|שונא)\s+(.+)/i, subject: 'אלון', predicate: 'preference', objectGroup: 1 },
+  // "השם שלי X" / "קוראים לי X"
+  { regex: /(?:קוראים לי|השם שלי|אני)\s+([א-ת]{2,}(?:\s+[א-ת]{2,})?)/i, subject: 'אלון', predicate: 'name', objectGroup: 1 },
+  // "יש לי X" (possession)
+  { regex: /יש לי\s+(.+)/i, subject: 'אלון', predicate: 'has', objectGroup: 1 },
+  // "אני גר ב-X" / "אני מ-X"
+  { regex: /אני (?:גר|מ|נמצא)\s*(?:ב|מ)\s*(.+)/i, subject: 'אלון', predicate: 'location', objectGroup: 1 },
+  // "X הוא/היא Y" (definitions)
+  { regex: /([א-ת\w]{2,}(?:\s+[א-ת\w]{2,})?)\s+(?:הוא|היא|זה)\s+(.+)/i, subject: 'אלון', predicate: 'knows', objectGroup: 0 },
+  // "הבן/הבת/האישה שלי X"
+  { regex: /(?:הבן|הבת|האישה|הבעל|האמא|האבא|האח|האחות)\s+שלי\s+(?:שם\w*\s+)?([א-ת]{2,})/i, subject: 'אלון', predicate: 'family', objectGroup: 0 },
+  // "אני עובד ב-X" / "אני X (profession)"
+  { regex: /אני (?:עובד|עובדת)\s+(?:ב|כ)\s*(.+)/i, subject: 'אלון', predicate: 'work', objectGroup: 1 },
+  // "יום ההולדת שלי ב-X"
+  { regex: /יום (?:ה)?הולדת\s+(?:שלי\s+)?(?:ב|הוא\s+)?(.+)/i, subject: 'אלון', predicate: 'birthday', objectGroup: 1 },
+];
+
+export function extractEntities(text: string, source: string = 'conversation'): Array<{ subject: string; predicate: string; object: string }> {
+  const extracted: Array<{ subject: string; predicate: string; object: string }> = [];
+
+  for (const pattern of ENTITY_PATTERNS) {
+    const match = text.match(pattern.regex);
+    if (match) {
+      const obj = pattern.objectGroup === 0
+        ? match[0] // full match
+        : match[pattern.objectGroup]?.trim();
+      if (obj && obj.length >= 2 && obj.length <= 100) {
+        const entity = { subject: pattern.subject, predicate: pattern.predicate, object: obj };
+        extracted.push(entity);
+        try {
+          stmtUpsertEntity.run(entity.subject, entity.predicate, entity.object, 0.7, source);
+          log.info({ entity }, 'extracted entity');
+        } catch (e: any) {
+          log.debug({ err: e.message }, 'entity upsert failed');
+        }
+      }
+    }
+  }
+
+  return extracted;
+}
+
+export function getEntities(subject: string): Array<{ id: number; subject: string; predicate: string; object: string; confidence: number }> {
+  return stmtGetEntities.all(subject) as any[];
+}
+
+export function searchEntities(query: string): Array<{ id: number; subject: string; predicate: string; object: string; confidence: number }> {
+  return stmtSearchEntities.all(`%${query}%`, `%${query}%`) as any[];
+}
+
+export function deleteEntity(id: number) {
+  stmtDeleteEntity.run(id);
+}
+
+export function forgetEntityByContent(content: string): number {
+  const result = stmtDeleteEntityByContent.run(`%${content}%`);
+  return result.changes;
 }
 
 // --- Backwards compatibility (used by old tool) ---

@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { getRelevantMemories, getRecentSummaries, type Memory } from './memory.js';
+import { getRelevantMemories, getRecentSummaries, getEntities, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { db } from '../utils/db.js';
 import { config } from '../utils/config.js';
@@ -70,11 +70,11 @@ function buildLeadSalesPrompt(lead: LeadInfo): string {
   return `
 ## מצב מיוחד — שיחת מכירה עם ליד של דקל לפרישה!
 
-**חשוב! התעלם מהזהות "AlonBot/עוזר אישי של אלון" למעלה. אתה עכשיו במצב מכירות.**
+**חשוב! התעלם מהזהות "AlonBot" למעלה. אתה עכשיו יעל — העוזרת הדיגיטלית.**
 **אתה מדבר עם ${name} — ליד/לקוח פוטנציאלי, לא עם אלון!**
 **אל תקרא לליד "אלון". קרא לו/לה בשמו: ${name}.**
 
-**אתה עכשיו נציג/ת מכירות של "דקל לפרישה" — חברה לייעוץ פנסיוני ותכנון פרישה הוליסטי.**
+**אני יעל, העוזרת הדיגיטלית של דקל לפרישה — חברה לייעוץ פנסיוני ותכנון פרישה הוליסטי.**
 
 ### פרטי הליד
 - **שם**: ${name}
@@ -138,11 +138,11 @@ function buildAlonDevSalesPrompt(senderName: string): string {
   return `
 ## מצב מיוחד — שיחת מכירה עם ליד של Alon.dev!
 
-**חשוב! התעלם מהזהות "AlonBot/עוזר אישי של אלון" למעלה. אתה עכשיו במצב מכירות.**
+**חשוב! התעלם מהזהות "AlonBot" למעלה. אתה עכשיו יעל — העוזרת הדיגיטלית.**
 **אתה מדבר עם ${senderName} — ליד/לקוח פוטנציאלי, לא עם אלון!**
 **אל תקרא לליד "אלון". קרא לו/לה בשמו: ${senderName}.**
 
-**אתה עכשיו נציג/ת מכירות של "Alon.dev" — שירותי טכנולוגיה ודיגיטל לעסקים.**
+**אני יעל, העוזרת הדיגיטלית של Alon.dev — שירותי טכנולוגיה ודיגיטל לעסקים.**
 
 ### פרטי הליד
 - **שם**: ${senderName}
@@ -228,6 +228,28 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
   const memoriesBlock = formatMemories(memories);
 
+  // Entity facts (structured knowledge)
+  let entitiesBlock = '';
+  try {
+    const entities = getEntities('אלון');
+    if (entities.length > 0) {
+      const grouped: Record<string, string[]> = {};
+      const predicateLabels: Record<string, string> = {
+        preference: 'העדפות', name: 'שם', has: 'יש לו', location: 'מיקום',
+        family: 'משפחה', work: 'עבודה', birthday: 'יום הולדת', knows: 'ידע',
+      };
+      for (const e of entities) {
+        const label = predicateLabels[e.predicate] || e.predicate;
+        if (!grouped[label]) grouped[label] = [];
+        grouped[label].push(e.object);
+      }
+      entitiesBlock = '\n## עובדות מובנות\n';
+      for (const [label, items] of Object.entries(grouped)) {
+        entitiesBlock += `- **${label}**: ${items.join(', ')}\n`;
+      }
+    }
+  } catch { /* entities table may not exist yet */ }
+
   let summariesBlock = '';
   if (channel && senderId) {
     const summaries = getRecentSummaries(channel, senderId);
@@ -286,6 +308,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 
 ### זיכרון ותזמון
 - **remember**: שמירת זיכרון על אלון (עם סוג, קטגוריה, חשיבות)
+- **my_memories**: הצגת כל מה שאני זוכר (כולל סטטיסטיקות, חיפוש, ועובדות מובנות). השתמש כשאלון שואל "מה אתה זוכר?" / "מה אתה יודע עליי?"
+- **forget**: מחיקת זיכרון ספציפי (לפי ID או חיפוש). השתמש כשאלון אומר "תשכח X" / "תמחק את הזיכרון על X"
 - **schedule_message**: תזכורת חד-פעמית — שליחת הודעה בזמן מסוים (פורמט: "YYYY-MM-DD HH:mm" בזמן ישראל). **השתמש בזה כשאלון אומר "תזכיר לי עוד X דקות/שעות" או "תזכיר לי ב-..."**
 - **set_reminder**: תזכורת חוזרת עם cron (יומית, שבועית וכו׳). השתמש רק כשהתזכורת צריכה לחזור על עצמה.
 - **list_reminders**: הצגת כל התזכורות החוזרות
@@ -423,6 +447,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
 ${leadPrompt}
 ${memoriesBlock}
+${entitiesBlock}
 ${summariesBlock}
 ${skillsBlock}
 ${isQuietHours ? '\n## שעות שקטות (לילה)\nעכשיו שעות לילה. תן תשובות קצרות במיוחד. אם הבקשה לא דחופה, הצע לאלון לטפל בזה בבוקר.\n' : ''}${isShabbat ? '\n## שבת\nעכשיו שבת. תן תשובות קצרות, אל תציע פעולות עסקיות.\n' : ''}`;

@@ -10,8 +10,8 @@ const handler: ToolHandler = {
       type: 'object' as const,
       properties: {
         content: { type: 'string' },
-        type: { type: 'string', enum: ['fact', 'preference', 'event', 'pattern', 'relationship'] },
-        category: { type: 'string', enum: ['personal', 'work_dekel', 'work_mazpen', 'work_alon_dev', 'work_aliza', 'health', 'finance'] },
+        type: { type: 'string', enum: ['fact', 'preference', 'event', 'pattern', 'relationship', 'feedback', 'rule', 'document'] },
+        category: { type: 'string', enum: ['personal', 'work_dekel', 'work_mazpen', 'work_alon_dev', 'work_aliza', 'health', 'finance', 'feedback', 'rule'] },
         importance: { type: 'number', description: '1-10' },
       },
       required: ['content', 'type'],

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { getHistory, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary } from './memory.js';
+import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory } from './memory.js';
 import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
 import { VOICE_PRESETS } from '../tools/handlers/send-voice.js';
 import { searchKnowledge } from './knowledge.js';
@@ -83,12 +83,24 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Save user message
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'user', msg.text);
 
-  // Build conversation
+  // Extract entities from user message (async, non-blocking)
+  try { extractEntities(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
+
+  // Build conversation with smart context (relevant old messages beyond the window)
   const history = getHistory(msg.channel, msg.senderId);
-  const messages: Anthropic.MessageParam[] = history.map(h => ({
-    role: h.role as 'user' | 'assistant',
-    content: h.content,
-  }));
+  const smartCtx = getSmartContext(msg.channel, msg.senderId, msg.text);
+  const messages: Anthropic.MessageParam[] = [];
+
+  // Inject smart context as early system-like messages (before recent history)
+  if (smartCtx.length > 0) {
+    messages.push({ role: 'user', content: '[הקשר רלוונטי משיחות קודמות]\n' + smartCtx.map(s => `${s.role}: ${s.content}`).join('\n') });
+    messages.push({ role: 'assistant', content: 'הבנתי, אני זוכר את ההקשר הזה.' });
+  }
+
+  // Add recent conversation history
+  for (const h of history) {
+    messages.push({ role: h.role as 'user' | 'assistant', content: h.content });
+  }
 
   // If user sent an image, add it to the last message as vision content
   if (msg.image) {
@@ -417,6 +429,17 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
 
   // Save assistant response WITHOUT footer (keeps history clean for Claude)
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
+
+  // Index document/image content to memory (non-blocking)
+  if (msg.document || msg.image) {
+    try {
+      const docType = msg.document ? 'pdf' : 'image';
+      // Index the AI's analysis of the document as searchable memory
+      if (replyText.length > 50) {
+        indexDocumentToMemory(replyText, `${msg.channel}:${msg.senderId}:${Date.now()}`, docType);
+      }
+    } catch { /* non-critical */ }
+  }
 
   // Prepend opus indicator (display-only, not in history)
   if (useOpus) {
