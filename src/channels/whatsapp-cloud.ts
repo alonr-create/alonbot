@@ -141,6 +141,14 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
 
     log.debug({ from: senderId, type: msg.type }, 'Cloud API message received');
 
+    // Auto-upsert lead in leads table for dashboard tracking
+    try {
+      const pushName = senderName !== senderId ? senderName : '';
+      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'whatsapp', datetime('now'), datetime('now')) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = datetime('now')`).run(senderId, pushName, pushName);
+    } catch (e: any) {
+      log.warn({ err: e.message, senderId }, 'lead upsert failed');
+    }
+
     // Security: check allowed list or lead status
     const isAllowed = config.allowedWhatsApp.length === 0 || config.allowedWhatsApp.includes(senderId);
     let isLead = false;

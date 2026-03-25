@@ -13,7 +13,6 @@ const log = createLogger('server');
 // Cache HTML at startup (no server-side variables needed)
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
-const waManagerHTML = readFileSync(join(import.meta.dirname, '../views/wa-manager.html'), 'utf-8');
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const swJS = readFileSync(join(import.meta.dirname, '../views/sw.js'), 'utf-8');
@@ -985,10 +984,10 @@ app.get('/wa-inbox', dashAuth, (_req, res) => {
   res.send(waInboxHTML);
 });
 
-// WA Manager HTML
-app.get('/wa-manager', dashAuth, (_req, res) => {
-  res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(waManagerHTML);
+// WA Manager — redirect to unified wa-inbox
+app.get('/wa-manager', dashAuth, (req, res) => {
+  const token = req.query.token || '';
+  res.redirect(`/wa-inbox${token ? '?token=' + token : ''}`);
 });
 
 // Dashboard HTML
