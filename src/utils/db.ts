@@ -7,6 +7,7 @@ import { mkdirSync } from 'fs';
 const log = createLogger('db');
 
 mkdirSync(config.dataDir, { recursive: true });
+log.info({ dataDir: config.dataDir, dbPath: `${config.dataDir}/alonbot.db` }, 'database location');
 
 const db: DatabaseType = new Database(`${config.dataDir}/alonbot.db`);
 db.pragma('journal_mode = WAL');
