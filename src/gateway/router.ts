@@ -221,11 +221,21 @@ async function notifyLeadMessage(msg: UnifiedMessage) {
   const targetId = config.allowedTelegram[0];
   if (!targetId || !config.telegramBotToken) return;
   try {
+    const { db } = await import('../utils/db.js');
+    const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(msg.senderId) as any;
+
+    // Detect hot lead: responded to campaign, or first message from unknown number
+    const isHot = !lead || lead.source === 'alon_dev_whatsapp' || lead.source === 'alon_dev' || lead.source === 'campaign';
+    const isFirstReply = !lead || !db.prepare("SELECT 1 FROM messages WHERE channel = 'whatsapp-inbound' AND sender_id = ? AND role = 'user' LIMIT 1").get(msg.senderId);
+
+    const hotTag = isHot && isFirstReply ? '🔥 ליד חם! תגובה ראשונה לקמפיין!\n' : '';
+    const statusTag = lead?.lead_status ? `📋 סטטוס: ${lead.lead_status}\n` : '';
+
     const { Bot } = await import('grammy');
     const bot = new Bot(config.telegramBotToken);
     const preview = msg.text ? msg.text.slice(0, 200) : '(תמונה/קובץ/קולי)';
     await bot.api.sendMessage(Number(targetId),
-      `📩 הודעת WhatsApp חדשה!\n\n👤 ${msg.senderName || msg.senderId}\n💬 ${preview}`
+      `📩 הודעת WhatsApp חדשה!\n${hotTag}\n👤 ${msg.senderName || msg.senderId}\n${statusTag}💬 ${preview}`
     );
   } catch (e: any) {
     log.debug({ err: e.message }, 'lead notification failed');

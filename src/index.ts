@@ -332,6 +332,57 @@ cron.schedule('*/5 * * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
+// Lead follow-up — 10:00 and 16:00 Israel time, send follow-ups to silent leads
+cron.schedule('0 10,16 * * 0-4', async () => {
+  if (isDND()) return;
+  try {
+    // Find leads where:
+    // 1. Last message was from the bot (assistant) — lead didn't reply
+    // 2. Last message was 18-48 hours ago (not too soon, not too late)
+    // 3. Lead hasn't been followed up more than 2 times
+    const silentLeads = db.prepare(`
+      SELECT m.sender_id as phone, l.name, l.source,
+        MAX(m.created_at) as last_msg_time,
+        (SELECT COUNT(*) FROM messages WHERE channel = 'whatsapp-inbound' AND sender_id = m.sender_id AND role = 'assistant' AND content LIKE '%לא שכחתי%') as followup_count
+      FROM messages m
+      JOIN leads l ON l.phone = m.sender_id
+      WHERE m.channel = 'whatsapp-inbound'
+        AND m.role = 'assistant'
+        AND l.was_booked = 0
+        AND l.lead_status NOT IN ('refused', 'not_relevant', 'done')
+        AND m.sender_id NOT IN (${config.allowedWhatsApp.map(() => '?').join(',') || "'none'"})
+      GROUP BY m.sender_id
+      HAVING last_msg_time < datetime('now', '-18 hours')
+        AND last_msg_time > datetime('now', '-48 hours')
+        AND followup_count < 2
+        AND (SELECT role FROM messages WHERE channel = 'whatsapp-inbound' AND sender_id = m.sender_id ORDER BY created_at DESC LIMIT 1) = 'assistant'
+    `).all(...config.allowedWhatsApp) as any[];
+
+    for (const lead of silentLeads) {
+      log.info({ phone: lead.phone, name: lead.name }, 'sending lead follow-up');
+
+      // Use sendAgentMessage so Claude generates a personalized follow-up
+      await sendAgentMessage('whatsapp', lead.phone,
+        `[SYSTEM: שלח פולואפ קצר וחם ל-${lead.name || 'הליד'}. הם לא ענו להודעה האחרונה שלך. תזכיר בקצרה מה הצעת ותשאל אם עדיין מעוניינים. אל תהיה דוחף מדי — הודעה אחת קצרה.]`
+      );
+
+      // Small delay between messages to avoid rate limits
+      await new Promise(r => setTimeout(r, 5000));
+    }
+
+    if (silentLeads.length > 0) {
+      const targetId = config.allowedTelegram[0];
+      if (targetId) {
+        await sendToChannel('telegram', targetId,
+          `📤 נשלחו ${silentLeads.length} פולואפים ללידים שלא ענו:\n${silentLeads.map(l => `- ${l.name || l.phone}`).join('\n')}`
+        );
+      }
+    }
+  } catch (e: any) {
+    log.error({ err: e.message }, 'lead follow-up cron failed');
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
 // Memory maintenance — daily at 03:00 (decay, consolidate, cleanup)
 cron.schedule('0 3 * * *', () => {
   log.info('memory maintenance starting');
