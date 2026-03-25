@@ -104,11 +104,26 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     res.sendStatus(200);
   }
 
+  // Dedup at adapter level — prevent processing same wamid twice
+  const processedWamIds = new Map<string, number>();
+  setInterval(() => {
+    const cutoff = Date.now() - 600_000; // 10 min
+    for (const [k, v] of processedWamIds) if (v < cutoff) processedWamIds.delete(k);
+  }, 120_000);
+
   async function processIncomingMessage(msg: any, contacts?: any[] | null, overrideFrom?: string) {
     if (!messageHandler) return;
 
     const from = overrideFrom || msg.from;
     if (!from) return;
+
+    // Dedup by wamid
+    const wamid = msg.id;
+    if (wamid && processedWamIds.has(wamid)) {
+      log.warn({ wamid }, 'duplicate wamid skipped');
+      return;
+    }
+    if (wamid) processedWamIds.set(wamid, Date.now());
 
     // Normalize phone number
     let senderId = from.replace(/^\+/, '');
