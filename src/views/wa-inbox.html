@@ -1035,7 +1035,9 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 <script>
 // ===== CONFIG =====
-const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+const _urlToken = new URLSearchParams(window.location.search).get('token');
+if (_urlToken) localStorage.setItem('wa_token', _urlToken);
+const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
 const API = '/api/wa-manager';
 const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
 let seenPhones = new Set(); // phones we've opened at least once

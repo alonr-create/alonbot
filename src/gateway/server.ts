@@ -1193,8 +1193,8 @@ app.post('/api/wa-manager/create-template', dashAuth, async (req, res) => {
   }
 });
 
-// WA Inbox HTML
-app.get('/wa-inbox', dashAuth, (_req, res) => {
+// WA Inbox HTML — served without auth (API calls still require token)
+app.get('/wa-inbox', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(waInboxHTML);
 });
