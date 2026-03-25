@@ -637,6 +637,40 @@ html,body{
   text-align:center;padding:20px;color:var(--text-muted);font-size:13px;
 }
 
+/* ===== ANALYTICS SCREEN ===== */
+.analytics-content{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
+.analytics-content::-webkit-scrollbar{display:none;}
+.ana-card{
+  background:var(--bg-secondary);border-radius:12px;
+  padding:16px;margin-bottom:12px;
+}
+.ana-card-title{
+  font-size:13px;font-weight:600;color:var(--blue);
+  text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;
+}
+.ana-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 0;border-bottom:1px solid rgba(42,57,66,.4);
+}
+.ana-row:last-child{border-bottom:none;}
+.ana-label{font-size:14px;color:var(--text-muted);}
+.ana-value{font-size:14px;font-weight:600;color:var(--text);}
+.ana-badge{
+  display:inline-block;padding:2px 10px;border-radius:10px;
+  font-size:12px;font-weight:600;
+}
+.ana-badge.green{background:#00875a33;color:#00c853;}
+.ana-badge.yellow{background:#f9a82533;color:#ffc107;}
+.ana-badge.red{background:#e5393533;color:#ff5252;}
+.ana-badge.blue{background:#0088cc33;color:#0099e6;}
+.ana-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
+.ana-mini-card{
+  background:rgba(0,136,204,.08);border-radius:10px;
+  padding:12px;text-align:center;
+}
+.ana-mini-num{font-size:22px;font-weight:700;color:var(--blue);}
+.ana-mini-label{font-size:11px;color:var(--text-muted);margin-top:2px;}
+
 /* ===== LEAD STATS BAR ===== */
 .stats-bar{
   display:flex;gap:8px;padding:8px 12px;overflow-x:auto;
@@ -687,6 +721,7 @@ html,body{
         <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
         <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
       </div>
+      <div class="filter-pills" id="sourceFilters" style="margin-top:4px;"></div>
     </div>
     <div class="ptr-indicator" id="ptrIndicator">&#8635; שחרר לרענון</div>
     <div class="stats-bar" id="leadStats"></div>
@@ -733,17 +768,16 @@ html,body{
     <div class="details-body" id="detailsBody"></div>
   </div>
 
-  <!-- ===== UPDATES SCREEN ===== -->
+  <!-- ===== ANALYTICS SCREEN ===== -->
   <div id="screen-updates" class="screen hidden">
     <div class="list-header">
       <div class="list-header-row">
-        <span class="list-title">עדכונים</span>
+        <span class="list-title">&#128200; אנליטיקס</span>
+        <button class="chat-action-btn" onclick="loadAnalytics()" title="רענן">&#8635;</button>
       </div>
     </div>
-    <div class="placeholder-screen">
-      <div class="ph-icon">&#128276;</div>
-      <div class="ph-title">אין עדכונים חדשים</div>
-      <div class="ph-desc">עדכוני סטטוס ופעילות יופיעו כאן</div>
+    <div class="analytics-content" id="analyticsContent">
+      <div class="spinner"></div>
     </div>
   </div>
 
@@ -839,8 +873,8 @@ html,body{
   <!-- ===== BOTTOM TAB BAR ===== -->
   <div class="tab-bar" id="tabBar">
     <div class="tab-item" data-tab="updates" onclick="switchTab('updates')">
-      <div class="tab-icon">&#128276;</div>
-      <div class="tab-label">עדכונים</div>
+      <div class="tab-icon">&#128200;</div>
+      <div class="tab-label">אנליטיקס</div>
     </div>
     <div class="tab-item active" data-tab="list" onclick="switchTab('list')">
       <div class="tab-icon">&#128172;</div>
@@ -877,6 +911,7 @@ const AVATAR_COLORS = ['#e17055','#00b894','#0088cc','#6c5ce7','#fdcb6e','#e8439
 let contacts = [];
 let filteredContacts = [];
 let currentFilter = 'all';
+let currentSource = 'all';
 let currentPhone = null;
 let currentMessages = [];
 let pollTimer = null;
@@ -960,6 +995,7 @@ async function loadContacts() {
     if (data.success) {
       contacts = data.leads || [];
       contacts.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
+      buildSourcePills();
       applyFilter();
       updateUnreadBadge();
       if (typeof checkNewMessages === 'function') checkNewMessages();
@@ -972,10 +1008,11 @@ async function loadContacts() {
 function applyFilter() {
   const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   filteredContacts = contacts.filter(c => {
+    if (currentSource !== 'all' && c.source !== currentSource) return false;
     if (currentFilter === 'new' && c.lead_status !== 'new') return false;
     if (currentFilter === 'vip' && c.lead_status !== 'vip') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
-    if (currentFilter === 'replied' && c.last_message_role !== 'user') return false;
+    if (currentFilter === 'replied' && !(c.user_reply_count > 0)) return false;
     if (q && !(c.name || '').toLowerCase().includes(q) && !(c.phone || '').includes(q)) return false;
     return true;
   });
@@ -986,9 +1023,40 @@ function filterContacts() { applyFilter(); }
 
 function setFilter(f, el) {
   currentFilter = f;
-  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('[data-filter]').forEach(p => p.classList.remove('active'));
   el.classList.add('active');
   applyFilter();
+}
+
+function setSource(src, el) {
+  currentSource = src;
+  document.querySelectorAll('[data-source]').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  applyFilter();
+}
+
+const SOURCE_LABELS = {
+  'alon_dev': 'Alon.dev',
+  'voice_agent': 'Voice Agent',
+  'whatsapp': 'WhatsApp',
+  'alon_dev_whatsapp': 'WA Campaign',
+  'campaign': 'Campaign',
+};
+
+function buildSourcePills() {
+  const sources = {};
+  contacts.forEach(c => {
+    const s = c.source || 'other';
+    sources[s] = (sources[s] || 0) + 1;
+  });
+  const el = document.getElementById('sourceFilters');
+  if (!el || Object.keys(sources).length <= 1) { if (el) el.innerHTML = ''; return; }
+  let html = '<button class="filter-pill ' + (currentSource === 'all' ? 'active' : '') + '" data-source="all" onclick="setSource(\'all\',this)">הכל</button>';
+  Object.entries(sources).sort((a, b) => b[1] - a[1]).forEach(([src, count]) => {
+    const label = SOURCE_LABELS[src] || src;
+    html += `<button class="filter-pill ${currentSource === src ? 'active' : ''}" data-source="${esc(src)}" onclick="setSource('${esc(src)}',this)">${esc(label)} (${count})</button>`;
+  });
+  el.innerHTML = html;
 }
 
 function renderContactList() {
@@ -1053,6 +1121,8 @@ function switchTab(tab) {
       el.className = 'screen hidden';
     }
   });
+
+  if (tab === 'updates') loadAnalytics();
 
   // Show/hide tab bar
   document.getElementById('tabBar').style.display = 'flex';
@@ -1750,6 +1820,125 @@ async function requestNotifPermission() {
   }
 }
 
+/* ===== ANALYTICS ===== */
+async function loadAnalytics() {
+  const el = document.getElementById('analyticsContent');
+  if (!el) return;
+  el.innerHTML = '<div class="spinner"></div>';
+
+  // Load meta health + internal stats in parallel
+  const [metaRes, statsRes] = await Promise.allSettled([
+    api('/meta-health'),
+    api('/stats')
+  ]);
+
+  const meta = metaRes.status === 'fulfilled' ? metaRes.value : null;
+  const stats = statsRes.status === 'fulfilled' ? statsRes.value : null;
+
+  let html = '';
+
+  // WhatsApp Number Health
+  if (meta?.success && meta.phone) {
+    const p = meta.phone;
+    const qualityClass = p.quality_rating === 'GREEN' ? 'green' : p.quality_rating === 'YELLOW' ? 'yellow' : 'red';
+    const limitMap = { TIER_1K: '1,000', TIER_10K: '10,000', TIER_100K: '100,000', TIER_UNLIMITED: 'ללא הגבלה' };
+    html += `<div class="ana-card">
+      <div class="ana-card-title">&#128222; בריאות המספר</div>
+      <div class="ana-row">
+        <span class="ana-label">שם מאומת</span>
+        <span class="ana-value">${esc(p.verified_name || '-')}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">מספר</span>
+        <span class="ana-value" dir="ltr">${esc(p.display_phone_number || '-')}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">איכות</span>
+        <span class="ana-badge ${qualityClass}">${p.quality_rating || '?'}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">מגבלת הודעות</span>
+        <span class="ana-value">${limitMap[p.messaging_limit_tier] || p.messaging_limit_tier || '?'}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">פלטפורמה</span>
+        <span class="ana-value">${p.platform_type || 'Cloud API'}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">סטטוס שם</span>
+        <span class="ana-badge ${p.name_status === 'APPROVED' ? 'green' : 'yellow'}">${p.name_status || '?'}</span>
+      </div>
+    </div>`;
+  } else {
+    html += `<div class="ana-card"><div class="ana-card-title">&#128222; בריאות המספר</div><div style="color:var(--text-muted);font-size:13px;">לא זמין — Cloud API לא מוגדר</div></div>`;
+  }
+
+  // WABA Account
+  if (meta?.waba?.name) {
+    html += `<div class="ana-card">
+      <div class="ana-card-title">&#127970; חשבון WABA</div>
+      <div class="ana-row">
+        <span class="ana-label">שם</span>
+        <span class="ana-value">${esc(meta.waba.name)}</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">סטטוס</span>
+        <span class="ana-badge ${meta.waba.review_status === 'APPROVED' ? 'green' : 'yellow'}">${meta.waba.review_status || '?'}</span>
+      </div>
+    </div>`;
+  }
+
+  // Facebook Ads
+  if (meta?.ads) {
+    const a = meta.ads;
+    const leads = (a.actions || []).find(x => x.action_type === 'lead');
+    const msgs = (a.actions || []).find(x => x.action_type === 'onsite_conversion.messaging_conversation_started_7d');
+    html += `<div class="ana-card">
+      <div class="ana-card-title">&#128184; פייסבוק Ads (7 ימים)</div>
+      <div class="ana-grid">
+        <div class="ana-mini-card"><div class="ana-mini-num">${a.spend ? '&#8362;' + Math.round(parseFloat(a.spend)) : '0'}</div><div class="ana-mini-label">הוצאה</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${a.impressions ? parseInt(a.impressions).toLocaleString() : '0'}</div><div class="ana-mini-label">חשיפות</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${a.clicks || '0'}</div><div class="ana-mini-label">קליקים</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${a.ctr ? parseFloat(a.ctr).toFixed(1) + '%' : '0%'}</div><div class="ana-mini-label">CTR</div></div>
+      </div>
+      ${leads ? `<div class="ana-row" style="margin-top:8px;"><span class="ana-label">לידים</span><span class="ana-badge green">${leads.value}</span></div>` : ''}
+      ${msgs ? `<div class="ana-row"><span class="ana-label">שיחות WA</span><span class="ana-badge blue">${msgs.value}</span></div>` : ''}
+    </div>`;
+  }
+
+  // Internal Stats
+  if (stats?.success) {
+    html += `<div class="ana-card">
+      <div class="ana-card-title">&#128202; סטטיסטיקות CRM</div>
+      <div class="ana-grid">
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.totalLeads || 0}</div><div class="ana-mini-label">לידים</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.activeConvos || 0}</div><div class="ana-mini-label">שיחות פעילות</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.messagesToday || 0}</div><div class="ana-mini-label">הודעות היום</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.avgResponseMin || '-'}</div><div class="ana-mini-label">זמן תגובה (דק')</div></div>
+      </div>
+      <div class="ana-row" style="margin-top:8px;">
+        <span class="ana-label">שיעור תגובה</span>
+        <span class="ana-badge blue">${stats.responseRate || 0}%</span>
+      </div>
+      <div class="ana-row">
+        <span class="ana-label">ממתינים לטיפול</span>
+        <span class="ana-value">${stats.pendingFollowups || 0}</span>
+      </div>
+    </div>`;
+
+    // Source breakdown
+    if (stats.sourceBreakdown?.length) {
+      html += `<div class="ana-card"><div class="ana-card-title">&#127760; מקורות</div>`;
+      stats.sourceBreakdown.forEach(s => {
+        html += `<div class="ana-row"><span class="ana-label">${esc(s.source || 'לא ידוע')}</span><span class="ana-badge blue">${s.count}</span></div>`;
+      });
+      html += '</div>';
+    }
+  }
+
+  el.innerHTML = html || '<div style="text-align:center;color:var(--text-muted);padding:40px;">אין נתונים</div>';
+}
+
 /* ===== LEAD STATS ===== */
 async function loadLeadStats() {
   try {
@@ -1757,7 +1946,7 @@ async function loadLeadStats() {
     if (!data.success) return;
     const statsEl = document.getElementById('leadStats');
     if (!statsEl) return;
-    const replied = contacts.filter(c => c.last_message_role === 'user').length;
+    const replied = contacts.filter(c => c.user_reply_count > 0).length;
     statsEl.innerHTML = `
       <div class="stat-card"><div class="stat-num">${data.totalLeads || 0}</div><div class="stat-label">לידים</div></div>
       <div class="stat-card"><div class="stat-num">${replied}</div><div class="stat-label">ענו</div></div>

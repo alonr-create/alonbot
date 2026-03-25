@@ -600,6 +600,94 @@ app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
   }
 });
 
+// ── Meta Health: WhatsApp number quality + WABA status + Ads overview ──
+app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
+  try {
+    const token = config.waCloudToken;
+    const phoneId = config.waCloudPhoneId;
+    const wabaId = config.waCloudWabaId;
+    if (!token || !phoneId) {
+      res.json({ success: false, error: 'WhatsApp Cloud API not configured' });
+      return;
+    }
+    // Phone number quality + status
+    const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${phoneId}?fields=verified_name,quality_rating,display_phone_number,platform_type,code_verification_status,name_status,messaging_limit_tier`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const phoneData = await phoneRes.json();
+
+    // WABA account info
+    let wabaData: any = {};
+    if (wabaId) {
+      const wabaRes = await fetch(`https://graph.facebook.com/v21.0/${wabaId}?fields=name,account_review_status,message_template_namespace,timezone_id`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      wabaData = await wabaRes.json();
+    }
+
+    // Facebook Ads overview for alon.dev account
+    let adsData: any = null;
+    if (config.fbAccessToken) {
+      try {
+        const adsRes = await fetch(`https://graph.facebook.com/v21.0/act_1314904720689466/insights?fields=spend,impressions,clicks,actions,cpc,ctr,cpp&date_preset=last_7d&access_token=${config.fbAccessToken}`);
+        const adsJson = await adsRes.json();
+        adsData = adsJson.data?.[0] || null;
+      } catch {}
+    }
+
+    res.json({
+      success: true,
+      phone: {
+        verified_name: phoneData.verified_name,
+        quality_rating: phoneData.quality_rating,
+        display_phone_number: phoneData.display_phone_number,
+        platform_type: phoneData.platform_type,
+        name_status: phoneData.name_status,
+        messaging_limit_tier: phoneData.messaging_limit_tier,
+      },
+      waba: {
+        name: wabaData.name,
+        review_status: wabaData.account_review_status,
+      },
+      ads: adsData,
+    });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ── Profile Picture: lookup WhatsApp contact profile pic ──
+app.get('/api/wa-manager/profile-pic/:phone', dashAuth, async (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const token = config.waCloudToken;
+
+    // Check cache in DB first
+    const cached = db.prepare('SELECT profile_pic_url FROM leads WHERE phone = ?').get(phone) as any;
+    if (cached?.profile_pic_url) {
+      res.json({ success: true, url: cached.profile_pic_url });
+      return;
+    }
+
+    // Try WhatsApp Cloud API contacts endpoint
+    if (token && config.waCloudPhoneId) {
+      try {
+        const contactRes = await fetch(`https://graph.facebook.com/v21.0/${config.waCloudPhoneId}/contacts`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ blocking: 'wait', contacts: [`+${phone}`] })
+        });
+        const contactData = await contactRes.json();
+        // Note: Cloud API doesn't actually return profile pics, this is a best-effort attempt
+      } catch {}
+    }
+
+    res.json({ success: true, url: null });
+  } catch (e: any) {
+    res.json({ success: false, url: null });
+  }
+});
+
 app.get('/api/wa-manager/leads', dashAuth, (req, res) => {
   try {
     const workspace = req.query.workspace as string | undefined;
@@ -611,6 +699,7 @@ app.get('/api/wa-manager/leads', dashAuth, (req, res) => {
         (SELECT m.content FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message,
         (SELECT m.created_at FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message_at,
         (SELECT m.role FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound') ORDER BY m.id DESC LIMIT 1) as last_message_role,
+        (SELECT COUNT(*) FROM messages m WHERE m.sender_id = l.phone AND m.channel IN ('whatsapp','whatsapp-inbound') AND m.role = 'user') as user_reply_count,
         (SELECT GROUP_CONCAT(tag, ',') FROM lead_tags lt WHERE lt.phone = l.phone) as tags_csv
       FROM leads l ${whereClause} ORDER BY l.updated_at DESC
     `).all(...params) as any[];
