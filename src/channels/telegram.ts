@@ -600,14 +600,17 @@ export function createTelegramAdapter(): ChannelAdapter {
       try {
         await bot.api.setMyCommands([
           { command: 'menu', description: 'תפריט פעולות מהירות' },
+          { command: 'monday', description: 'מאנדי — לידים, משימות, בורדים' },
+          { command: 'ads', description: 'פייסבוק — קמפיינים, תקציב, ביצועים' },
+          { command: 'calendar', description: 'יומן — פגישות, תזכורות' },
+          { command: 'email', description: 'שלח מייל' },
+          { command: 'voice', description: 'הודעה קולית (קול אלון)' },
+          { command: 'image', description: 'צור תמונה עם AI' },
+          { command: 'search', description: 'חיפוש באינטרנט' },
+          { command: 'site', description: 'בנה אתר / deploy' },
           { command: 'tasks', description: 'משימות פתוחות' },
-          { command: 'opus', description: 'שאלה ל-Claude Opus (מודל חזק)' },
-          { command: 'summary', description: 'סיכום השיחה האחרונה' },
-          { command: 'search', description: 'חיפוש בהיסטוריה' },
-          { command: 'backup', description: 'גיבוי מסד נתונים' },
-          { command: 'dashboard', description: 'פתח דאשבורד' },
-          { command: 'export', description: 'ייצוא היסטוריית שיחה' },
-          { command: 'help', description: 'מה אני יודע לעשות?' },
+          { command: 'opus', description: 'שאלה ל-Claude Opus' },
+          { command: 'help', description: 'כל היכולות שלי' },
         ]);
       } catch (e: any) {
         log.warn({ err: e.message }, 'failed to set commands');
