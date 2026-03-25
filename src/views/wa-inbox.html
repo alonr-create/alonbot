@@ -75,6 +75,15 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   border-radius:8px;font-size:10px;margin-right:4px;font-weight:700;
 }
 .filter-tab.active .count{background:rgba(255,255,255,.25);}
+.biz-filter{padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;color:var(--text2);transition:all .15s;font-weight:500;}
+.biz-filter:hover{background:var(--bg3);}
+.biz-filter.active{background:var(--text);color:#fff;border-color:var(--text);}
+.biz-tag{display:inline-block;font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;margin-right:4px;flex-shrink:0;vertical-align:middle;}
+.biz-tag.dekel{background:#e0f2fe;color:#0369a1;}
+.biz-tag.voice_agent{background:#e0f2fe;color:#0369a1;}
+.biz-tag.alon_dev{background:#fef3c7;color:#92400e;}
+.biz-tag.campaign{background:#ede9fe;color:#6d28d9;}
+.biz-tag.whatsapp{background:#e7fce9;color:#15803d;}
 .contacts-list{flex:1;overflow-y:auto;overflow-x:hidden;}
 .contacts-list::-webkit-scrollbar{width:4px;}
 .contacts-list::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
@@ -481,6 +490,12 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
       <button class="filter-tab" data-filter="unanswered" onclick="setFilter('unanswered',this)">ממתינים</button>
       <button class="filter-tab" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו</button>
     </div>
+    <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
+      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">🔵 הכל</button>
+      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל</button>
+      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
+      <button class="biz-filter" data-biz="whatsapp" onclick="setBizFilter('whatsapp',this)">💬 אורגני</button>
+    </div>
     <div class="contacts-list" id="contactsList">
       <!-- dynamically populated -->
     </div>
@@ -531,7 +546,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
         <div class="detail-avatar" id="detailAvatar"></div>
         <div class="detail-name" id="detailName"></div>
         <div class="detail-phone" id="detailPhone"></div>
-        <div class="detail-channel">
+        <div class="detail-channel" id="detailBiz">
           <span>📱</span> WhatsApp
         </div>
       </div>
@@ -841,6 +856,21 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+// ===== BUSINESS FILTER =====
+let currentBizFilter = 'all';
+function setBizFilter(biz, btn) {
+  currentBizFilter = biz;
+  document.querySelectorAll('.biz-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderContacts();
+}
+function getBizLabel(source) {
+  if (!source) return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
+  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: 'דקל', cls: 'dekel' };
+  if (source.includes('alon_dev') || source === 'campaign') return { emoji: '💻', label: 'Alon.dev', cls: 'alon_dev' };
+  return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
+}
+
 // ===== FORMAT TIME =====
 // DB stores datetime('now') as UTC without timezone — parse as UTC
 function parseUTC(ts) {
@@ -1014,6 +1044,17 @@ function renderContacts() {
     filtered = filtered.filter(c => c.unread > 0);
   }
 
+  // Apply business filter
+  if (currentBizFilter !== 'all') {
+    filtered = filtered.filter(c => {
+      const biz = getBizLabel(c.source);
+      if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
+      if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
+      if (currentBizFilter === 'whatsapp') return biz.cls === 'whatsapp';
+      return true;
+    });
+  }
+
   // Apply search
   if (searchQuery) {
     const q = searchQuery.toLowerCase();
@@ -1050,6 +1091,7 @@ function renderContacts() {
     const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
 
+    const biz = getBizLabel(c.source);
     return `
       <div class="contact-item ${isActive ? 'active' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
         <div class="contact-avatar" style="background:${color};pointer-events:none;">
@@ -1058,10 +1100,10 @@ function renderContacts() {
         </div>
         <div class="contact-body" style="pointer-events:none;">
           <div class="contact-row" style="pointer-events:none;">
-            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}</span>
+            <span class="contact-name" style="pointer-events:none;"><span class="biz-tag ${biz.cls}">${biz.emoji} ${biz.label}</span>${esc(c.name)}</span>
             <span class="${timeClass}" style="pointer-events:none;">${formatTime(c.lastTime)}</span>
           </div>
-          <div class="contact-preview" style="pointer-events:none;">${c.isCampaign ? '<span style="font-size:9px;background:#6366f1;color:#fff;border-radius:3px;padding:0 4px;flex-shrink:0;">🚀</span> ' : ''}${preview}</div>
+          <div class="contact-preview" style="pointer-events:none;">${preview}</div>
         </div>
         ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
       </div>
@@ -1431,6 +1473,8 @@ async function loadContactDetails(phone, contact) {
   document.getElementById('detailAvatar').textContent = initials;
   document.getElementById('detailName').textContent = contact.name;
   document.getElementById('detailPhone').textContent = phone;
+  const biz = getBizLabel(contact.source);
+  document.getElementById('detailBiz').innerHTML = `<span class="biz-tag ${biz.cls}" style="font-size:11px;padding:2px 8px;">${biz.emoji} ${biz.label}</span> <span style="color:var(--text3);font-size:12px;">📱 WhatsApp</span>`;
   document.getElementById('detailStatus').value = contact.status || 'new';
 
   // Load tags
@@ -2071,30 +2115,34 @@ async function loadOverview() {
 
 function renderOverviewStats() {
   const s = overviewStats;
+  // Count leads by business
+  const dekelCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'dekel').length;
+  const alonCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'alon_dev').length;
+  const organicCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'whatsapp').length;
   document.getElementById('overviewStats').innerHTML = `
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
       <div style="font-size:32px;font-weight:900;color:var(--accent);">${s.totalLeads || 0}</div>
       <div style="font-size:12px;color:var(--text2);margin-top:4px;">סה"כ לידים</div>
     </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
-      <div style="font-size:32px;font-weight:900;color:#0099cc;">${s.activeConvos || 0}</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:4px;">שיחות פעילות (7 ימים)</div>
+    <div style="background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border:1px solid #7dd3fc;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#0369a1;">${dekelCount}</div>
+      <div style="font-size:12px;color:#0369a1;margin-top:4px;">🏡 דקל לפרישה</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1px solid #fcd34d;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#92400e;">${alonCount}</div>
+      <div style="font-size:12px;color:#92400e;margin-top:4px;">💻 Alon.dev</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#e7fce9,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#15803d;">${organicCount}</div>
+      <div style="font-size:12px;color:#15803d;margin-top:4px;">💬 אורגני</div>
     </div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
       <div style="font-size:32px;font-weight:900;color:#7b2ff7;">${s.messagesToday || 0}</div>
       <div style="font-size:12px;color:var(--text2);margin-top:4px;">הודעות היום</div>
     </div>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
-      <div style="font-size:32px;font-weight:900;color:#f59e0b;">${s.responseRate || 0}%</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:4px;">שיעור מענה</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
       <div style="font-size:32px;font-weight:900;color:var(--accent);">${s.bookedCount || 0}</div>
       <div style="font-size:12px;color:var(--text2);margin-top:4px;">נקבעו פגישות</div>
-    </div>
-    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
-      <div style="font-size:32px;font-weight:900;color:#0099cc;">${s.avgResponseMin || '—'}</div>
-      <div style="font-size:12px;color:var(--text2);margin-top:4px;">זמן תגובה ממוצע (דק׳)</div>
     </div>
   `;
 }
