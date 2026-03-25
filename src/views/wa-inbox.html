@@ -941,6 +941,10 @@ const messageCache = {};
 
 async function selectContact(phone) {
   activePhone = phone;
+  // Update URL without reload so user can bookmark/share direct chat links
+  const url = new URL(window.location);
+  url.searchParams.set('chat', phone);
+  history.replaceState(null, '', url);
   renderContacts();
 
   const contact = contacts.find(c => c.phone === phone);
@@ -1384,6 +1388,9 @@ async function init() {
     return;
   }
   await loadContacts();
+  // Auto-open chat from URL param ?chat=972...
+  const chatParam = new URLSearchParams(window.location.search).get('chat');
+  if (chatParam) selectContact(chatParam);
   startPolling();
 }
 
