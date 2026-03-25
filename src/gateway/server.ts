@@ -291,7 +291,7 @@ function dashAuth(req: any, res: any, next: any) {
 
     // For HTML page requests, redirect to strip token from URL (except wa-inbox which needs it for JS API calls)
     const path = req.path;
-    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager' || path === '/wa-mobile') {
+    if (path === '/dashboard' || path === '/chat' || path === '/wa-manager') {
       res.redirect(302, path);
       return;
     }
