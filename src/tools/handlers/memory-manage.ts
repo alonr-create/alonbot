@@ -1,4 +1,4 @@
-import { getRelevantMemories, getEntities, searchEntities, forgetEntityByContent, type Memory } from '../../agent/memory.js';
+import { getRelevantMemories, getEntities, searchEntities, forgetEntityByContent, getLastTimeTalkedAbout, getSentimentTrend, getRecentTopics, type Memory } from '../../agent/memory.js';
 import { db } from '../../utils/db.js';
 import type { ToolHandler } from '../types.js';
 
@@ -132,6 +132,56 @@ const handlers: ToolHandler[] = [
       }
 
       return `נמחקו ${deleted} זיכרונות. שכחתי את זה.`;
+    },
+  },
+  {
+    name: 'memory_timeline',
+    definition: {
+      name: 'memory_timeline',
+      description: 'Search when something was discussed. Use when user asks "מתי דיברנו על X?", "when did we talk about X?", "מה היה עם X?"',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          query: { type: 'string', description: 'What to search for in conversation history and memories' },
+          channel: { type: 'string', description: 'Channel (telegram/whatsapp)' },
+          sender_id: { type: 'string', description: 'Sender ID' },
+        },
+        required: ['query'],
+      },
+    },
+    async execute(input) {
+      return getLastTimeTalkedAbout(input.query, input.channel || 'telegram', input.sender_id || '');
+    },
+  },
+  {
+    name: 'mood_check',
+    definition: {
+      name: 'mood_check',
+      description: 'Check user mood trend and sentiment history. Use when user asks "מה מצב הרוח שלי?", "how am I feeling?", or to understand emotional context.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          channel: { type: 'string', description: 'Channel (telegram/whatsapp)' },
+          sender_id: { type: 'string', description: 'Sender ID' },
+        },
+        required: [],
+      },
+    },
+    async execute(input) {
+      const trend = getSentimentTrend(input.channel || 'telegram', input.sender_id || '');
+      const topics = getRecentTopics(input.channel || 'telegram', input.sender_id || '');
+
+      let result = `😊 מצב רוח: ${trend.mood === 'positive' ? 'חיובי' : trend.mood === 'frustrated' ? 'מתוסכל' : trend.mood === 'negative' ? 'שלילי' : 'ניטרלי'}\n`;
+      result += `${trend.details}\n\n`;
+
+      if (topics.length > 0) {
+        result += `🏷️ נושאים אחרונים:\n`;
+        for (const t of topics.slice(0, 5)) {
+          result += `- ${t.topic} (${t.count} פעמים, אחרון: ${t.lastMentioned})\n`;
+        }
+      }
+
+      return result;
     },
   },
 ];

@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory } from './memory.js';
+import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory, autoSaveCorrection, trackSentiment, tagConversationTopics } from './memory.js';
 import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
 import { VOICE_PRESETS } from '../tools/handlers/send-voice.js';
 import { searchKnowledge } from './knowledge.js';
@@ -83,8 +83,17 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Save user message
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'user', msg.text);
 
-  // Extract entities from user message (async, non-blocking)
+  // Extract entities from user message (non-blocking)
   try { extractEntities(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
+
+  // Auto-detect corrections and save as feedback (non-blocking)
+  try { autoSaveCorrection(msg.text, msg.channel, msg.senderId); } catch { /* non-critical */ }
+
+  // Track sentiment (non-blocking)
+  try { trackSentiment(msg.channel, msg.senderId, msg.text); } catch { /* non-critical */ }
+
+  // Tag conversation topics (non-blocking)
+  try { tagConversationTopics(msg.channel, msg.senderId, msg.text); } catch { /* non-critical */ }
 
   // Build conversation with smart context (relevant old messages beyond the window)
   const history = getHistory(msg.channel, msg.senderId);

@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { getRelevantMemories, getRecentSummaries, getEntities, type Memory } from './memory.js';
+import { getRelevantMemories, getRecentSummaries, getEntities, getRecentMood, getRecentTopics, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { db } from '../utils/db.js';
 import { config } from '../utils/config.js';
@@ -251,6 +251,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
   } catch { /* entities table may not exist yet */ }
 
   let summariesBlock = '';
+  let moodBlock = '';
+  let topicsBlock = '';
   if (channel && senderId) {
     const summaries = getRecentSummaries(channel, senderId);
     if (summaries.length > 0) {
@@ -260,6 +262,27 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
         summariesBlock += `- ${s.from_date} עד ${s.to_date}: ${s.summary}${topics ? ` [${topics}]` : ''}\n`;
       }
     }
+
+    // Mood awareness
+    try {
+      const mood = getRecentMood(channel, senderId);
+      if (mood === 'frustrated') {
+        moodBlock = '\n## שים לב — מצב רוח\nהמשתמש נראה מתוסכל בהודעות האחרונות. תהיה סבלני במיוחד, ישיר, ותציע פתרונות קונקרטיים. אל תחזור על דברים שכבר אמרת.\n';
+      } else if (mood === 'happy') {
+        moodBlock = '\n## מצב רוח\nהמשתמש במצב רוח טוב! תמשיך עם האנרגיה החיובית.\n';
+      }
+    } catch { /* sentiment table may not exist yet */ }
+
+    // Recent conversation topics
+    try {
+      const topics = getRecentTopics(channel, senderId);
+      if (topics.length > 0) {
+        topicsBlock = '\n## נושאים אחרונים\n';
+        for (const t of topics.slice(0, 5)) {
+          topicsBlock += `- ${t.topic} (${t.count}x)\n`;
+        }
+      }
+    } catch { /* topics table may not exist yet */ }
   }
 
   // Knowledge base context is now injected as document blocks in agent.ts (for citations)
@@ -310,6 +333,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **remember**: שמירת זיכרון על אלון (עם סוג, קטגוריה, חשיבות)
 - **my_memories**: הצגת כל מה שאני זוכר (כולל סטטיסטיקות, חיפוש, ועובדות מובנות). השתמש כשאלון שואל "מה אתה זוכר?" / "מה אתה יודע עליי?"
 - **forget**: מחיקת זיכרון ספציפי (לפי ID או חיפוש). השתמש כשאלון אומר "תשכח X" / "תמחק את הזיכרון על X"
+- **memory_timeline**: חיפוש מתי דיברנו על משהו. השתמש כשאלון שואל "מתי דיברנו על X?" / "מה היה עם X?" / "when did we discuss X?"
+- **mood_check**: בדיקת מצב רוח ומגמה. השתמש כשאלון שואל "מה מצב הרוח שלי?" / "מה ההרגשה?"
 - **schedule_message**: תזכורת חד-פעמית — שליחת הודעה בזמן מסוים (פורמט: "YYYY-MM-DD HH:mm" בזמן ישראל). **השתמש בזה כשאלון אומר "תזכיר לי עוד X דקות/שעות" או "תזכיר לי ב-..."**
 - **set_reminder**: תזכורת חוזרת עם cron (יומית, שבועית וכו׳). השתמש רק כשהתזכורת צריכה לחזור על עצמה.
 - **list_reminders**: הצגת כל התזכורות החוזרות
@@ -449,6 +474,8 @@ ${leadPrompt}
 ${memoriesBlock}
 ${entitiesBlock}
 ${summariesBlock}
+${moodBlock}
+${topicsBlock}
 ${skillsBlock}
 ${isQuietHours ? '\n## שעות שקטות (לילה)\nעכשיו שעות לילה. תן תשובות קצרות במיוחד. אם הבקשה לא דחופה, הצע לאלון לטפל בזה בבוקר.\n' : ''}${isShabbat ? '\n## שבת\nעכשיו שבת. תן תשובות קצרות, אל תציע פעולות עסקיות.\n' : ''}`;
 

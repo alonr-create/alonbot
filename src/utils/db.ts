@@ -256,6 +256,31 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_entities_subject ON entities(subject);
   CREATE INDEX IF NOT EXISTS idx_entities_predicate ON entities(predicate);
 
+  CREATE TABLE IF NOT EXISTS sentiment_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    sentiment TEXT NOT NULL CHECK(sentiment IN ('positive', 'neutral', 'negative', 'frustrated')),
+    score REAL NOT NULL DEFAULT 0,
+    trigger_text TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sentiment_log_sender ON sentiment_log(channel, sender_id, created_at);
+
+  CREATE TABLE IF NOT EXISTS conversation_topics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    channel TEXT NOT NULL,
+    sender_id TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    first_mentioned TEXT NOT NULL DEFAULT (datetime('now')),
+    last_mentioned TEXT NOT NULL DEFAULT (datetime('now')),
+    mention_count INTEGER NOT NULL DEFAULT 1
+  );
+
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_topics_unique ON conversation_topics(channel, sender_id, topic);
+  CREATE INDEX IF NOT EXISTS idx_conv_topics_sender ON conversation_topics(channel, sender_id, last_mentioned DESC);
+
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
