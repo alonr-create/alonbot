@@ -949,22 +949,23 @@ async function selectContact(phone) {
   const url = new URL(window.location);
   url.searchParams.set('chat', phone);
   history.replaceState(null, '', url);
-  renderContacts();
 
   const contact = contacts.find(c => c.phone === phone);
-  if (!contact) return;
+  if (!contact) { console.warn('Contact not found:', phone); return; }
 
-  // Update header immediately
+  // Update header FIRST before any re-render
+  const headerName = contact.name || contact.phone;
+  const color = getAvatarColor(headerName);
+  const initials = getInitials(headerName);
   document.getElementById('chatHeader').style.display = 'flex';
   document.getElementById('chatInputArea').style.display = 'flex';
   document.getElementById('emptyState').style.display = 'none';
-
-  const color = getAvatarColor(contact.name);
-  const initials = getInitials(contact.name);
   document.getElementById('chatHeaderAvatar').style.background = color;
   document.getElementById('chatHeaderAvatar').textContent = initials;
-  document.getElementById('chatHeaderName').textContent = contact.name;
-  document.getElementById('chatHeaderStatus').textContent = 'מקוון';
+  document.getElementById('chatHeaderName').textContent = headerName;
+  document.getElementById('chatHeaderStatus').textContent = contact.phone;
+
+  renderContacts();
 
   // Show cached messages instantly, then refresh in background
   if (messageCache[phone]) {
