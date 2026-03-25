@@ -891,7 +891,7 @@ function renderContacts() {
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
 
     return `
-      <div class="contact-item ${isActive ? 'active' : ''}" onclick="selectContact('${c.phone}')">
+      <div class="contact-item ${isActive ? 'active' : ''}" data-phone="${c.phone}">
         <div class="contact-avatar" style="background:${color}">
           ${initials}
           ${c.online ? '<div class="online-dot"></div>' : ''}
@@ -908,6 +908,14 @@ function renderContacts() {
     `;
   }).join('');
 }
+
+// Event delegation for contact clicks
+document.getElementById('contactsList').addEventListener('click', (e) => {
+  const item = e.target.closest('.contact-item');
+  if (item && item.dataset.phone) {
+    selectContact(item.dataset.phone);
+  }
+});
 
 function truncate(s, n) {
   if (!s) return '';
