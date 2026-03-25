@@ -35,13 +35,13 @@ start_tunnel() {
   log "Tunnel URL: $TUNNEL_URL (PID: $TUNNEL_PID)"
   echo "$TUNNEL_URL" > /tmp/alonbot-tunnel-url.txt
 
-  # Update Railway voice-agent AALONBOT_URL (for post-call WhatsApp)
+  # Update Railway voice-agent ALONBOT_URL (for post-call WhatsApp)
   log "Updating Railway voice-agent..."
-  cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
+  cd "$RAILWAY_PROJECT_DIR" && railway variables --set "ALONBOT_URL=$TUNNEL_URL" 2>&1
 
-  # Register with AalonBot cloud on Render (in-memory update, no redeploy needed)
+  # Register with AlonBot cloud on Render (in-memory update, no redeploy needed)
   # Render forwards WhatsApp webhooks to local when connected
-  log "Registering with AalonBot cloud (Render)..."
+  log "Registering with AlonBot cloud (Render)..."
   curl -s -X POST "$ALONBOT_CLOUD_URL/api/register-local" \
     -H "Content-Type: application/json" \
     -H "Authorization: Bearer $ALONBOT_SECRET" \

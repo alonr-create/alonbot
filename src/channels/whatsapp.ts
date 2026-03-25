@@ -71,7 +71,7 @@ export function createWhatsAppAdapter(): ChannelAdapter {
         keys: makeCacheableSignalKeyStore(state.keys, log as any),
       },
       printQRInTerminal: false,
-      browser: ['AalonBot', 'Chrome', '22.0'],
+      browser: ['AlonBot', 'Chrome', '22.0'],
       generateHighQualityLinkPreview: false,
       syncFullHistory: false,
       markOnlineOnConnect: false,

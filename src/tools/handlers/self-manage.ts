@@ -50,7 +50,7 @@ const handlers: ToolHandler[] = [
         }
 
         // Commit
-        const commitMsg = `${input.message}\n\nSelf-deployed by AalonBot`;
+        const commitMsg = `${input.message}\n\nSelf-deployed by AlonBot`;
         await execAsync(`git commit -m ${JSON.stringify(commitMsg)}`, { timeout: 15000 });
 
         // Push

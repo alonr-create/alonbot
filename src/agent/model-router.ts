@@ -6,7 +6,7 @@
  * - Medium queries (tasks, tools, memory) → balanced model (Claude Sonnet)
  * - Complex queries (long reasoning, multi-step) → premium model (Claude Opus)
  *
- * Ported from AliClaw, adapted for AalonBot.
+ * Ported from AliClaw, adapted for AlonBot.
  */
 
 import { createLogger } from '../utils/logger.js';
@@ -144,7 +144,7 @@ function formatCost(m: ModelConfig): string {
 }
 
 /**
- * Build available models from AalonBot config + env keys
+ * Build available models from AlonBot config + env keys
  */
 export function buildModelCatalog(): ModelConfig[] {
   const models: ModelConfig[] = [];
@@ -254,7 +254,7 @@ export async function callFreeModel(
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${model.apiKey}`,
         'HTTP-Referer': 'https://alon.dev',
-        'X-Title': 'AalonBot',
+        'X-Title': 'AlonBot',
       },
       body: JSON.stringify({
         model: model.model,

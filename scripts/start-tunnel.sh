@@ -41,8 +41,8 @@ echo "[Tunnel] URL: $TUNNEL_URL"
 echo "$TUNNEL_URL" > /tmp/alonbot-tunnel-url.txt
 
 # Update Railway voice-agent env var
-echo "[Tunnel] Updating Railway voice-agent AALONBOT_URL..."
-cd "$RAILWAY_PROJECT_DIR" && railway variables --set "AALONBOT_URL=$TUNNEL_URL" 2>&1
+echo "[Tunnel] Updating Railway voice-agent ALONBOT_URL..."
+cd "$RAILWAY_PROJECT_DIR" && railway variables --set "ALONBOT_URL=$TUNNEL_URL" 2>&1
 echo "[Tunnel] Railway updated"
 
 # Verify tunnel works
