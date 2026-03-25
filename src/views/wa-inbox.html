@@ -937,6 +937,8 @@ function handleSearch(val) {
 }
 
 // ===== SELECT CONTACT =====
+const messageCache = {};
+
 async function selectContact(phone) {
   activePhone = phone;
   renderContacts();
@@ -944,7 +946,7 @@ async function selectContact(phone) {
   const contact = contacts.find(c => c.phone === phone);
   if (!contact) return;
 
-  // Update header
+  // Update header immediately
   document.getElementById('chatHeader').style.display = 'flex';
   document.getElementById('chatInputArea').style.display = 'flex';
   document.getElementById('emptyState').style.display = 'none';
@@ -956,13 +958,17 @@ async function selectContact(phone) {
   document.getElementById('chatHeaderName').textContent = contact.name;
   document.getElementById('chatHeaderStatus').textContent = 'מקוון';
 
-  // Load quick replies
+  // Show cached messages instantly, then refresh in background
+  if (messageCache[phone]) {
+    activeMessages = messageCache[phone];
+    renderMessages();
+  } else {
+    document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><div class="empty-icon">⏳</div><p>טוען...</p></div>';
+  }
+
+  // Load quick replies + messages + details in parallel
   loadQuickReplies();
-
-  // Load messages
-  await loadMessages(phone);
-
-  // Load details
+  loadMessages(phone);
   loadContactDetails(phone, contact);
 
   // Mobile: show chat
@@ -979,10 +985,13 @@ async function loadMessages(phone) {
   try {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
-    renderMessages();
+    messageCache[phone] = activeMessages;
+    if (activePhone === phone) renderMessages();
   } catch(e) {
     console.error('Failed to load messages:', e);
-    document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><p>שגיאה בטעינת השיחה</p></div>';
+    if (!messageCache[phone]) {
+      document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><p>שגיאה בטעינת השיחה</p></div>';
+    }
   }
 }
 
