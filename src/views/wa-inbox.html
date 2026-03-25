@@ -507,7 +507,8 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     <div class="quick-replies-bar" id="quickRepliesBar" style="display:none;"></div>
     <div class="chat-input-area" id="chatInputArea" style="display:none;">
       <button class="input-btn" title="אמוג'י" onclick="toggleEmoji()">😊</button>
-      <button class="input-btn" title="קובץ מצורף">📎</button>
+      <button class="input-btn" title="קובץ מצורף" onclick="document.getElementById('fileInput').click()">📎</button>
+      <input type="file" id="fileInput" style="display:none" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="handleFileSelect(event)">
       <textarea class="chat-textarea" id="chatInput" rows="1" placeholder="הקלד הודעה..." oninput="autoResize(this)" onkeydown="handleInputKey(event)"></textarea>
       <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
       <div class="emoji-picker" id="emojiPicker"></div>
@@ -1438,6 +1439,55 @@ async function sendMessage() {
   document.getElementById('typingIndicator').classList.remove('show');
   document.getElementById('sendBtn').disabled = false;
   input.focus();
+}
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file || !activePhone) return;
+  event.target.value = ''; // reset input
+
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    alert('הקובץ גדול מדי (מקסימום 10MB)');
+    return;
+  }
+
+  const caption = prompt('כיתוב (אופציונלי):', '') || '';
+
+  // Show sending indicator
+  const isImage = file.type.startsWith('image/');
+  activeMessages.push({
+    body: caption ? `${isImage ? '[תמונה]' : '[קובץ: ' + file.name + ']'} ${caption}` : (isImage ? '[תמונה]' : '[קובץ: ' + file.name + ']'),
+    direction: 'outgoing',
+    fromMe: true,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  renderMessages();
+
+  try {
+    const reader = new FileReader();
+    const base64 = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    await api('/send-media', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: activePhone,
+        caption,
+        mediaBase64: base64,
+        mimeType: file.type,
+        filename: file.name
+      })
+    });
+  } catch(e) {
+    console.error('Media send failed:', e);
+    activeMessages[activeMessages.length - 1].failed = true;
+    renderMessages();
+  }
 }
 
 function handleInputKey(e) {

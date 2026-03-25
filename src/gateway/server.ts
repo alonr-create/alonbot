@@ -611,6 +611,43 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
   }
 });
 
+// Send image/document via WhatsApp from dashboard
+app.post('/api/wa-manager/send-media', dashAuth, async (req, res) => {
+  const { phone, caption, mediaBase64, mimeType, filename } = req.body;
+  if (!phone || !mediaBase64) {
+    res.status(400).json({ success: false, error: 'Missing phone or mediaBase64' });
+    return;
+  }
+  try {
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (!wa) {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+    let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
+    if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
+    chatPhone = chatPhone.replace(/^\+/, '');
+    const buffer = Buffer.from(mediaBase64, 'base64');
+    const isImage = (mimeType || '').startsWith('image/');
+    const fakeMsg = { id: 'wa-mgr', channel: 'whatsapp' as const, senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: `${chatPhone}@s.whatsapp.net` } };
+
+    if (isImage) {
+      await wa.sendReply(fakeMsg, { text: caption || '', image: buffer });
+    } else {
+      await wa.sendReply(fakeMsg, { text: caption || '', document: buffer, documentName: filename || 'file', documentMimetype: mimeType });
+    }
+    try {
+      const label = isImage ? '[תמונה]' : `[קובץ: ${filename || 'file'}]`;
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, caption ? `${label} ${caption}` : label);
+    } catch { /* non-critical */ }
+    log.info({ phone: chatPhone, type: isImage ? 'image' : 'document' }, 'wa-manager: media sent');
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
   const { phones, message } = req.body;
   if (!Array.isArray(phones) || !message) {
