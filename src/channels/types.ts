@@ -28,6 +28,10 @@ export interface UnifiedReply {
   document?: Buffer;
   documentName?: string;
   documentMimetype?: string;
+  /** WhatsApp template name (for sending outside 24-hour window) */
+  template?: string;
+  /** Template language code (default: 'he') */
+  templateLanguage?: string;
 }
 
 export interface ChannelAdapter {

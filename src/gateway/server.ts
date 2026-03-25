@@ -1160,10 +1160,29 @@ app.get('/api/leads', externalAuth, (_req, res) => {
   }
 });
 
-/** Register a webhook handler for Telegram (cloud mode) */
+/** Register a webhook handler (Telegram or WhatsApp cloud mode) */
 export function registerWebhook(path: string, handler: (req: any, res: any) => void) {
   app.post(path, handler);
-  log.info({ path }, 'webhook endpoint registered');
+
+  // WhatsApp Cloud API webhook verification (GET) — needed for Meta webhook setup
+  if (path.includes('whatsapp')) {
+    const verifyToken = config.localApiSecret; // reuse existing secret as verify token
+    app.get(path, (req, res) => {
+      const mode = req.query['hub.mode'];
+      const token = req.query['hub.verify_token'];
+      const challenge = req.query['hub.challenge'];
+      if (mode === 'subscribe' && token === verifyToken) {
+        log.info('WhatsApp webhook verified');
+        res.status(200).send(challenge);
+      } else {
+        log.warn('WhatsApp webhook verification failed');
+        res.sendStatus(403);
+      }
+    });
+    log.info({ path, verifyToken }, 'WhatsApp webhook with GET verification registered');
+  } else {
+    log.info({ path }, 'webhook endpoint registered');
+  }
 }
 
 export function startServer() {

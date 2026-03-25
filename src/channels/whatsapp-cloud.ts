@@ -272,6 +272,20 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       if (!token || !phoneNumberId) return;
       const to = original.senderId;
 
+      // Template message (works outside 24-hour window)
+      if (reply.template) {
+        await sendGraphApi('messages', {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'template',
+          template: {
+            name: reply.template,
+            language: { code: reply.templateLanguage || 'he' },
+          },
+        });
+        return;
+      }
+
       // Voice message
       if (reply.voice) {
         const mediaId = await uploadMedia(reply.voice, 'audio/ogg', 'voice.ogg');
