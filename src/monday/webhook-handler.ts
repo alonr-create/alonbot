@@ -4,11 +4,36 @@ import { fetchMondayItem } from './api.js';
 import { createLogger } from '../utils/logger.js';
 import { isAdminPhone } from '../db/tenant-config.js';
 import type { MondayWebhookPayload } from './types.js';
+import type { BotAdapter } from '../whatsapp/connection.js';
 
 const log = createLogger('monday-webhook');
 
 type NewLeadCallback = (phone: string, name: string, interest: string) => void | Promise<void>;
 let onNewLeadCallback: NewLeadCallback | null = null;
+
+/** Registered bot adapter for sending WhatsApp messages from webhook events. */
+let botAdapter: BotAdapter | null = null;
+
+/**
+ * Register the bot adapter so webhook events can send WhatsApp messages.
+ */
+export function setWebhookBotAdapter(adapter: BotAdapter): void {
+  botAdapter = adapter;
+}
+
+/**
+ * Status label → WhatsApp message mapping.
+ * When boss changes status on Monday.com, send appropriate message to lead.
+ * null means don't send a message for that status change.
+ */
+const STATUS_MESSAGES: Record<string, string | null> = {
+  'הצעת מחיר נשלחה': 'היי! רציתי לוודא שקיבלת את הצעת המחיר שלנו. יש שאלות? אשמח לעזור 😊',
+  'פגישה נקבעה': null, // handled by booking flow
+  'סגור-זכייה': 'מעולה! שמחים שהחלטת להתקדם איתנו 🎉 ניצור קשר בקרוב עם כל הפרטים.',
+  'חדש': null,
+  'בטיפול': null,
+  'ממתין לתשובה': 'היי, רק רציתי לבדוק — ראית את ההודעה האחרונה שלי? אשמח לעזור אם יש שאלות 🙏',
+};
 
 /**
  * Set a callback to be called when a new lead is created from Monday.com.
@@ -60,10 +85,17 @@ mondayWebhookRouter.post('/monday', (req, res) => {
   // Respond 200 immediately — process asynchronously
   res.status(200).json({ ok: true });
 
-  // Async processing
-  processWebhookEvent(event.pulseId, event.boardId).catch((err) => {
-    log.error({ err, pulseId: event.pulseId }, 'Failed to process webhook event');
-  });
+  // Route by event type
+  if (event.type === 'update_column_value' && event.columnId) {
+    processColumnChangeEvent(event).catch((err) => {
+      log.error({ err, pulseId: event.pulseId }, 'Failed to process column change event');
+    });
+  } else {
+    // Default: create_item or other events
+    processWebhookEvent(event.pulseId, event.boardId).catch((err) => {
+      log.error({ err, pulseId: event.pulseId }, 'Failed to process webhook event');
+    });
+  }
 });
 
 async function processWebhookEvent(
@@ -128,5 +160,70 @@ async function processWebhookEvent(
     } catch (err) {
       log.error({ err, phone }, 'onNewLead callback failed');
     }
+  }
+}
+
+/**
+ * Process a column value change event from Monday.com.
+ * When status column changes, send a WhatsApp message to the lead.
+ */
+async function processColumnChangeEvent(
+  event: NonNullable<MondayWebhookPayload['event']>,
+): Promise<void> {
+  const { pulseId, boardId, columnId, value } = event;
+  log.info({ pulseId, boardId, columnId, value }, 'Processing Monday.com column change');
+
+  if (!botAdapter) {
+    log.warn('No bot adapter registered — cannot send WhatsApp from webhook');
+    return;
+  }
+
+  // Only handle status column changes
+  const statusColumnId = (await import('../config.js')).config.mondayStatusColumnId;
+  if (columnId !== statusColumnId && columnId !== 'status') {
+    log.debug({ columnId }, 'Ignoring non-status column change');
+    return;
+  }
+
+  // Extract new status label
+  const newStatus = (value as any)?.label?.text;
+  if (!newStatus) {
+    log.debug({ value }, 'No status label in column change');
+    return;
+  }
+
+  // Check if we have a message for this status
+  const message = STATUS_MESSAGES[newStatus];
+  if (!message) {
+    log.debug({ newStatus }, 'No WhatsApp message configured for this status');
+    return;
+  }
+
+  // Find the lead by monday_item_id
+  const db = getDb();
+  const lead = db
+    .prepare('SELECT phone, name FROM leads WHERE monday_item_id = ?')
+    .get(pulseId) as { phone: string; name: string | null } | undefined;
+
+  if (!lead) {
+    log.warn({ pulseId }, 'No local lead found for Monday item');
+    return;
+  }
+
+  // Don't send status messages to admin
+  if (isAdminPhone(lead.phone)) return;
+
+  const jid = lead.phone + '@s.whatsapp.net';
+  try {
+    const { sendWithTyping } = await import('../whatsapp/rate-limiter.js');
+    await sendWithTyping(botAdapter, jid, message);
+    log.info({ phone: lead.phone, newStatus }, 'Status change WhatsApp message sent');
+
+    // Store outgoing message
+    const leadRow = db.prepare('SELECT id FROM leads WHERE phone = ?').get(lead.phone) as { id: number } | undefined;
+    db.prepare('INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)')
+      .run(lead.phone, leadRow?.id || null, 'out', message);
+  } catch (err) {
+    log.error({ err, phone: lead.phone, newStatus }, 'Failed to send status change message');
   }
 }

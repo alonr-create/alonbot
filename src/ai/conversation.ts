@@ -316,6 +316,20 @@ export async function handleConversation(
     }
   }
 
+  // Auto-detect lead name from conversation and update DB + Monday.com
+  if (lead && !lead.name) {
+    const nameFromMsg = extractLeadName(batchedText);
+    if (nameFromMsg) {
+      db.prepare('UPDATE leads SET name = ? WHERE phone = ?').run(nameFromMsg, phone);
+      log.info({ phone, name: nameFromMsg }, 'Auto-detected lead name');
+      if (lead.monday_item_id && lead.monday_board_id) {
+        updateItemName(lead.monday_board_id, lead.monday_item_id, nameFromMsg).catch(
+          (err) => { log.error({ err, phone }, 'Failed to update Monday.com item name'); },
+        );
+      }
+    }
+  }
+
   // Update lead score
   if (lead) {
     const { score } = calculateLeadScore(phone);
@@ -892,6 +906,27 @@ function updateLeadTimestamp(
       });
     }
   }
+}
+
+/**
+ * Try to extract a lead's name from their message text.
+ * Looks for common Hebrew/English patterns like "שמי X", "אני X", "קוראים לי X".
+ */
+function extractLeadName(text: string): string | null {
+  const patterns = [
+    /(?:שמי|אני|קוראים לי|השם שלי)\s+([א-ת]{2,}(?:\s+[א-ת]{2,})?)/,
+    /(?:my name is|i'm|i am)\s+([A-Za-z]{2,}(?:\s+[A-Za-z]{2,})?)/i,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const name = match[1].trim();
+      // Filter out common non-name words
+      const ignore = ['מעוניין', 'רוצה', 'צריך', 'מחפש', 'בעל', 'עובד', 'גר', 'פה', 'כאן', 'בא'];
+      if (!ignore.includes(name)) return name;
+    }
+  }
+  return null;
 }
 
 /**

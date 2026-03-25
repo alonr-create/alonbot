@@ -3,7 +3,7 @@ import { getDb } from '../db/index.js';
 import { sendWithTyping } from './rate-limiter.js';
 import { addMessageToBatch } from './message-batcher.js';
 import { handleConversation, sendFirstMessage } from '../ai/conversation.js';
-import { setOnNewLeadCallback } from '../monday/webhook-handler.js';
+import { setOnNewLeadCallback, setWebhookBotAdapter } from '../monday/webhook-handler.js';
 import { cancelFollowUps } from '../follow-up/follow-up-db.js';
 import { transcribeAudio } from '../ai/voice-transcribe.js';
 import { analyzeImage } from '../ai/image-analysis.js';
@@ -69,6 +69,9 @@ async function createNewLead(phone: string, firstMessage?: string): Promise<void
  * Routes incoming text to message batcher -> AI conversation flow.
  */
 export function setupMessageHandler(client: any, adapter: BotAdapter): void {
+  // Register adapter for Monday.com webhook → WhatsApp messages
+  setWebhookBotAdapter(adapter);
+
   // Wire Monday.com webhook callback for first message
   setOnNewLeadCallback(async (phone: string, name: string, interest: string) => {
     await sendFirstMessage(phone, name, interest, adapter);

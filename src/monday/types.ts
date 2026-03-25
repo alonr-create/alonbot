@@ -15,6 +15,11 @@ export interface MondayWebhookPayload {
     pulseId: number;
     boardId: number;
     pulseName: string;
+    /** Column change events */
+    columnId?: string;
+    columnType?: string;
+    value?: { label?: { text?: string; index?: number } } | Record<string, any>;
+    previousValue?: { label?: { text?: string; index?: number } } | Record<string, any>;
   };
 }
 
