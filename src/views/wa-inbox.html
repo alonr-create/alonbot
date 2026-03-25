@@ -439,6 +439,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     <button class="nav-tab" id="navBroadcasts" onclick="showView('broadcasts')">📢 שידורים</button>
     <button class="nav-tab" id="navAnalytics" onclick="showView('analytics')">📈 אנליטיקס</button>
     <button class="nav-tab" id="navCosts" onclick="showView('costs')">💰 עלויות</button>
+    <button class="nav-tab" id="navCampaign" onclick="showView('campaign')">🚀 קמפיין</button>
     <button class="topbar-btn" title="רענון" onclick="refreshAll()">🔄</button>
     <button class="topbar-btn" title="דשבורד ראשי" onclick="window.location='/dashboard?token='+TOKEN">🏠</button>
   </div>
@@ -590,6 +591,28 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
         </div>
         <div id="modalResult" style="margin-top:12px;font-size:12px;display:none;"></div>
       </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMPAIGN VIEW -->
+<div id="campaignView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">🚀 קמפיין לידים — Alon.dev</h2>
+      <button onclick="loadCampaign()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:13px;">🔄 רענן</button>
+    </div>
+    <!-- Summary cards -->
+    <div id="campaignCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;"></div>
+    <!-- Messages list -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:16px;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">📱 הודעות WhatsApp שנשלחו</div>
+      <div id="campaignMessages" style="max-height:400px;overflow-y:auto;"></div>
+    </div>
+    <!-- Calls list -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">📞 שיחות שבוצעו</div>
+      <div id="campaignCalls" style="max-height:400px;overflow-y:auto;"></div>
     </div>
   </div>
 </div>
@@ -952,7 +975,6 @@ function handleSearch(val) {
 const messageCache = {};
 
 function selectContact(phone) {
-  console.log('[360] selectContact called with:', phone);
   activePhone = phone;
 
   // Update URL
@@ -963,12 +985,7 @@ function selectContact(phone) {
   } catch(e) { console.error('URL update failed:', e); }
 
   const contact = contacts.find(c => c.phone === phone);
-  console.log('[360] contact found:', contact ? contact.name : 'NOT FOUND', 'total contacts:', contacts.length);
-
-  if (!contact) {
-    document.title = 'NOT FOUND: ' + phone;
-    return;
-  }
+  if (!contact) return;
 
   // Update header
   const headerName = contact.name || contact.phone;
@@ -1438,6 +1455,7 @@ function showView(view) {
     broadcasts: document.getElementById('broadcastsView'),
     analytics: document.getElementById('analyticsView'),
     costs: document.getElementById('costsView'),
+    campaign: document.getElementById('campaignView'),
   };
   const navBtns = {
     inbox: document.getElementById('navInbox'),
@@ -1446,6 +1464,7 @@ function showView(view) {
     broadcasts: document.getElementById('navBroadcasts'),
     analytics: document.getElementById('navAnalytics'),
     costs: document.getElementById('navCosts'),
+    campaign: document.getElementById('navCampaign'),
   };
 
   // Hide all views and deactivate all nav buttons
@@ -1462,6 +1481,79 @@ function showView(view) {
   else if (view === 'overview') loadOverview();
   else if (view === 'broadcasts') loadBroadcastData();
   else if (view === 'analytics') loadAnalytics();
+  else if (view === 'campaign') loadCampaign();
+}
+
+// ===== CAMPAIGN =====
+async function loadCampaign() {
+  const cardsEl = document.getElementById('campaignCards');
+  const msgsEl = document.getElementById('campaignMessages');
+  const callsEl = document.getElementById('campaignCalls');
+  cardsEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2);">טוען...</div>';
+  msgsEl.innerHTML = '';
+  callsEl.innerHTML = '';
+
+  try {
+    const res = await fetch('https://campaign-webhook-production.up.railway.app/api/campaign-messages');
+    const data = await res.json();
+
+    // Summary cards
+    cardsEl.innerHTML = `
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--primary);">${data.total_wa || 0}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">הודעות WA</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:#f59e0b;">${data.total_calls || 0}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">שיחות</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:#10b981;">${(data.messages || []).length + (data.calls || []).length}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">סה״כ פעולות</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--text);">${data.date || '—'}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">תאריך</div>
+      </div>
+    `;
+
+    // WA messages
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      msgsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">אין הודעות היום</div>';
+    } else {
+      msgsEl.innerHTML = msgs.map(m => `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;">📱</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(m.name || 'ליד')}</div>
+            <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.phone || '')}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);flex-shrink:0;">${m.time ? new Date(m.time).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+          ${m.site_link ? `<a href="${esc(m.site_link.match(/https?:\/\/[^\s]+/)?.[0] || m.site_link)}" target="_blank" style="font-size:11px;color:var(--primary);text-decoration:none;">🔗 אתר</a>` : ''}
+        </div>
+      `).join('');
+    }
+
+    // Calls
+    const calls = data.calls || [];
+    if (!calls.length) {
+      callsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">אין שיחות היום</div>';
+    } else {
+      callsEl.innerHTML = calls.map(c => `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;">📞</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(c.name || 'ליד')}</div>
+            <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.text || '').slice(0, 60)}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);flex-shrink:0;">${c.time ? new Date(c.time).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    cardsEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger);">שגיאה בטעינת נתוני קמפיין: ${esc(e.message)}</div>`;
+  }
 }
 
 // ===== TEMPLATES =====
