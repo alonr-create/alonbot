@@ -7,11 +7,11 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="360Shmikley">
-<meta name="theme-color" content="#25D366">
+<meta name="theme-color" content="#0088cc">
 <link rel="manifest" href="/manifest-wa.json">
-<link rel="apple-touch-icon" href="/apple-touch-icon-wa.png">
-<link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-32.png">
-<link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-192.png">
+<link rel="apple-touch-icon" href="/apple-touch-icon-wa-blue.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-blue-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-blue-192.png">
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
@@ -496,7 +496,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-logo" style="cursor:pointer;" onclick="showView('overview')">
-    <img src="/icon-wa-192.png" alt="360Shmikley" width="36" height="36" style="flex-shrink:0;border-radius:8px;">
+    <img src="/icon-wa-blue-192.png" alt="360Shmikley" width="36" height="36" style="flex-shrink:0;border-radius:8px;">
     <div style="display:flex;flex-direction:column;line-height:1.1;">
       <span style="font-size:15px;font-weight:900;background:linear-gradient(135deg,#25D366,#128C7E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px;">360Shmikley</span>
       <span style="font-size:9px;font-weight:400;color:var(--text3);letter-spacing:0.5px;">WA Manager</span>
@@ -2079,7 +2079,7 @@ async function pollMessages() {
       // Request browser notification permission
       if (Notification.permission === 'default') Notification.requestPermission();
       if (Notification.permission === 'granted') {
-        new Notification('360Shmikley', { body: 'הודעה חדשה נכנסה', icon: '/icon-wa-192.png' });
+        new Notification('360Shmikley', { body: 'הודעה חדשה נכנסה', icon: '/icon-wa-blue-192.png' });
       }
     }
 
