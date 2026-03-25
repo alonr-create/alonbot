@@ -891,19 +891,19 @@ function renderContacts() {
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
 
     return `
-      <div class="contact-item ${isActive ? 'active' : ''}" data-phone="${c.phone}">
-        <div class="contact-avatar" style="background:${color}">
+      <div class="contact-item ${isActive ? 'active' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
+        <div class="contact-avatar" style="background:${color};pointer-events:none;">
           ${initials}
-          ${c.online ? '<div class="online-dot"></div>' : ''}
+          ${c.online ? '<div class="online-dot" style="pointer-events:none;"></div>' : ''}
         </div>
-        <div class="contact-body">
-          <div class="contact-row">
-            <span class="contact-name">${esc(c.name)}</span>
-            <span class="${timeClass}">${formatTime(c.lastTime)}</span>
+        <div class="contact-body" style="pointer-events:none;">
+          <div class="contact-row" style="pointer-events:none;">
+            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}</span>
+            <span class="${timeClass}" style="pointer-events:none;">${formatTime(c.lastTime)}</span>
           </div>
-          <div class="contact-preview">${preview}</div>
+          <div class="contact-preview" style="pointer-events:none;">${preview}</div>
         </div>
-        ${c.unread > 0 ? `<div class="unread-badge">${c.unread}</div>` : ''}
+        ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
       </div>
     `;
   }).join('');
