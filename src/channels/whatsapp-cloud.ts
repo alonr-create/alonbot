@@ -123,7 +123,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     // Auto-upsert lead in leads table for dashboard tracking
     try {
       const pushName = senderName !== senderId ? senderName : '';
-      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'whatsapp', datetime('now'), datetime('now')) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = datetime('now')`).run(senderId, pushName, pushName);
+      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'alon_dev_whatsapp', datetime('now'), datetime('now')) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = datetime('now')`).run(senderId, pushName, pushName);
     } catch (e: any) {
       log.warn({ err: e.message, senderId }, 'lead upsert failed');
     }

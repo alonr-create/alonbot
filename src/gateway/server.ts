@@ -665,7 +665,7 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
 app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
   try {
     const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
-    const { lead_status, tags, name } = req.body;
+    const { lead_status, tags, name, source } = req.body;
     const updates: string[] = [];
     const params: any[] = [];
     if (lead_status !== undefined) {
@@ -676,7 +676,8 @@ app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
       } catch { /* ok */ }
       updates.push('lead_status = ?'); params.push(lead_status);
     }
-    if (tags !== undefined) { updates.push('source = ?'); params.push(tags); }
+    if (source !== undefined) { updates.push('source = ?'); params.push(source); }
+    else if (tags !== undefined) { updates.push('source = ?'); params.push(tags); }
     if (name !== undefined) { updates.push('name = ?'); params.push(name); }
     if (updates.length === 0) {
       res.status(400).json({ success: false, error: 'No fields to update' });
