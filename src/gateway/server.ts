@@ -14,6 +14,7 @@ const log = createLogger('server');
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
+const waMobileHTML = readFileSync(join(import.meta.dirname, '../views/wa-mobile.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const waManagerManifestJSON = readFileSync(join(import.meta.dirname, '../views/wa-manager-manifest.json'), 'utf-8');
@@ -1142,6 +1143,12 @@ app.post('/api/wa-manager/create-template', dashAuth, async (req, res) => {
 app.get('/wa-inbox', dashAuth, (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(waInboxHTML);
+});
+
+// WA Mobile PWA (iPhone app)
+app.get('/wa-mobile', dashAuth, (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.send(waMobileHTML);
 });
 
 // WA Manager — redirect to unified wa-inbox

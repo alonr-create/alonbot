@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>360Shmikley</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="360Shmikley">
+<meta name="theme-color" content="#0088cc">
+<link rel="manifest" href="/manifest-wa.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon-wa.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-192.png">
+<style>
+*{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+:root{
+  --bg:#111b21;
+  --bg-secondary:#1f2c34;
+  --bg-header:#1a2730;
+  --bg-input:#2a3942;
+  --blue:#0088cc;
+  --blue-light:#0099e6;
+  --blue-dark:#006da3;
+  --bubble-out:#1a3a4a;
+  --bubble-in:#1f2c34;
+  --text:#e9edef;
+  --text-secondary:#8696a0;
+  --text-muted:#667781;
+  --border:#2a3942;
+  --badge:#0088cc;
+  --tab-inactive:#8696a0;
+  --safe-top:env(safe-area-inset-top, 0px);
+  --safe-bottom:env(safe-area-inset-bottom, 0px);
+  --safe-left:env(safe-area-inset-left, 0px);
+  --safe-right:env(safe-area-inset-right, 0px);
+}
+html,body{
+  height:100%;height:100dvh;
+  overflow:hidden;
+  background:var(--bg);
+  color:var(--text);
+  font-family:system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;
+  font-size:16px;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ===== APP SHELL ===== */
+#app{
+  height:100%;height:100dvh;
+  display:flex;flex-direction:column;
+  position:relative;overflow:hidden;
+}
+.screens-container{
+  flex:1;position:relative;overflow:hidden;
+}
+
+/* ===== SCREENS ===== */
+.screen{
+  position:absolute;inset:0;
+  display:flex;flex-direction:column;
+  background:var(--bg);
+  transition:transform .3s cubic-bezier(.4,0,.2,1),opacity .3s cubic-bezier(.4,0,.2,1);
+  will-change:transform,opacity;
+  z-index:1;
+}
+.screen.hidden{
+  transform:translateX(-100%);opacity:0;pointer-events:none;
+}
+.screen.slide-right{
+  transform:translateX(100%);opacity:0;pointer-events:none;
+}
+.screen.active{
+  transform:translateX(0);opacity:1;pointer-events:auto;z-index:2;
+}
+.screen.screen-fullscreen{
+  position:fixed;inset:0;z-index:100;
+}
+
+/* ===== CHAT LIST SCREEN ===== */
+.list-header{
+  padding-top:calc(var(--safe-top) + 12px);
+  padding-right:20px;padding-left:20px;padding-bottom:8px;
+  background:var(--bg);
+}
+.list-header-row{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:12px;
+}
+.list-title{
+  font-size:30px;font-weight:700;color:var(--text);letter-spacing:-0.3px;
+}
+.list-header-actions{display:flex;gap:16px;}
+.header-btn{
+  width:34px;height:34px;border-radius:50%;
+  background:var(--bg-input);border:none;
+  color:var(--blue);font-size:16px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  transition:background .15s;
+}
+.header-btn:active{background:var(--border);}
+
+/* Search */
+.search-wrap{
+  position:relative;margin-bottom:8px;
+}
+.search-wrap input{
+  width:100%;padding:9px 14px 9px 36px;
+  border-radius:10px;border:none;
+  background:var(--bg-input);color:var(--text);
+  font-size:15px;font-family:inherit;outline:none;
+}
+.search-wrap input::placeholder{color:var(--text-muted);}
+.search-icon{
+  position:absolute;left:12px;top:50%;transform:translateY(-50%);
+  color:var(--text-muted);font-size:14px;pointer-events:none;
+}
+
+/* Filter pills */
+.filters{display:flex;gap:8px;padding-bottom:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.filters::-webkit-scrollbar{display:none;}
+.filter-pill{
+  padding:6px 16px;border-radius:18px;
+  font-size:13px;font-weight:500;
+  border:none;cursor:pointer;white-space:nowrap;
+  background:var(--bg-input);color:var(--text-secondary);
+  transition:all .15s;flex-shrink:0;
+}
+.filter-pill.active{background:var(--blue);color:#fff;}
+.filter-pill:active{opacity:.7;}
+
+/* Contact list */
+.contact-list{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+}
+.contact-list::-webkit-scrollbar{display:none;}
+
+.contact-row{
+  display:flex;align-items:center;gap:12px;
+  padding:12px 20px;cursor:pointer;
+  transition:background .1s;position:relative;
+}
+.contact-row:active{background:var(--bg-secondary);}
+.contact-row+.contact-row{border-top:1px solid rgba(134,150,160,.1);}
+
+.avatar{
+  width:52px;height:52px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;font-weight:600;color:#fff;
+  background-size:cover;background-position:center;
+}
+.contact-info{flex:1;min-width:0;}
+.contact-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;}
+.contact-name{font-size:16px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.contact-time{font-size:12px;color:var(--text-muted);flex-shrink:0;margin-right:8px;}
+.contact-time.unread{color:var(--blue);}
+.contact-bottom{display:flex;align-items:center;justify-content:space-between;}
+.contact-preview{
+  font-size:14px;color:var(--text-muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  flex:1;min-width:0;
+}
+.contact-preview .checks{color:var(--blue);margin-left:4px;font-size:12px;}
+.unread-badge{
+  background:var(--blue);color:#fff;font-size:11px;font-weight:700;
+  min-width:20px;height:20px;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 6px;flex-shrink:0;margin-right:4px;
+}
+.contact-status-dot{
+  width:8px;height:8px;border-radius:50%;flex-shrink:0;
+}
+.contact-status-dot.new{background:#f59e0b;}
+.contact-status-dot.vip{background:var(--blue);}
+.contact-status-dot.waiting{background:#ea4335;}
+
+/* Pull to refresh */
+.ptr-indicator{
+  text-align:center;padding:12px;color:var(--text-muted);font-size:13px;
+  transition:opacity .2s;opacity:0;height:0;overflow:hidden;
+}
+.ptr-indicator.visible{opacity:1;height:auto;padding:12px;}
+
+/* ===== CHAT VIEW SCREEN ===== */
+.chat-header{
+  padding-top:calc(var(--safe-top) + 8px);
+  padding-right:12px;padding-left:12px;padding-bottom:8px;
+  background:var(--bg-header);
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+  min-height:56px;
+}
+.back-btn{
+  width:36px;height:36px;border:none;background:none;
+  color:var(--blue);font-size:22px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.back-btn:active{opacity:.5;}
+.chat-header-avatar{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-size:16px;font-weight:600;color:#fff;
+  background-size:cover;background-position:center;
+}
+.chat-header-info{flex:1;min-width:0;}
+.chat-header-name{font-size:16px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.chat-header-status{font-size:12px;color:var(--text-muted);}
+.chat-header-actions{display:flex;gap:12px;}
+.chat-action-btn{
+  width:36px;height:36px;border:none;background:none;
+  color:var(--text-secondary);font-size:18px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+}
+.chat-action-btn:active{opacity:.5;}
+
+/* Messages area */
+.messages-area{
+  flex:1;overflow-y:auto;overflow-x:hidden;
+  -webkit-overflow-scrolling:touch;
+  padding:8px 12px;
+  background:var(--bg);
+  display:flex;flex-direction:column;
+}
+.messages-area::-webkit-scrollbar{display:none;}
+
+.msg-date-sep{
+  text-align:center;margin:12px 0 8px;
+}
+.msg-date-sep span{
+  background:var(--bg-input);color:var(--text-muted);
+  font-size:12px;padding:4px 12px;border-radius:8px;
+}
+
+.message{
+  max-width:80%;padding:7px 10px 4px;
+  border-radius:10px;margin-bottom:3px;
+  position:relative;font-size:15px;line-height:1.35;
+  word-wrap:break-word;animation:msgIn .2s ease-out;
+}
+@keyframes msgIn{
+  from{opacity:0;transform:translateY(8px);}
+  to{opacity:1;transform:translateY(0);}
+}
+.message.outgoing{
+  background:var(--bubble-out);
+  align-self:flex-start;
+  border-bottom-right-radius:4px;
+  margin-left:auto;
+}
+.message.incoming{
+  background:var(--bubble-in);
+  align-self:flex-end;
+  border-bottom-left-radius:4px;
+  margin-right:auto;
+}
+.msg-text{color:var(--text);}
+.msg-media{max-width:100%;border-radius:8px;margin-bottom:4px;}
+.msg-media img{width:100%;border-radius:8px;display:block;}
+.msg-media video{width:100%;border-radius:8px;display:block;}
+.msg-media audio{width:100%;margin-top:4px;}
+.msg-footer{
+  display:flex;align-items:center;justify-content:flex-end;gap:4px;
+  margin-top:2px;
+}
+.msg-time{font-size:11px;color:var(--text-muted);}
+.msg-check{font-size:12px;color:var(--blue);}
+
+/* Input bar */
+.input-bar{
+  display:flex;align-items:flex-end;gap:8px;
+  padding:8px 12px calc(var(--safe-bottom) + 8px);
+  background:var(--bg-header);
+  border-top:1px solid var(--border);
+}
+.input-attach{
+  width:40px;height:40px;border:none;background:none;
+  color:var(--text-secondary);font-size:22px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.input-attach:active{opacity:.5;}
+.input-field{
+  flex:1;min-height:40px;max-height:120px;
+  padding:10px 14px;border-radius:20px;
+  background:var(--bg-input);border:none;
+  color:var(--text);font-size:15px;font-family:inherit;
+  resize:none;outline:none;line-height:1.35;
+  overflow-y:auto;
+}
+.input-field::placeholder{color:var(--text-muted);}
+.input-field::-webkit-scrollbar{display:none;}
+.send-btn{
+  width:40px;height:40px;border-radius:50%;border:none;
+  background:var(--blue);color:#fff;font-size:18px;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .15s,transform .1s;
+}
+.send-btn:active{transform:scale(.92);background:var(--blue-dark);}
+.send-btn:disabled{background:var(--bg-input);color:var(--text-muted);cursor:default;}
+
+/* ===== CONTACT DETAILS SCREEN ===== */
+.details-header{
+  padding-top:calc(var(--safe-top) + 8px);
+  padding-right:12px;padding-left:12px;padding-bottom:8px;
+  background:var(--bg-header);
+  display:flex;align-items:center;gap:10px;
+  border-bottom:1px solid var(--border);
+}
+.details-body{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding:0;}
+.details-body::-webkit-scrollbar{display:none;}
+
+.details-avatar-section{
+  display:flex;flex-direction:column;align-items:center;
+  padding:28px 20px 20px;
+}
+.details-avatar{
+  width:88px;height:88px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:36px;font-weight:600;color:#fff;
+  background-size:cover;background-position:center;
+  margin-bottom:12px;
+}
+.details-name{font-size:22px;font-weight:600;color:var(--text);margin-bottom:4px;}
+.details-phone{font-size:15px;color:var(--text-muted);direction:ltr;}
+
+.details-section{
+  padding:16px 20px;border-top:8px solid var(--bg-secondary);
+}
+.details-section-title{
+  font-size:13px;font-weight:600;color:var(--blue);
+  margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;
+}
+.details-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 0;
+}
+.details-row+.details-row{border-top:1px solid var(--border);}
+.details-label{font-size:14px;color:var(--text-muted);}
+.details-value{font-size:14px;color:var(--text);}
+
+/* Status selector */
+.status-select{
+  padding:6px 12px;border-radius:8px;
+  background:var(--bg-input);color:var(--text);
+  border:1px solid var(--border);font-family:inherit;font-size:14px;
+  outline:none;cursor:pointer;
+}
+.status-select:focus{border-color:var(--blue);}
+
+/* Tags */
+.tags-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
+.tag-chip{
+  display:flex;align-items:center;gap:4px;
+  padding:5px 10px;border-radius:16px;
+  background:rgba(0,136,204,.15);color:var(--blue);
+  font-size:13px;font-weight:500;
+}
+.tag-remove{
+  width:16px;height:16px;border-radius:50%;border:none;
+  background:rgba(0,136,204,.3);color:var(--blue);
+  font-size:11px;cursor:pointer;display:flex;
+  align-items:center;justify-content:center;line-height:1;
+}
+.tag-remove:active{opacity:.5;}
+.tag-add-wrap{display:flex;gap:6px;margin-top:8px;}
+.tag-input{
+  flex:1;padding:6px 10px;border-radius:8px;
+  background:var(--bg-input);color:var(--text);
+  border:1px solid var(--border);font-size:13px;
+  font-family:inherit;outline:none;
+}
+.tag-input:focus{border-color:var(--blue);}
+.tag-add-btn{
+  padding:6px 12px;border-radius:8px;border:none;
+  background:var(--blue);color:#fff;font-size:13px;
+  font-weight:500;cursor:pointer;
+}
+.tag-add-btn:active{opacity:.7;}
+
+/* Notes */
+.notes-field{
+  width:100%;min-height:80px;padding:10px;border-radius:8px;
+  background:var(--bg-input);color:var(--text);
+  border:1px solid var(--border);font-size:14px;
+  font-family:inherit;resize:vertical;outline:none;
+  margin-top:8px;
+}
+.notes-field:focus{border-color:var(--blue);}
+.notes-save{
+  margin-top:8px;padding:8px 16px;border-radius:8px;border:none;
+  background:var(--blue);color:#fff;font-size:14px;
+  font-weight:500;cursor:pointer;width:100%;
+}
+.notes-save:active{opacity:.7;}
+
+/* Quick actions */
+.quick-actions{
+  display:flex;gap:12px;justify-content:center;
+  padding:16px 20px;
+}
+.quick-action{
+  display:flex;flex-direction:column;align-items:center;gap:6px;
+  cursor:pointer;
+}
+.quick-action-icon{
+  width:48px;height:48px;border-radius:50%;
+  background:rgba(0,136,204,.12);color:var(--blue);
+  display:flex;align-items:center;justify-content:center;
+  font-size:20px;
+}
+.quick-action-label{font-size:12px;color:var(--text-muted);}
+
+/* ===== BOTTOM TAB BAR ===== */
+.tab-bar{
+  display:flex;align-items:center;justify-content:space-around;
+  background:var(--bg-header);
+  border-top:1px solid var(--border);
+  padding:6px 0 calc(var(--safe-bottom) + 4px);
+  flex-shrink:0;z-index:50;
+}
+.tab-item{
+  display:flex;flex-direction:column;align-items:center;
+  gap:2px;padding:4px 12px;cursor:pointer;
+  color:var(--tab-inactive);transition:color .15s;
+  -webkit-tap-highlight-color:transparent;
+  position:relative;min-width:56px;
+}
+.tab-item.active{color:var(--blue);}
+.tab-item:active{opacity:.6;}
+.tab-icon{font-size:24px;height:28px;display:flex;align-items:center;justify-content:center;}
+.tab-label{font-size:10px;font-weight:500;}
+.tab-badge{
+  position:absolute;top:0;right:8px;
+  background:var(--blue);color:#fff;
+  font-size:10px;font-weight:700;
+  min-width:16px;height:16px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 4px;
+}
+
+/* ===== PLACEHOLDER SCREENS ===== */
+.placeholder-screen{
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+  color:var(--text-muted);text-align:center;padding:40px;
+}
+.placeholder-screen .ph-icon{font-size:48px;margin-bottom:16px;opacity:.5;}
+.placeholder-screen .ph-title{font-size:20px;font-weight:600;color:var(--text);margin-bottom:8px;}
+.placeholder-screen .ph-desc{font-size:14px;line-height:1.5;}
+
+/* ===== LOADING ===== */
+.spinner{
+  width:28px;height:28px;border:3px solid var(--border);
+  border-top-color:var(--blue);border-radius:50%;
+  animation:spin .6s linear infinite;margin:20px auto;
+}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+/* Empty state */
+.empty-state{
+  text-align:center;padding:40px 20px;color:var(--text-muted);
+}
+.empty-state .em-icon{font-size:40px;margin-bottom:12px;opacity:.4;}
+.empty-state p{font-size:14px;}
+
+/* ===== TOAST ===== */
+.toast{
+  position:fixed;bottom:calc(80px + var(--safe-bottom));
+  left:50%;transform:translateX(-50%) translateY(20px);
+  background:var(--bg-input);color:var(--text);
+  padding:10px 20px;border-radius:10px;
+  font-size:14px;z-index:999;
+  opacity:0;transition:all .3s;pointer-events:none;
+  box-shadow:0 4px 12px rgba(0,0,0,.3);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+/* ===== SCROLLBAR HIDE ===== */
+::-webkit-scrollbar{display:none;}
+*{scrollbar-width:none;}
+</style>
+</head>
+<body>
+
+<div id="app">
+<div class="screens-container">
+
+  <!-- ===== CHAT LIST SCREEN ===== -->
+  <div id="screen-list" class="screen active">
+    <div class="list-header">
+      <div class="list-header-row">
+        <span class="list-title">צ׳אטים</span>
+        <div class="list-header-actions">
+          <button class="header-btn" onclick="loadContacts()" title="רענן">&#8635;</button>
+          <button class="header-btn" onclick="openDetails(null)" title="...">&#8942;</button>
+        </div>
+      </div>
+      <div class="search-wrap">
+        <input type="text" id="searchInput" placeholder="חיפוש..." oninput="filterContacts()">
+        <span class="search-icon">&#128269;</span>
+      </div>
+      <div class="filters">
+        <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+        <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
+        <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
+        <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
+      </div>
+    </div>
+    <div class="ptr-indicator" id="ptrIndicator">&#8635; שחרר לרענון</div>
+    <div class="contact-list" id="contactList"></div>
+  </div>
+
+  <!-- ===== CHAT VIEW SCREEN ===== -->
+  <div id="screen-chat" class="screen screen-fullscreen slide-right">
+    <div class="chat-header">
+      <button class="back-btn" onclick="goBack()">&#8594;</button>
+      <div class="chat-header-avatar" id="chatAvatar"></div>
+      <div class="chat-header-info" onclick="openDetails(currentPhone)">
+        <div class="chat-header-name" id="chatName"></div>
+        <div class="chat-header-status" id="chatStatus">לחץ לפרטים</div>
+      </div>
+      <div class="chat-header-actions">
+        <button class="chat-action-btn" onclick="openDetails(currentPhone)" title="פרטים">&#9432;</button>
+      </div>
+    </div>
+    <div class="messages-area" id="messagesArea"></div>
+    <div class="input-bar">
+      <button class="input-attach" onclick="showAttach()" title="צרף">&#128206;</button>
+      <textarea class="input-field" id="msgInput" placeholder="הודעה..." rows="1" oninput="autoGrow(this)" onkeydown="handleKey(event)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>&#10148;</button>
+    </div>
+  </div>
+
+  <!-- ===== CONTACT DETAILS SCREEN ===== -->
+  <div id="screen-details" class="screen screen-fullscreen slide-right">
+    <div class="details-header">
+      <button class="back-btn" onclick="closeDetails()">&#8594;</button>
+      <span style="font-size:17px;font-weight:600;">פרטי איש קשר</span>
+    </div>
+    <div class="details-body" id="detailsBody"></div>
+  </div>
+
+  <!-- ===== UPDATES SCREEN ===== -->
+  <div id="screen-updates" class="screen hidden">
+    <div class="list-header">
+      <div class="list-header-row">
+        <span class="list-title">עדכונים</span>
+      </div>
+    </div>
+    <div class="placeholder-screen">
+      <div class="ph-icon">&#128276;</div>
+      <div class="ph-title">אין עדכונים חדשים</div>
+      <div class="ph-desc">עדכוני סטטוס ופעילות יופיעו כאן</div>
+    </div>
+  </div>
+
+  <!-- ===== TOOLS SCREEN ===== -->
+  <div id="screen-tools" class="screen hidden">
+    <div class="list-header">
+      <div class="list-header-row">
+        <span class="list-title">כלים</span>
+      </div>
+    </div>
+    <div class="placeholder-screen">
+      <div class="ph-icon">&#128295;</div>
+      <div class="ph-title">כלי ניהול</div>
+      <div class="ph-desc">שידורים, תגיות, ייצוא נתונים ועוד — בקרוב</div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS SCREEN ===== -->
+  <div id="screen-settings" class="screen hidden">
+    <div class="list-header">
+      <div class="list-header-row">
+        <span class="list-title">הגדרות</span>
+      </div>
+    </div>
+    <div class="placeholder-screen">
+      <div class="ph-icon">&#9881;</div>
+      <div class="ph-title">הגדרות</div>
+      <div class="ph-desc">התאמה אישית, התראות, חשבון</div>
+    </div>
+  </div>
+
+  </div><!-- end screens-container -->
+
+  <!-- ===== BOTTOM TAB BAR ===== -->
+  <div class="tab-bar" id="tabBar">
+    <div class="tab-item" data-tab="updates" onclick="switchTab('updates')">
+      <div class="tab-icon">&#128276;</div>
+      <div class="tab-label">עדכונים</div>
+    </div>
+    <div class="tab-item active" data-tab="list" onclick="switchTab('list')">
+      <div class="tab-icon">&#128172;</div>
+      <div class="tab-label">שיחות</div>
+      <div class="tab-badge" id="totalUnread" style="display:none;">0</div>
+    </div>
+    <div class="tab-item" data-tab="tools" onclick="switchTab('tools')">
+      <div class="tab-icon">&#128295;</div>
+      <div class="tab-label">כלים</div>
+    </div>
+    <div class="tab-item" data-tab="settings" onclick="switchTab('settings')">
+      <div class="tab-icon">&#9881;</div>
+      <div class="tab-label">הגדרות</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== CONFIG ===== */
+const TOKEN = new URLSearchParams(window.location.search).get('token') || '';
+const API = '/api/wa-manager';
+const POLL_INTERVAL = 15000;
+const AVATAR_COLORS = ['#e17055','#00b894','#0088cc','#6c5ce7','#fdcb6e','#e84393','#00cec9','#2d3436','#d63031','#a29bfe'];
+
+let contacts = [];
+let filteredContacts = [];
+let currentFilter = 'all';
+let currentPhone = null;
+let currentMessages = [];
+let pollTimer = null;
+let chatPollTimer = null;
+
+/* ===== API ===== */
+async function api(path, opts = {}) {
+  let url = API + path;
+  if (TOKEN) url += (url.includes('?') ? '&' : '?') + 'token=' + TOKEN;
+  const res = await fetch(url, {
+    headers: { 'Content-Type': 'application/json', ...opts.headers },
+    ...opts
+  });
+  if (!res.ok) throw new Error('API error ' + res.status);
+  return res.json();
+}
+
+/* ===== HELPERS ===== */
+function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+function nameHash(name) {
+  let h = 0;
+  for (let i = 0; i < (name || '').length; i++) h = ((h << 5) - h + name.charCodeAt(i)) | 0;
+  return Math.abs(h);
+}
+
+function avatarColor(name) {
+  return AVATAR_COLORS[nameHash(name) % AVATAR_COLORS.length];
+}
+
+function initials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+function renderAvatar(el, name, picUrl, size) {
+  if (picUrl) {
+    el.style.backgroundImage = `url(${picUrl})`;
+    el.style.backgroundColor = 'transparent';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = '';
+    el.style.backgroundColor = avatarColor(name);
+    el.textContent = initials(name);
+  }
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  const now = new Date();
+  const diff = now - d;
+  const mins = Math.floor(diff / 60000);
+  const hrs = Math.floor(diff / 3600000);
+  const days = Math.floor(diff / 86400000);
+  if (days > 6) return d.toLocaleDateString('he-IL', { day: 'numeric', month: 'numeric' });
+  if (days > 1) return ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][d.getDay()];
+  if (days === 1) return 'אתמול';
+  return d.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function msgTime(ts) {
+  if (!ts) return '';
+  return new Date(ts).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 2500);
+}
+
+/* ===== CONTACTS ===== */
+async function loadContacts() {
+  try {
+    const data = await api('/leads');
+    if (data.success) {
+      contacts = data.leads || [];
+      contacts.sort((a, b) => new Date(b.last_message_at || 0) - new Date(a.last_message_at || 0));
+      applyFilter();
+      updateUnreadBadge();
+    }
+  } catch (e) {
+    console.error('Load contacts error:', e);
+  }
+}
+
+function applyFilter() {
+  const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
+  filteredContacts = contacts.filter(c => {
+    if (currentFilter === 'new' && c.lead_status !== 'new') return false;
+    if (currentFilter === 'vip' && c.lead_status !== 'vip') return false;
+    if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
+    if (q && !(c.name || '').toLowerCase().includes(q) && !(c.phone || '').includes(q)) return false;
+    return true;
+  });
+  renderContactList();
+}
+
+function filterContacts() { applyFilter(); }
+
+function setFilter(f, el) {
+  currentFilter = f;
+  document.querySelectorAll('.filter-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  applyFilter();
+}
+
+function renderContactList() {
+  const list = document.getElementById('contactList');
+  if (!filteredContacts.length) {
+    list.innerHTML = '<div class="empty-state"><div class="em-icon">&#128172;</div><p>אין שיחות להצגה</p></div>';
+    return;
+  }
+  list.innerHTML = filteredContacts.map(c => {
+    const hasUnread = (c.unread_count || 0) > 0;
+    const isOut = c.last_message_role === 'assistant';
+    const statusClass = c.lead_status === 'new' ? 'new' : c.lead_status === 'vip' ? 'vip' : c.lead_status === 'waiting' ? 'waiting' : '';
+    const preview = c.last_message ? esc(c.last_message).slice(0, 50) : '';
+    return `
+      <div class="contact-row" onclick="openChat('${esc(c.phone)}')">
+        <div class="avatar" id="av-${esc(c.phone)}"
+          style="background-color:${c.profile_pic_url ? 'transparent' : avatarColor(c.name)};${c.profile_pic_url ? 'background-image:url(' + esc(c.profile_pic_url) + ')' : ''}"
+        >${c.profile_pic_url ? '' : esc(initials(c.name))}</div>
+        <div class="contact-info">
+          <div class="contact-top">
+            <span class="contact-name">${esc(c.name || c.phone)}</span>
+            <span class="contact-time ${hasUnread ? 'unread' : ''}">${timeAgo(c.last_message_at)}</span>
+          </div>
+          <div class="contact-bottom">
+            <span class="contact-preview">${isOut && !hasUnread ? '<span class="checks">✓✓</span> ' : ''}${preview}</span>
+            ${hasUnread ? `<span class="unread-badge">${c.unread_count}</span>` : ''}
+            ${statusClass ? `<span class="contact-status-dot ${statusClass}"></span>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function updateUnreadBadge() {
+  const total = contacts.reduce((s, c) => s + (c.unread_count || 0), 0);
+  const badge = document.getElementById('totalUnread');
+  if (total > 0) {
+    badge.textContent = total > 99 ? '99+' : total;
+    badge.style.display = 'flex';
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+/* ===== NAVIGATION ===== */
+function switchTab(tab) {
+  // Hide chat/details screens
+  document.getElementById('screen-chat').className = 'screen slide-right';
+  document.getElementById('screen-details').className = 'screen slide-right';
+  currentPhone = null;
+  clearInterval(chatPollTimer);
+
+  // Switch tabs
+  document.querySelectorAll('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+
+  // Switch screens
+  ['list', 'updates', 'tools', 'settings'].forEach(s => {
+    const el = document.getElementById('screen-' + s);
+    if (s === tab) {
+      el.className = 'screen active';
+    } else {
+      el.className = 'screen hidden';
+    }
+  });
+
+  // Show/hide tab bar
+  document.getElementById('tabBar').style.display = 'flex';
+}
+
+function openChat(phone) {
+  currentPhone = phone;
+  const c = contacts.find(x => x.phone === phone) || {};
+
+  // Set header
+  const av = document.getElementById('chatAvatar');
+  renderAvatar(av, c.name, c.profile_pic_url);
+  document.getElementById('chatName').textContent = c.name || phone;
+  document.getElementById('chatStatus').textContent = 'לחץ לפרטים';
+
+  // Show chat screen, hide tab bar
+  document.getElementById('screen-list').className = 'screen hidden';
+  document.getElementById('screen-chat').className = 'screen active';
+  document.getElementById('tabBar').style.display = 'none';
+
+  // Clear and load messages
+  document.getElementById('messagesArea').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('msgInput').value = '';
+  document.getElementById('sendBtn').disabled = true;
+  loadMessages(phone);
+
+  // Poll for new messages
+  clearInterval(chatPollTimer);
+  chatPollTimer = setInterval(() => loadMessages(phone, true), POLL_INTERVAL);
+}
+
+function goBack() {
+  clearInterval(chatPollTimer);
+  currentPhone = null;
+  document.getElementById('screen-chat').className = 'screen slide-right';
+  document.getElementById('screen-list').className = 'screen active';
+  document.getElementById('tabBar').style.display = 'flex';
+  loadContacts();
+}
+
+/* ===== MESSAGES ===== */
+async function loadMessages(phone, silent) {
+  try {
+    const data = await api('/conversations/' + encodeURIComponent(phone));
+    if (data.success && currentPhone === phone) {
+      const wasAtBottom = isAtBottom();
+      currentMessages = data.messages || [];
+      renderMessages();
+      if (!silent || wasAtBottom) scrollToBottom();
+    }
+  } catch (e) {
+    if (!silent) {
+      document.getElementById('messagesArea').innerHTML = '<div class="empty-state"><p>שגיאה בטעינת הודעות</p></div>';
+    }
+  }
+}
+
+function isAtBottom() {
+  const area = document.getElementById('messagesArea');
+  return area.scrollHeight - area.scrollTop - area.clientHeight < 60;
+}
+
+function scrollToBottom() {
+  const area = document.getElementById('messagesArea');
+  requestAnimationFrame(() => {
+    area.scrollTop = area.scrollHeight;
+  });
+}
+
+function renderMessages() {
+  const area = document.getElementById('messagesArea');
+  if (!currentMessages.length) {
+    area.innerHTML = '<div class="empty-state"><div class="em-icon">&#128172;</div><p>אין הודעות עדיין</p></div>';
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+
+  currentMessages.forEach(m => {
+    const ts = m.created_at || m.timestamp;
+    const d = new Date(ts);
+    const dateStr = d.toLocaleDateString('he-IL', { day: 'numeric', month: 'long', year: 'numeric' });
+    if (dateStr !== lastDate) {
+      html += `<div class="msg-date-sep"><span>${esc(dateStr)}</span></div>`;
+      lastDate = dateStr;
+    }
+
+    const isOut = m.role === 'assistant' || m.direction === 'outgoing';
+    const cls = isOut ? 'outgoing' : 'incoming';
+    const body = m.content || m.body || '';
+    let content = '';
+
+    if (m.type === 'image' && m.media_url) {
+      content += `<div class="msg-media"><img src="${esc(m.media_url)}" alt="תמונה" loading="lazy" onclick="window.open(this.src)"></div>`;
+    } else if (m.type === 'video' && m.media_url) {
+      content += `<div class="msg-media"><video src="${esc(m.media_url)}" controls playsinline></video></div>`;
+    } else if ((m.type === 'audio' || m.type === 'ptt') && m.media_url) {
+      content += `<div class="msg-media"><audio src="${esc(m.media_url)}" controls></audio></div>`;
+    }
+
+    if (body) {
+      content += `<div class="msg-text">${esc(body)}</div>`;
+    }
+
+    content += `<div class="msg-footer">
+      <span class="msg-time">${msgTime(ts)}</span>
+      ${isOut ? '<span class="msg-check">✓✓</span>' : ''}
+    </div>`;
+
+    html += `<div class="message ${cls}">${content}</div>`;
+  });
+
+  area.innerHTML = html;
+}
+
+/* ===== SEND ===== */
+async function sendMessage() {
+  const input = document.getElementById('msgInput');
+  const msg = input.value.trim();
+  if (!msg || !currentPhone) return;
+
+  input.value = '';
+  input.style.height = 'auto';
+  document.getElementById('sendBtn').disabled = true;
+
+  // Optimistic add
+  const now = new Date().toISOString();
+  currentMessages.push({ role: 'assistant', content: msg, created_at: now, type: 'text' });
+  renderMessages();
+  scrollToBottom();
+
+  try {
+    await api('/send', { method: 'POST', body: JSON.stringify({ phone: currentPhone, message: msg }) });
+  } catch (e) {
+    toast('שגיאה בשליחה');
+  }
+}
+
+function handleKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+}
+
+function autoGrow(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  document.getElementById('sendBtn').disabled = !el.value.trim();
+}
+
+function showAttach() {
+  toast('צירוף קבצים — בקרוב');
+}
+
+/* ===== CONTACT DETAILS ===== */
+async function openDetails(phone) {
+  if (!phone) return;
+  const c = contacts.find(x => x.phone === phone) || {};
+
+  document.getElementById('screen-details').className = 'screen active';
+
+  const body = document.getElementById('detailsBody');
+  body.innerHTML = '<div class="spinner"></div>';
+
+  let lead = c;
+  let tags = [];
+
+  try {
+    const [leadData, tagData] = await Promise.all([
+      api('/leads/' + encodeURIComponent(phone)),
+      api('/tags/' + encodeURIComponent(phone))
+    ]);
+    if (leadData.success && leadData.lead) lead = { ...c, ...leadData.lead };
+    if (tagData.success) tags = tagData.tags || [];
+  } catch (e) {}
+
+  body.innerHTML = `
+    <div class="details-avatar-section">
+      <div class="details-avatar" id="detailsAvatar"></div>
+      <div class="details-name">${esc(lead.name || phone)}</div>
+      <div class="details-phone">${esc(phone)}</div>
+    </div>
+    <div class="quick-actions">
+      <div class="quick-action" onclick="openChat('${esc(phone)}');closeDetails();">
+        <div class="quick-action-icon">&#128172;</div>
+        <div class="quick-action-label">הודעה</div>
+      </div>
+      <div class="quick-action" onclick="window.open('tel:${esc(phone)}')">
+        <div class="quick-action-icon">&#128222;</div>
+        <div class="quick-action-label">שיחה</div>
+      </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">פרטים</div>
+      <div class="details-row">
+        <span class="details-label">סטטוס</span>
+        <select class="status-select" id="detailsStatus" onchange="updateLeadStatus('${esc(phone)}')">
+          <option value="new" ${lead.lead_status === 'new' ? 'selected' : ''}>חדש</option>
+          <option value="contacted" ${lead.lead_status === 'contacted' ? 'selected' : ''}>פנו אליו</option>
+          <option value="interested" ${lead.lead_status === 'interested' ? 'selected' : ''}>מעוניין</option>
+          <option value="vip" ${lead.lead_status === 'vip' ? 'selected' : ''}>VIP</option>
+          <option value="waiting" ${lead.lead_status === 'waiting' ? 'selected' : ''}>ממתין</option>
+          <option value="closed" ${lead.lead_status === 'closed' ? 'selected' : ''}>סגור</option>
+        </select>
+      </div>
+      <div class="details-row">
+        <span class="details-label">מקור</span>
+        <span class="details-value">${esc(lead.source || '—')}</span>
+      </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">תגיות</div>
+      <div class="tags-wrap" id="tagsWrap">
+        ${tags.map(t => `<div class="tag-chip">${esc(t)}<button class="tag-remove" onclick="removeTag('${esc(phone)}','${esc(t)}')">&times;</button></div>`).join('')}
+      </div>
+      <div class="tag-add-wrap">
+        <input class="tag-input" id="tagInput" placeholder="תגית חדשה...">
+        <button class="tag-add-btn" onclick="addTag('${esc(phone)}')">הוסף</button>
+      </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">הערות</div>
+      <textarea class="notes-field" id="notesField" placeholder="הערות על איש הקשר...">${esc(lead.notes || '')}</textarea>
+      <button class="notes-save" onclick="saveNotes('${esc(phone)}')">שמור הערות</button>
+    </div>
+  `;
+
+  const av = document.getElementById('detailsAvatar');
+  renderAvatar(av, lead.name, lead.profile_pic_url || c.profile_pic_url);
+}
+
+function closeDetails() {
+  document.getElementById('screen-details').className = 'screen slide-right';
+}
+
+async function updateLeadStatus(phone) {
+  const status = document.getElementById('detailsStatus').value;
+  try {
+    await api('/leads/' + encodeURIComponent(phone), {
+      method: 'PATCH',
+      body: JSON.stringify({ lead_status: status })
+    });
+    toast('סטטוס עודכן');
+    // Update local contact
+    const c = contacts.find(x => x.phone === phone);
+    if (c) c.lead_status = status;
+  } catch (e) {
+    toast('שגיאה בעדכון');
+  }
+}
+
+async function addTag(phone) {
+  const input = document.getElementById('tagInput');
+  const tag = input.value.trim();
+  if (!tag) return;
+  try {
+    await api('/tags/' + encodeURIComponent(phone), {
+      method: 'POST',
+      body: JSON.stringify({ tag })
+    });
+    input.value = '';
+    openDetails(phone);
+  } catch (e) {
+    toast('שגיאה בהוספת תגית');
+  }
+}
+
+async function removeTag(phone, tag) {
+  try {
+    await api('/tags/' + encodeURIComponent(phone) + '/' + encodeURIComponent(tag), { method: 'DELETE' });
+    openDetails(phone);
+  } catch (e) {
+    toast('שגיאה');
+  }
+}
+
+async function saveNotes(phone) {
+  const notes = document.getElementById('notesField').value;
+  try {
+    await api('/leads/' + encodeURIComponent(phone), {
+      method: 'PATCH',
+      body: JSON.stringify({ notes })
+    });
+    toast('הערות נשמרו');
+  } catch (e) {
+    toast('שגיאה בשמירה');
+  }
+}
+
+/* ===== PULL TO REFRESH ===== */
+let startY = 0;
+let pulling = false;
+const contactListEl = document.getElementById('contactList');
+
+contactListEl.addEventListener('touchstart', e => {
+  if (contactListEl.scrollTop === 0) {
+    startY = e.touches[0].pageY;
+    pulling = true;
+  }
+}, { passive: true });
+
+contactListEl.addEventListener('touchmove', e => {
+  if (!pulling) return;
+  const dy = e.touches[0].pageY - startY;
+  if (dy > 60) {
+    document.getElementById('ptrIndicator').classList.add('visible');
+  }
+}, { passive: true });
+
+contactListEl.addEventListener('touchend', () => {
+  if (document.getElementById('ptrIndicator').classList.contains('visible')) {
+    loadContacts();
+    toast('מרענן...');
+  }
+  document.getElementById('ptrIndicator').classList.remove('visible');
+  pulling = false;
+});
+
+/* ===== BACK GESTURE / HW BACK ===== */
+window.addEventListener('popstate', () => {
+  if (document.getElementById('screen-details').classList.contains('active')) {
+    closeDetails();
+  } else if (document.getElementById('screen-chat').classList.contains('active')) {
+    goBack();
+  }
+});
+
+/* ===== INPUT MONITORING ===== */
+document.getElementById('msgInput').addEventListener('input', function() {
+  document.getElementById('sendBtn').disabled = !this.value.trim();
+});
+
+/* ===== SERVICE WORKER ===== */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+
+/* ===== INIT ===== */
+loadContacts();
+setInterval(loadContacts, POLL_INTERVAL);
+</script>
+</body>
+</html>
