@@ -215,16 +215,30 @@ app.post('/api/push/unsubscribe', (req, res) => {
   res.json({ success: true });
 });
 
-// Test push — sends a test notification to all subscribers
+// Test push — sends a test notification to all subscribers with detailed results
 app.post('/api/push/test', dashAuth, async (_req, res) => {
   try {
-    const subs = db.prepare('SELECT COUNT(*) as count FROM push_subscriptions').get() as any;
-    await sendPushNotification({
+    const subs = db.prepare('SELECT * FROM push_subscriptions').all() as any[];
+    if (!subs.length) return res.json({ success: false, error: 'No subscribers', subscribers: 0 });
+    const data = JSON.stringify({
       title: '360Shmikley - בדיקה',
       body: 'ההתראות עובדות! 🎉',
       tag: 'test-' + Date.now(),
     });
-    res.json({ success: true, subscribers: subs.count });
+    const results: any[] = [];
+    for (const sub of subs) {
+      try {
+        await webpush.sendNotification({
+          endpoint: sub.endpoint,
+          keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
+        }, data);
+        results.push({ endpoint: sub.endpoint.slice(-30), status: 'ok' });
+      } catch (e: any) {
+        results.push({ endpoint: sub.endpoint.slice(-30), status: 'error', code: e.statusCode, message: e.body || e.message });
+        log.warn({ err: e.message, statusCode: e.statusCode, endpoint: sub.endpoint.slice(-30) }, 'push test send failed');
+      }
+    }
+    res.json({ success: true, subscribers: subs.length, results });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -244,6 +258,7 @@ export async function sendPushNotification(payload: { title: string; body: strin
           keys: { p256dh: sub.keys_p256dh, auth: sub.keys_auth },
         }, data);
       } catch (e: any) {
+        log.warn({ err: e.message, statusCode: e.statusCode }, 'push send failed for subscriber');
         if (e.statusCode === 410 || e.statusCode === 404) {
           stale.push(sub.endpoint);
         }
@@ -253,9 +268,10 @@ export async function sendPushNotification(payload: { title: string; body: strin
     if (stale.length) {
       const placeholders = stale.map(() => '?').join(',');
       db.prepare(`DELETE FROM push_subscriptions WHERE endpoint IN (${placeholders})`).run(...stale);
+      log.info({ count: stale.length }, 'removed stale push subscriptions');
     }
   } catch (e: any) {
-    log.debug({ err: e.message }, 'push notification dispatch failed');
+    log.error({ err: e.message }, 'push notification dispatch failed');
   }
 }
 
