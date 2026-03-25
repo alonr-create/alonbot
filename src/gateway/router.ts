@@ -129,6 +129,13 @@ export function registerAdapter(adapter: ChannelAdapter) {
       }).catch(() => {});
     }
 
+    // Trigger chatbot flows for inbound WhatsApp
+    if (msg.channel === 'whatsapp') {
+      import('./flow-engine.js').then(({ triggerFlows }) => {
+        triggerFlows('keyword', msg.text || '', msg.senderId);
+      }).catch(() => {});
+    }
+
     // Check for keyword workflows (fire-and-forget, don't block response)
     try {
       const matched = matchKeywordWorkflows(msg.text);

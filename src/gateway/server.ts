@@ -181,6 +181,9 @@ try {
   )`);
 } catch { /* table may already exist */ }
 
+// Seed example chatbot flows
+import('./flow-engine.js').then(m => m.seedExampleFlows()).catch(() => {});
+
 // Public key endpoint (no auth — needed before subscribing)
 app.get('/api/push/vapid-key', (_req, res) => {
   res.json({ publicKey: VAPID_PUBLIC });
@@ -1159,6 +1162,34 @@ app.delete('/api/wa-manager/flows/:id', dashAuth, (req, res) => {
     db.prepare('DELETE FROM chatbot_flows WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Run a flow manually for selected leads
+app.post('/api/wa-manager/flows/:id/run', dashAuth, async (req, res) => {
+  try {
+    const flowId = parseInt(req.params.id);
+    const { phones } = req.body; // Array of phone numbers, or 'all' for all leads
+    const { executeFlow } = await import('./flow-engine.js');
+
+    let targetPhones: string[] = [];
+    if (phones === 'all' || !phones) {
+      const leads = db.prepare('SELECT phone FROM leads').all() as any[];
+      targetPhones = leads.map((l: any) => l.phone);
+    } else if (Array.isArray(phones)) {
+      targetPhones = phones;
+    }
+
+    // Execute in background
+    let started = 0;
+    for (const phone of targetPhones) {
+      executeFlow(flowId, phone).catch(() => {});
+      started++;
+    }
+
+    res.json({ success: true, started, flowId });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // === Workspace CRUD Endpoints ===

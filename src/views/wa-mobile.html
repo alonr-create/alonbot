@@ -820,6 +820,11 @@ html,body{
       <div class="tags-list-wrap" id="tagsListWrap">
         <div style="color:var(--text-muted);font-size:13px;" id="tagsListContent">טוען...</div>
       </div>
+
+      <div class="tool-section-title">אוטומציות</div>
+      <div id="flowsList">
+        <div style="color:var(--text-muted);font-size:13px;padding:8px;">טוען...</div>
+      </div>
     </div>
   </div>
 
@@ -1123,6 +1128,7 @@ function switchTab(tab) {
   });
 
   if (tab === 'updates') loadAnalytics();
+  if (tab === 'tools') loadFlows();
 
   // Show/hide tab bar
   document.getElementById('tabBar').style.display = 'flex';
@@ -1605,6 +1611,55 @@ async function toggleTagsList() {
     </div>`
   ).join('');
 }
+
+/* ===== FLOWS ===== */
+async function loadFlows() {
+  const el = document.getElementById('flowsList');
+  if (!el) return;
+  try {
+    const data = await api('/flows');
+    if (!data.success || !data.flows?.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">אין אוטומציות</div>';
+      return;
+    }
+    el.innerHTML = data.flows.map(f => `
+      <div style="margin-bottom:8px;">
+        <button class="tool-btn" onclick="confirmRunFlow(${f.id}, '${esc(f.name)}', ${f.enabled})">
+          <span class="tool-btn-icon">${f.enabled ? '&#9889;' : '&#9724;'}</span>
+          <div class="tool-btn-info">
+            <div class="tool-btn-label">${esc(f.name)}</div>
+            <div class="tool-btn-desc">${f.trigger_type === 'keyword' ? 'טריגר: ' + esc(f.trigger_value || '') : f.trigger_type === 'new_lead' ? 'ליד חדש' : f.trigger_type} · ${f.steps?.length || 0} צעדים · ${f.run_count || 0} הרצות</div>
+          </div>
+        </button>
+      </div>
+    `).join('');
+  } catch { el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">שגיאה בטעינה</div>'; }
+}
+
+async function confirmRunFlow(id, name, enabled) {
+  if (!enabled) { toast('האוטומציה כבויה'); return; }
+  const sourceFilter = currentSource !== 'all' ? currentSource : null;
+  const targetDesc = sourceFilter ? `לידים מ-${SOURCE_LABELS[sourceFilter] || sourceFilter}` : 'כל הלידים';
+  if (!confirm(`להריץ "${name}" על ${targetDesc}?`)) return;
+  toast('מריץ אוטומציה...');
+  try {
+    const phones = sourceFilter
+      ? contacts.filter(c => c.source === sourceFilter).map(c => c.phone)
+      : 'all';
+    const res = await api('/flows/' + id + '/run', {
+      method: 'POST',
+      body: JSON.stringify({ phones })
+    });
+    if (res.success) {
+      toast(`אוטומציה הופעלה על ${res.started} לידים`);
+    } else {
+      toast('שגיאה: ' + (res.error || ''));
+    }
+  } catch { toast('שגיאה בהפעלה'); }
+}
+
+// Load flows when tools tab is shown
+const _origSwitchTab = typeof switchTab === 'function' ? switchTab : null;
 
 /* ===== SETTINGS FUNCTIONS (Features 7 & 8) ===== */
 function saveSetting(key, value) {
