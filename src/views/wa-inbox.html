@@ -1101,12 +1101,17 @@ async function loadMessages(phone) {
   try {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
-    messageCache[phone] = activeMessages;
-    // If no AalonBot messages, try campaign data
-    if (activeMessages.length === 0 && campaignCache[phone]) {
-      activeMessages = buildCampaignMessages(phone);
-      messageCache[phone] = activeMessages;
+    // Merge campaign messages if available
+    if (campaignCache[phone]) {
+      const campMsgs = buildCampaignMessages(phone);
+      if (activeMessages.length === 0) {
+        activeMessages = campMsgs;
+      } else {
+        // Prepend campaign messages (they happened before bot conversation)
+        activeMessages = [...campMsgs, ...activeMessages];
+      }
     }
+    messageCache[phone] = activeMessages;
     if (activePhone === phone) renderMessages();
   } catch(e) {
     console.error('Failed to load messages:', e);
