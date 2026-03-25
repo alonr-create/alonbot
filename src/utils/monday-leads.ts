@@ -33,7 +33,7 @@ export async function createMondayLead(
 
   // Check if lead already exists in Monday.com board (created by campaign etc.)
   try {
-    const searchQuery = `query { boards(ids: ${ALON_DEV_BOARD_ID}) { items_page(limit: 5, query_params: { rules: [{ column_id: "phone_mm16hqz2", compare_value: ["${phone}"] }] }) { items { id name } } } }`;
+    const searchQuery = `query { boards(ids: ${ALON_DEV_BOARD_ID}) { items_page(limit: 5, query_params: { rules: [{ column_id: "phone_mm16hqz2", compare_value: ["${phone}"], operator: contains_text }] }) { items { id name } } } }`;
     const searchRes = await fetch('https://api.monday.com/v2', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
