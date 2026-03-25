@@ -25,7 +25,10 @@ const appleTouchIconWa = readFileSync(join(import.meta.dirname, '../views/apple-
 const faviconWa32 = readFileSync(join(import.meta.dirname, '../views/favicon-wa-32.png'));
 
 const app = express();
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '12mb' }));
+
+// Serve media files from incoming WhatsApp messages (dashboard display)
+app.use('/media', express.static(join(config.dataDir, 'media'), { maxAge: '30d' }));
 
 // Serve marketing assets (logo, images, video)
 app.use('/assets', express.static(join(config.dataDir), {
@@ -1058,6 +1061,78 @@ app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
     });
     const data = await r.json();
     res.json({ success: true, data });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Create WhatsApp message template via Meta Graph API
+app.post('/api/wa-manager/create-template', dashAuth, async (req, res) => {
+  try {
+    const { name, category, language, headerType, headerText, body, footer, buttons } = req.body;
+    if (!name || !body) { res.status(400).json({ success: false, error: 'name and body are required' }); return; }
+    const wabaId = config.waCloudWabaId || '1289908913100682';
+    const token = config.waCloudToken;
+    if (!token) { res.status(400).json({ success: false, error: 'Cloud API token not configured' }); return; }
+
+    // Build components array
+    const components: any[] = [];
+
+    // Header component
+    if (headerType && headerType !== 'NONE') {
+      if (headerType === 'TEXT' && headerText) {
+        components.push({ type: 'HEADER', format: 'TEXT', text: headerText });
+      } else if (headerType === 'IMAGE') {
+        components.push({ type: 'HEADER', format: 'IMAGE' });
+      }
+    }
+
+    // Body component (required)
+    components.push({ type: 'BODY', text: body });
+
+    // Footer component
+    if (footer) {
+      components.push({ type: 'FOOTER', text: footer });
+    }
+
+    // Buttons component
+    if (buttons && Array.isArray(buttons) && buttons.length > 0) {
+      const btns = buttons.map((b: any) => {
+        if (b.type === 'QUICK_REPLY') {
+          return { type: 'QUICK_REPLY', text: b.text };
+        } else if (b.type === 'URL') {
+          return { type: 'URL', text: b.text, url: b.url };
+        } else if (b.type === 'PHONE_NUMBER') {
+          return { type: 'PHONE_NUMBER', text: b.text, phone_number: b.phone_number };
+        }
+        return { type: b.type, text: b.text };
+      });
+      components.push({ type: 'BUTTONS', buttons: btns });
+    }
+
+    const payload = {
+      name,
+      category: category || 'MARKETING',
+      language: language || 'he',
+      components
+    };
+
+    log.info({ name, category, language, componentsCount: components.length }, 'creating template');
+
+    const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const data = await r.json() as any;
+
+    if (data.error) {
+      log.error({ error: data.error }, 'Meta create template API error');
+      res.json({ success: false, error: data.error });
+      return;
+    }
+
+    res.json({ success: true, template: data });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }

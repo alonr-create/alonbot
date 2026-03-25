@@ -346,6 +346,70 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 }
 .emoji-grid button:hover{background:var(--bg3);}
 
+/* ===== FLOW EDITOR ===== */
+.flow-card{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;transition:all .15s;}
+.flow-card:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(37,211,102,0.08);}
+.flow-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.flow-info{flex:1;min-width:0;}
+.flow-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px;}
+.flow-meta{display:flex;gap:12px;font-size:11px;color:var(--text3);}
+.flow-meta strong{color:var(--text2);}
+.flow-actions{display:flex;gap:8px;align-items:center;}
+.flow-toggle{position:relative;width:38px;height:22px;display:inline-block;}
+.flow-toggle input{opacity:0;width:0;height:0;}
+.flow-toggle .slider{position:absolute;inset:0;background:#ccc;border-radius:22px;cursor:pointer;transition:.3s;}
+.flow-toggle .slider::before{content:'';position:absolute;width:16px;height:16px;right:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.flow-toggle input:checked+.slider{background:var(--accent);}
+.flow-toggle input:checked+.slider::before{right:18px;}
+.flow-editor-overlay{display:none;position:fixed;inset:0;z-index:300;background:var(--bg);}
+.flow-editor-overlay.open{display:flex;flex-direction:column;}
+.fe-toolbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;}
+.fe-toolbar .fe-title{font-size:16px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:8px;}
+.fe-toolbar .fe-title input{background:transparent;border:none;border-bottom:2px solid transparent;font-size:16px;font-weight:700;color:var(--text);font-family:inherit;outline:none;padding:2px 4px;width:200px;}
+.fe-toolbar .fe-title input:focus{border-bottom-color:var(--accent);}
+.fe-toolbar-actions{display:flex;gap:8px;align-items:center;}
+.fe-body{flex:1;display:flex;overflow:hidden;}
+.fe-sidebar{width:220px;background:var(--bg2);border-left:1px solid var(--border);padding:16px;overflow-y:auto;flex-shrink:0;}
+.fe-sidebar h4{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+.fe-node-type{padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:grab;display:flex;align-items:center;gap:10px;transition:all .2s;background:var(--bg);font-size:13px;font-weight:500;}
+.fe-node-type:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.fe-node-type .nt-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.fe-canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg);cursor:grab;}
+.fe-canvas-wrap.grabbing{cursor:grabbing;}
+.fe-canvas{position:absolute;top:0;right:0;width:4000px;height:4000px;transform-origin:0 0;}
+.fe-canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;}
+.fe-canvas svg.fe-connections{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
+.fe-canvas svg.fe-connections path{stroke:var(--border);stroke-width:2;fill:none;}
+.fe-canvas svg.fe-connections path.active{stroke:var(--accent);stroke-width:2.5;}
+.fe-node{position:absolute;width:220px;background:var(--bg2);border:2px solid var(--border);border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.06);cursor:grab;z-index:10;transition:box-shadow .2s;user-select:none;}
+.fe-node:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1);}
+.fe-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,211,102,0.2);}
+.fe-node.dragging{z-index:100;opacity:0.9;cursor:grabbing;}
+.fe-node-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;border-radius:10px 10px 0 0;}
+.fe-node-header .nh-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.fe-node-header .nh-label{font-size:12px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fe-node-header .nh-delete{cursor:pointer;color:var(--text3);font-size:14px;opacity:0;transition:opacity .2s;}
+.fe-node:hover .nh-delete{opacity:1;}
+.fe-node-header .nh-delete:hover{color:var(--danger);}
+.fe-node-body{padding:10px 14px;font-size:12px;color:var(--text2);min-height:36px;}
+.fe-node-body textarea,.fe-node-body input,.fe-node-body select{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:11px;outline:none;background:var(--bg);color:var(--text);resize:vertical;}
+.fe-node-body textarea:focus,.fe-node-body input:focus,.fe-node-body select:focus{border-color:var(--accent);}
+.fe-node-body label{display:block;font-size:10px;color:var(--text3);margin-bottom:2px;margin-top:6px;}
+.fe-node-body label:first-child{margin-top:0;}
+.fe-port{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--bg2);border:2px solid var(--border);cursor:crosshair;z-index:20;transition:all .15s;}
+.fe-port:hover{transform:scale(1.3);border-color:var(--accent);background:var(--accent);}
+.fe-port.port-in{top:50%;right:-7px;transform:translateY(-50%);}
+.fe-port.port-out{top:50%;left:-7px;transform:translateY(-50%);}
+.fe-port.port-in:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.port-out:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.connected{background:var(--accent);border-color:var(--accent);}
+.fe-node.trigger-node{border-color:#7b2ff7;}
+.fe-node.trigger-node .fe-node-header{background:linear-gradient(135deg,rgba(123,47,247,0.08),transparent);}
+.fe-zoom{position:absolute;bottom:16px;left:16px;display:flex;gap:4px;z-index:50;}
+.fe-zoom button{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--text);transition:all .15s;}
+.fe-zoom button:hover{border-color:var(--accent);color:var(--accent);}
+.fe-zoom .zoom-level{padding:0 8px;line-height:32px;font-size:11px;color:var(--text2);}
+
 /* ===== RESPONSIVE ===== */
 @media(max-width:900px){
   .details-panel{display:none!important;}
@@ -454,6 +518,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     <button class="nav-tab" id="navAnalytics" onclick="showView('analytics')">📈 אנליטיקס</button>
     <button class="nav-tab" id="navCosts" onclick="showView('costs')">💰 עלויות</button>
     <button class="nav-tab" id="navCampaign" onclick="showView('campaign')">🚀 קמפיין</button>
+    <button class="nav-tab" id="navFlows" onclick="showView('flows')">⚡ פלואים</button>
     <button class="topbar-btn" title="רענון" onclick="refreshAll()">🔄</button>
     <button class="topbar-btn" title="דשבורד ראשי" onclick="window.location='/dashboard?token='+TOKEN">🏠</button>
   </div>
@@ -586,10 +651,15 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   <div style="max-width:900px;margin:0 auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">📋 תבניות הודעה (Message Templates)</h2>
-      <a href="https://business.facebook.com/latest/whatsapp_manager/message_templates/?business_id=296034178660107" target="_blank"
-         style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;font-size:13px;font-weight:500;">
-        ניהול ב-Meta →
-      </a>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="openCreateTemplateModal()" style="padding:8px 16px;border-radius:8px;background:var(--bg2);color:var(--accent);border:2px solid var(--accent);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg2)';this.style.color='var(--accent)'">
+          ➕ תבנית חדשה
+        </button>
+        <a href="https://business.facebook.com/latest/whatsapp_manager/message_templates/?business_id=296034178660107" target="_blank"
+           style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;font-size:13px;font-weight:500;">
+          ניהול ב-Meta →
+        </a>
+      </div>
     </div>
     <div id="templatesList" style="display:flex;flex-direction:column;gap:12px;">
       <div style="text-align:center;padding:40px;color:var(--text3);">טוען תבניות...</div>
@@ -611,6 +681,107 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
           <button onclick="closeTemplateModal()" style="padding:8px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
         </div>
         <div id="modalResult" style="margin-top:12px;font-size:12px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Create template modal -->
+    <div id="createTemplateModal" onclick="if(event.target===this)closeCreateTemplateModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;">
+      <div style="background:var(--bg2);border-radius:16px;padding:28px;width:100%;max-width:780px;box-shadow:0 8px 40px rgba(0,0,0,.25);position:relative;display:flex;gap:24px;flex-wrap:wrap;">
+        <!-- Close button -->
+        <button onclick="closeCreateTemplateModal()" style="position:absolute;top:12px;left:14px;width:32px;height:32px;border-radius:50%;border:none;background:var(--bg3);cursor:pointer;font-size:18px;color:var(--text2);display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1;" onmouseover="this.style.background='var(--danger)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text2)'">✕</button>
+
+        <!-- Left: Form -->
+        <div style="flex:1;min-width:300px;">
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;color:var(--text);">➕ יצירת תבנית חדשה</h3>
+
+          <!-- Template Name -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">שם תבנית</label>
+            <input id="ctplName" placeholder="my_template_name" oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'');updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:monospace;font-size:13px;direction:ltr;">
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">אותיות קטנות באנגלית, מספרים וקו תחתון בלבד</div>
+          </div>
+
+          <!-- Category + Language row -->
+          <div style="display:flex;gap:12px;margin-bottom:14px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">קטגוריה</label>
+              <select id="ctplCategory" onchange="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+                <option value="MARKETING">📢 שיווקית (Marketing)</option>
+                <option value="UTILITY">🔧 שירות (Utility)</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">שפה</label>
+              <select id="ctplLang" onchange="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+                <option value="he">🇮🇱 עברית (he)</option>
+                <option value="en">🇺🇸 English (en)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Header Type -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">כותרת (Header)</label>
+            <select id="ctplHeaderType" onchange="toggleHeaderInput();updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+              <option value="NONE">ללא</option>
+              <option value="TEXT">טקסט</option>
+              <option value="IMAGE">תמונה</option>
+            </select>
+          </div>
+
+          <!-- Header Text (conditional) -->
+          <div id="ctplHeaderTextWrap" style="margin-bottom:14px;display:none;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">טקסט כותרת</label>
+            <input id="ctplHeaderText" placeholder="כותרת ההודעה" oninput="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+          </div>
+
+          <!-- Body -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">גוף ההודעה</label>
+            <textarea id="ctplBody" rows="5" placeholder="שלום {{1}}, תודה שפנית אלינו!&#10;נשמח לעזור לך עם {{2}}." oninput="updateCreatePreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;resize:vertical;line-height:1.5;"></textarea>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">השתמש ב-{{1}}, {{2}} וכו׳ למשתנים</div>
+          </div>
+
+          <!-- Footer -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">כותרת תחתונה (Footer) — אופציונלי</label>
+            <input id="ctplFooter" placeholder="Alon.dev — בניית אתרים" oninput="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+          </div>
+
+          <!-- Buttons -->
+          <div style="margin-bottom:18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);">כפתורים (עד 3)</label>
+              <button onclick="addTemplateButton()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;color:var(--accent);font-weight:600;">+ הוסף כפתור</button>
+            </div>
+            <div id="ctplButtons" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="createTemplate()" id="ctplSubmitBtn" style="padding:10px 24px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;transition:all .15s;">צור תבנית</button>
+            <button onclick="closeCreateTemplateModal()" style="padding:10px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
+          </div>
+          <div id="ctplResult" style="margin-top:12px;font-size:13px;display:none;padding:10px 14px;border-radius:8px;"></div>
+        </div>
+
+        <!-- Right: Live Preview -->
+        <div style="width:280px;flex-shrink:0;">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">תצוגה מקדימה</div>
+          <div style="background:var(--chat-bg);border-radius:12px;padding:16px;min-height:200px;border:1px solid var(--border);">
+            <div id="ctplPreview" style="direction:rtl;">
+              <div style="background:var(--bubble-out);border-radius:12px 12px 0 12px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06);max-width:100%;">
+                <div id="ctplPreviewHeader" style="font-weight:700;font-size:14px;margin-bottom:6px;display:none;"></div>
+                <div id="ctplPreviewImagePlaceholder" style="display:none;background:var(--bg3);border-radius:8px;height:120px;margin-bottom:8px;display:none;align-items:center;justify-content:center;color:var(--text3);font-size:24px;">🖼️</div>
+                <div id="ctplPreviewBody" style="white-space:pre-wrap;word-break:break-word;">הקלד את גוף ההודעה...</div>
+                <div id="ctplPreviewFooter" style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;display:none;"></div>
+                <div id="ctplPreviewButtons" style="margin-top:8px;display:none;border-top:1px solid rgba(0,0,0,.08);padding-top:8px;"></div>
+                <div style="text-align:left;font-size:10px;color:var(--text4);margin-top:4px;">12:00 ✓✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
       </div>
     </div>
   </div>
@@ -779,6 +950,81 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
         <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">משפך המרה</h3>
         <table id="analyticsFunnelTable" style="width:100%;border-collapse:collapse;font-size:13px;"><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOWS VIEW -->
+<div id="flowsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">⚡ אוטומציות (Chatbot Flows)</h2>
+      <button onclick="openFlowEditor(null)" style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;">➕ פלו חדש</button>
+    </div>
+    <div id="flowsList" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="text-align:center;padding:40px;color:var(--text3);">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOW EDITOR OVERLAY -->
+<div class="flow-editor-overlay" id="flow-editor">
+  <div class="fe-toolbar">
+    <div class="fe-title">
+      <span style="font-size:20px;">⚡</span>
+      <input id="fe-name" placeholder="שם הפלו..." value="">
+    </div>
+    <div class="fe-toolbar-actions">
+      <button id="fe-delete-btn" style="display:none;padding:6px 14px;border-radius:8px;background:var(--danger);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:12px;" onclick="deleteFlow()">🗑 מחק</button>
+      <button style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:12px;" onclick="closeFlowEditor()">ביטול</button>
+      <button style="padding:6px 14px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;" onclick="saveFlow()">💾 שמור</button>
+    </div>
+  </div>
+  <div class="fe-body">
+    <div class="fe-sidebar">
+      <h4>📦 נודים</h4>
+      <div class="fe-node-type" draggable="true" data-type="send_message" ondragstart="onNodeTypeDrag(event,'send_message')">
+        <div class="nt-icon" style="background:#dcf8c6;">💬</div>
+        <div>שלח הודעה</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="wait" ondragstart="onNodeTypeDrag(event,'wait')">
+        <div class="nt-icon" style="background:#fff3cd;">⏳</div>
+        <div>המתנה</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="condition" ondragstart="onNodeTypeDrag(event,'condition')">
+        <div class="nt-icon" style="background:#e8daff;">🔀</div>
+        <div>תנאי</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="webhook" ondragstart="onNodeTypeDrag(event,'webhook')">
+        <div class="nt-icon" style="background:#d4edff;">🌐</div>
+        <div>Webhook</div>
+      </div>
+      <h4 style="margin-top:20px;">⚙ הגדרות</h4>
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">טריגר</label>
+        <select id="fe-trigger-type" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:#fff;" onchange="updateFeTriggerUI()">
+          <option value="keyword">🔑 מילת מפתח</option>
+          <option value="new_lead">🆕 ליד חדש</option>
+          <option value="status_change">🔄 שינוי סטטוס</option>
+        </select>
+      </div>
+      <div id="fe-trigger-val-wrap">
+        <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;" id="fe-trigger-val-label">ערך</label>
+        <input id="fe-trigger-value" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;" placeholder="שלום">
+      </div>
+    </div>
+    <div class="fe-canvas-wrap" id="fe-canvas-wrap"
+      ondragover="event.preventDefault()" ondrop="onCanvasDrop(event)">
+      <div class="fe-canvas" id="fe-canvas">
+        <div class="fe-canvas-grid"></div>
+        <svg class="fe-connections" id="fe-connections"></svg>
+      </div>
+      <div class="fe-zoom">
+        <button onclick="feZoom(-0.1)">−</button>
+        <span class="zoom-level" id="fe-zoom-level">100%</span>
+        <button onclick="feZoom(0.1)">+</button>
+        <button onclick="feZoom(0)" title="איפוס">↺</button>
       </div>
     </div>
   </div>
@@ -1195,7 +1441,7 @@ function selectContact(phone) {
 
   // Update header
   const headerName = contact.name || contact.phone;
-  document.title = '360 | ' + headerName;
+  document.title = '360Shmikley | ' + headerName;
 
   const color = getAvatarColor(headerName);
   const initials = getInitials(headerName);
@@ -1369,11 +1615,26 @@ function renderMessages() {
 
     const sender = msg.source === 'campaign' ? '🚀 קמפיין' : (isOut ? '🤖 בוט' : '');
 
+    // Render media if present
+    let mediaHtml = '';
+    const rawText = msg.body || msg.message || msg.text || msg.content || '';
+    const imgMatch = rawText.match(/\[media:image:([^\]]+)\]/);
+    const fileMatch = rawText.match(/\[media:file:([^\]:]+):([^\]]+)\]/);
+    let cleanText = text;
+    if (imgMatch) {
+      mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
+      cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
+    } else if (fileMatch) {
+      mediaHtml = `<a href="/media/${esc(fileMatch[1])}" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px;background:rgba(0,0,0,0.05);border-radius:6px;margin-bottom:4px;text-decoration:none;color:inherit;"><span style="font-size:20px;">📄</span><span style="font-size:12px;">${esc(fileMatch[2])}</span></a>`;
+      cleanText = text.replace(/\[media:file:[^\]]+\]\s*/, '');
+    }
+
     html += `
       <div class="msg-wrapper ${dir}">
         <div class="msg-bubble ${dir}">
           ${sender ? `<div style="font-size:10px;font-weight:600;color:${msg.source === 'campaign' ? '#6366f1' : (isOut ? '#128C7E' : '#e17076')};margin-bottom:2px;">${sender}</div>` : ''}
-          <div class="msg-text">${text}</div>
+          ${mediaHtml}
+          <div class="msg-text">${cleanText}</div>
           <div class="msg-meta">
             <span class="msg-time">${time}</span>
             ${checks}
@@ -1620,8 +1881,11 @@ async function handleTagKey(e) {
 }
 
 async function removeTag(tag) {
-  // No delete endpoint defined — we just reload. If API supports DELETE, add here.
-  console.log('Remove tag:', tag);
+  if (!activePhone) return;
+  try {
+    await api('/tags/' + encodeURIComponent(activePhone) + '/' + encodeURIComponent(tag), { method: 'DELETE' });
+    loadTags(activePhone);
+  } catch(e) { console.error('Remove tag failed:', e); }
 }
 
 // ===== NOTES =====
@@ -1692,10 +1956,18 @@ async function loadStatusHistory(phone) {
   }
 }
 
-function updateStatus(val) {
-  // Status update — could POST to an endpoint if available
+async function updateStatus(val) {
+  if (!activePhone) return;
   const c = contacts.find(c => c.phone === activePhone);
   if (c) c.status = val;
+  try {
+    await api('/leads/' + encodeURIComponent(activePhone), {
+      method: 'PATCH',
+      body: JSON.stringify({ lead_status: val })
+    });
+    loadStatusHistory(activePhone);
+    renderContacts();
+  } catch(e) { console.error('Status update failed:', e); }
 }
 
 // ===== EMOJI PICKER =====
@@ -1856,6 +2128,7 @@ function showView(view) {
     analytics: document.getElementById('analyticsView'),
     costs: document.getElementById('costsView'),
     campaign: document.getElementById('campaignView'),
+    flows: document.getElementById('flowsView'),
   };
   const navBtns = {
     inbox: document.getElementById('navInbox'),
@@ -1865,6 +2138,7 @@ function showView(view) {
     analytics: document.getElementById('navAnalytics'),
     costs: document.getElementById('navCosts'),
     campaign: document.getElementById('navCampaign'),
+    flows: document.getElementById('navFlows'),
   };
 
   // Hide all views and deactivate all nav buttons
@@ -1882,6 +2156,7 @@ function showView(view) {
   else if (view === 'broadcasts') loadBroadcastData();
   else if (view === 'analytics') loadAnalytics();
   else if (view === 'campaign') loadCampaign();
+  else if (view === 'flows') loadFlows();
 }
 
 // ===== CAMPAIGN =====
@@ -2073,6 +2348,230 @@ async function doSendTemplate() {
   } catch(e) {
     resultEl.style.color = 'var(--danger)';
     resultEl.textContent = '❌ שגיאה: ' + e.message;
+  }
+}
+
+// ===== CREATE TEMPLATE =====
+let ctplButtonCount = 0;
+
+function openCreateTemplateModal() {
+  // Reset form
+  document.getElementById('ctplName').value = '';
+  document.getElementById('ctplCategory').value = 'MARKETING';
+  document.getElementById('ctplLang').value = 'he';
+  document.getElementById('ctplHeaderType').value = 'NONE';
+  document.getElementById('ctplHeaderText').value = '';
+  document.getElementById('ctplBody').value = '';
+  document.getElementById('ctplFooter').value = '';
+  document.getElementById('ctplButtons').innerHTML = '';
+  document.getElementById('ctplResult').style.display = 'none';
+  document.getElementById('ctplSubmitBtn').disabled = false;
+  ctplButtonCount = 0;
+  toggleHeaderInput();
+  updateCreatePreview();
+  const modal = document.getElementById('createTemplateModal');
+  modal.style.display = 'flex';
+}
+
+function closeCreateTemplateModal() {
+  document.getElementById('createTemplateModal').style.display = 'none';
+}
+
+function toggleHeaderInput() {
+  const type = document.getElementById('ctplHeaderType').value;
+  document.getElementById('ctplHeaderTextWrap').style.display = type === 'TEXT' ? 'block' : 'none';
+}
+
+function addTemplateButton() {
+  if (ctplButtonCount >= 3) return;
+  ctplButtonCount++;
+  const idx = ctplButtonCount;
+  const wrap = document.getElementById('ctplButtons');
+  const row = document.createElement('div');
+  row.id = 'ctplBtnRow' + idx;
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `
+    <select id="ctplBtnType${idx}" onchange="updateCreatePreview()" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;width:120px;">
+      <option value="QUICK_REPLY">תגובה מהירה</option>
+      <option value="URL">קישור (URL)</option>
+      <option value="PHONE_NUMBER">מספר טלפון</option>
+    </select>
+    <input id="ctplBtnText${idx}" placeholder="טקסט כפתור" oninput="updateCreatePreview()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;">
+    <input id="ctplBtnValue${idx}" placeholder="URL / טלפון" oninput="updateCreatePreview()" style="width:140px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;direction:ltr;">
+    <button onclick="removeTemplateButton(${idx})" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;font-size:14px;color:var(--danger);display:flex;align-items:center;justify-content:center;">✕</button>
+  `;
+  wrap.appendChild(row);
+  updateCreatePreview();
+}
+
+function removeTemplateButton(idx) {
+  const row = document.getElementById('ctplBtnRow' + idx);
+  if (row) row.remove();
+  ctplButtonCount--;
+  // Re-index remaining buttons
+  const wrap = document.getElementById('ctplButtons');
+  const rows = wrap.children;
+  ctplButtonCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    ctplButtonCount++;
+    const n = ctplButtonCount;
+    rows[i].id = 'ctplBtnRow' + n;
+    rows[i].querySelector('select').id = 'ctplBtnType' + n;
+    rows[i].querySelector('input:nth-child(2)').id = 'ctplBtnText' + n;
+    rows[i].querySelector('input:nth-child(3)').id = 'ctplBtnValue' + n;
+    rows[i].querySelector('button').setAttribute('onclick', `removeTemplateButton(${n})`);
+  }
+  updateCreatePreview();
+}
+
+function updateCreatePreview() {
+  const headerType = document.getElementById('ctplHeaderType').value;
+  const headerText = document.getElementById('ctplHeaderText').value;
+  const body = document.getElementById('ctplBody').value;
+  const footer = document.getElementById('ctplFooter').value;
+
+  // Header
+  const previewHeader = document.getElementById('ctplPreviewHeader');
+  const previewImage = document.getElementById('ctplPreviewImagePlaceholder');
+  if (headerType === 'TEXT' && headerText) {
+    previewHeader.textContent = headerText;
+    previewHeader.style.display = 'block';
+    previewImage.style.display = 'none';
+  } else if (headerType === 'IMAGE') {
+    previewHeader.style.display = 'none';
+    previewImage.style.display = 'flex';
+  } else {
+    previewHeader.style.display = 'none';
+    previewImage.style.display = 'none';
+  }
+
+  // Body — highlight variables
+  const previewBody = document.getElementById('ctplPreviewBody');
+  if (body) {
+    previewBody.innerHTML = esc(body).replace(/\{\{(\d+)\}\}/g, '<span style="background:#c3e6f5;padding:0 3px;border-radius:3px;font-weight:600;color:#0c4a6e;">{{$1}}</span>');
+  } else {
+    previewBody.innerHTML = '<span style="color:var(--text3);">הקלד את גוף ההודעה...</span>';
+  }
+
+  // Footer
+  const previewFooter = document.getElementById('ctplPreviewFooter');
+  if (footer) {
+    previewFooter.textContent = footer;
+    previewFooter.style.display = 'block';
+  } else {
+    previewFooter.style.display = 'none';
+  }
+
+  // Buttons
+  const previewButtons = document.getElementById('ctplPreviewButtons');
+  let btnsHtml = '';
+  for (let i = 1; i <= ctplButtonCount; i++) {
+    const el = document.getElementById('ctplBtnText' + i);
+    if (!el) continue;
+    const txt = el.value || 'כפתור ' + i;
+    const typeEl = document.getElementById('ctplBtnType' + i);
+    const type = typeEl ? typeEl.value : 'QUICK_REPLY';
+    const icon = type === 'URL' ? '🔗' : type === 'PHONE_NUMBER' ? '📞' : '↩️';
+    btnsHtml += `<div style="text-align:center;padding:6px 0;color:#0c82df;font-size:12px;font-weight:500;${i > 1 ? 'border-top:1px solid rgba(0,0,0,.06);' : ''}">${icon} ${esc(txt)}</div>`;
+  }
+  if (btnsHtml) {
+    previewButtons.innerHTML = btnsHtml;
+    previewButtons.style.display = 'block';
+  } else {
+    previewButtons.style.display = 'none';
+  }
+}
+
+async function createTemplate() {
+  const name = document.getElementById('ctplName').value.trim();
+  const category = document.getElementById('ctplCategory').value;
+  const language = document.getElementById('ctplLang').value;
+  const headerType = document.getElementById('ctplHeaderType').value;
+  const headerText = document.getElementById('ctplHeaderText').value.trim();
+  const body = document.getElementById('ctplBody').value.trim();
+  const footer = document.getElementById('ctplFooter').value.trim();
+  const resultEl = document.getElementById('ctplResult');
+
+  // Validation
+  if (!name) { showCtplResult('error', 'נא להזין שם תבנית'); return; }
+  if (!/^[a-z0-9_]+$/.test(name)) { showCtplResult('error', 'שם תבנית: רק אותיות קטנות, מספרים וקו תחתון'); return; }
+  if (!body) { showCtplResult('error', 'נא להזין גוף הודעה'); return; }
+  if (headerType === 'TEXT' && !headerText) { showCtplResult('error', 'נא להזין טקסט כותרת'); return; }
+
+  // Build components
+  const components = [];
+
+  if (headerType === 'TEXT') {
+    components.push({ type: 'HEADER', format: 'TEXT', text: headerText });
+  } else if (headerType === 'IMAGE') {
+    components.push({ type: 'HEADER', format: 'IMAGE' });
+  }
+
+  components.push({ type: 'BODY', text: body });
+
+  if (footer) {
+    components.push({ type: 'FOOTER', text: footer });
+  }
+
+  // Buttons
+  const buttons = [];
+  for (let i = 1; i <= ctplButtonCount; i++) {
+    const typeEl = document.getElementById('ctplBtnType' + i);
+    const textEl = document.getElementById('ctplBtnText' + i);
+    const valueEl = document.getElementById('ctplBtnValue' + i);
+    if (!typeEl || !textEl) continue;
+    const btnType = typeEl.value;
+    const btnText = textEl.value.trim();
+    const btnValue = valueEl ? valueEl.value.trim() : '';
+    if (!btnText) { showCtplResult('error', `כפתור ${i}: נא להזין טקסט`); return; }
+    if (btnType === 'URL' && !btnValue) { showCtplResult('error', `כפתור ${i}: נא להזין URL`); return; }
+    if (btnType === 'PHONE_NUMBER' && !btnValue) { showCtplResult('error', `כפתור ${i}: נא להזין מספר טלפון`); return; }
+
+    const btn = { type: btnType, text: btnText };
+    if (btnType === 'URL') btn.url = btnValue;
+    if (btnType === 'PHONE_NUMBER') btn.phone_number = btnValue;
+    buttons.push(btn);
+  }
+  if (buttons.length) {
+    components.push({ type: 'BUTTONS', buttons });
+  }
+
+  // Submit
+  showCtplResult('info', 'שולח ל-Meta...');
+  document.getElementById('ctplSubmitBtn').disabled = true;
+
+  try {
+    const data = await api('/create-template', {
+      method: 'POST',
+      body: JSON.stringify({ name, category, language, components })
+    });
+    if (data.success || data.id) {
+      showCtplResult('success', '✅ התבנית נוצרה בהצלחה! ID: ' + (data.id || ''));
+      setTimeout(() => {
+        closeCreateTemplateModal();
+        loadTemplates();
+      }, 1500);
+    } else {
+      const errMsg = data.error?.message || data.error || JSON.stringify(data.data || data);
+      showCtplResult('error', '❌ ' + errMsg);
+      document.getElementById('ctplSubmitBtn').disabled = false;
+    }
+  } catch(e) {
+    showCtplResult('error', '❌ שגיאה: ' + e.message);
+    document.getElementById('ctplSubmitBtn').disabled = false;
+  }
+}
+
+function showCtplResult(type, msg) {
+  const el = document.getElementById('ctplResult');
+  el.style.display = 'block';
+  el.textContent = msg;
+  if (type === 'error') {
+    el.style.background = '#fef2f2'; el.style.color = 'var(--danger)'; el.style.border = '1px solid #fecaca';
+  } else if (type === 'success') {
+    el.style.background = '#f0fdf4'; el.style.color = '#15803d'; el.style.border = '1px solid #bbf7d0';
+  } else {
+    el.style.background = '#f0f9ff'; el.style.color = '#0369a1'; el.style.border = '1px solid #bae6fd';
   }
 }
 
@@ -2421,6 +2920,347 @@ function renderAnalyticsFunnelTable(data) {
     html += `<tr><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${STATUS_MAP[s.lead_status] || esc(s.lead_status || 'לא ידוע')}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${s.count}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${pct}%</td></tr>`;
   }
   tbody.innerHTML = html;
+}
+
+// ===== CHATBOT FLOWS =====
+let allFlows = [];
+let editingFlowId = null;
+let feNodes = [];
+let feConnections = [];
+let feScale = 1;
+let feOffsetX = 0, feOffsetY = 0;
+let feDragNode = null;
+let feDragStartX = 0, feDragStartY = 0;
+let feNodeStartX = 0, feNodeStartY = 0;
+let feSelectedNode = null;
+let fePanning = false;
+let fePanStartX = 0, fePanStartY = 0;
+let feNodeIdCounter = 1;
+let feConnecting = null;
+
+const NODE_META = {
+  trigger: { label: 'טריגר', icon: '⚡', color: '#7b2ff7', bg: '#e8daff' },
+  send_message: { label: 'שלח הודעה', icon: '💬', color: '#25D366', bg: '#dcf8c6' },
+  wait: { label: 'המתנה', icon: '⏳', color: '#e68a00', bg: '#fff3cd' },
+  condition: { label: 'תנאי', icon: '🔀', color: '#7b2ff7', bg: '#e8daff' },
+  webhook: { label: 'Webhook', icon: '🌐', color: '#0099cc', bg: '#d4edff' },
+};
+
+async function loadFlows() {
+  try {
+    const data = await api('/flows');
+    if (data.success) { allFlows = data.flows || []; renderFlowsList(); }
+  } catch(e) {
+    document.getElementById('flowsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">שגיאה בטעינת פלואים</div>';
+  }
+}
+
+function renderFlowsList() {
+  const container = document.getElementById('flowsList');
+  if (!allFlows.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">אין אוטומציות מוגדרות. לחץ "➕ פלו חדש" ליצירת אוטומציה.</div>';
+    return;
+  }
+  const triggerLabels = { keyword: '🔑 מילת מפתח', new_lead: '🆕 ליד חדש', status_change: '🔄 שינוי סטטוס' };
+  const triggerColors = { keyword: '#0099cc', new_lead: 'var(--accent)', status_change: '#7b2ff7' };
+  container.innerHTML = allFlows.map(f => {
+    const steps = typeof f.steps === 'string' ? JSON.parse(f.steps || '[]') : (f.steps || []);
+    return `
+    <div class="flow-card">
+      <div class="flow-icon" style="background:${triggerColors[f.trigger_type] || 'var(--accent)'}20;color:${triggerColors[f.trigger_type] || 'var(--accent)'};">⚡</div>
+      <div class="flow-info">
+        <div class="flow-name">${esc(f.name)}</div>
+        <div class="flow-meta">
+          <span>${triggerLabels[f.trigger_type] || f.trigger_type}: <strong>${esc(f.trigger_value || '—')}</strong></span>
+          <span>${steps.length} צעדים</span>
+        </div>
+      </div>
+      <div class="flow-actions">
+        <label class="flow-toggle" title="${f.enabled ? 'פעיל' : 'כבוי'}">
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlow(${f.id}, this.checked)">
+          <span class="slider"></span>
+        </label>
+        <button style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;" onclick="openFlowEditor(${f.id})">✏ עריכה</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleFlow(id, enabled) {
+  try {
+    await api('/flows/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: enabled ? 1 : 0 }) });
+    const f = allFlows.find(fl => fl.id === id);
+    if (f) f.enabled = enabled ? 1 : 0;
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function openFlowEditor(id) {
+  const flow = id ? allFlows.find(f => f.id === id) : null;
+  editingFlowId = flow ? flow.id : null;
+  document.getElementById('fe-name').value = flow ? flow.name : '';
+  document.getElementById('fe-trigger-type').value = flow ? flow.trigger_type : 'keyword';
+  document.getElementById('fe-trigger-value').value = flow ? (flow.trigger_value || '') : '';
+  document.getElementById('fe-delete-btn').style.display = flow ? 'inline-block' : 'none';
+  updateFeTriggerUI();
+
+  feNodes = []; feConnections = []; feNodeIdCounter = 1;
+  feScale = 1; feOffsetX = 0; feOffsetY = 0; feSelectedNode = null;
+  const steps = flow ? (typeof flow.steps === 'string' ? JSON.parse(flow.steps || '[]') : (flow.steps || [])) : [];
+  const triggerNode = { id: feNodeIdCounter++, type: 'trigger', x: 300, y: 80, data: {} };
+  feNodes.push(triggerNode);
+  let prevId = triggerNode.id;
+  steps.forEach((step, i) => {
+    const node = { id: feNodeIdCounter++, type: step.type, x: 300, y: 80 + (i + 1) * 140, data: { ...step } };
+    feNodes.push(node);
+    feConnections.push({ from: prevId, to: node.id });
+    prevId = node.id;
+  });
+  document.getElementById('flow-editor').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderFlowCanvas();
+  initFlowCanvasEvents();
+}
+
+function closeFlowEditor() {
+  document.getElementById('flow-editor').classList.remove('open');
+  document.body.style.overflow = '';
+  editingFlowId = null;
+  feNodes = []; feConnections = [];
+}
+
+function updateFeTriggerUI() {
+  const type = document.getElementById('fe-trigger-type').value;
+  const label = document.getElementById('fe-trigger-val-label');
+  const input = document.getElementById('fe-trigger-value');
+  const wrap = document.getElementById('fe-trigger-val-wrap');
+  if (type === 'keyword') { label.textContent = 'מילת מפתח'; input.placeholder = 'שלום'; wrap.style.display = 'block'; }
+  else if (type === 'new_lead') { wrap.style.display = 'none'; input.value = '*'; }
+  else if (type === 'status_change') { label.textContent = 'סטטוס יעד'; input.placeholder = 'interested'; wrap.style.display = 'block'; }
+}
+
+function renderFlowCanvas() {
+  const canvas = document.getElementById('fe-canvas');
+  canvas.style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+  canvas.querySelectorAll('.fe-node').forEach(n => n.remove());
+
+  for (const node of feNodes) {
+    const meta = NODE_META[node.type] || NODE_META.send_message;
+    const el = document.createElement('div');
+    el.className = 'fe-node' + (node.type === 'trigger' ? ' trigger-node' : '') + (feSelectedNode === node.id ? ' selected' : '');
+    el.dataset.nodeId = node.id;
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+
+    let bodyHTML = '';
+    if (node.type === 'trigger') {
+      const tv = document.getElementById('fe-trigger-value')?.value || '';
+      bodyHTML = `<div style="font-size:11px;color:var(--text2);">${NODE_META.trigger.label}: ${tv || '*'}</div>`;
+    } else if (node.type === 'send_message') {
+      bodyHTML = `<label>הודעה</label><textarea rows="3" placeholder="היי {name}..." oninput="feUpdateData(${node.id},'content',this.value)">${esc(node.data.content || '')}</textarea><div style="font-size:9px;color:var(--text3);margin-top:2px;">משתנים: {name}, {phone}</div>`;
+    } else if (node.type === 'wait') {
+      bodyHTML = `<label>זמן המתנה</label><input value="${esc(node.data.duration || '1h')}" placeholder="1h / 24h / 7d" oninput="feUpdateData(${node.id},'duration',this.value)"><div style="font-size:9px;color:var(--text3);margin-top:2px;">m=דקות h=שעות d=ימים</div>`;
+    } else if (node.type === 'condition') {
+      bodyHTML = `<label>שדה</label><select onchange="feUpdateData(${node.id},'field',this.value)"><option value="lead_status" ${node.data.field === 'lead_status' ? 'selected' : ''}>סטטוס ליד</option><option value="was_booked" ${node.data.field === 'was_booked' ? 'selected' : ''}>נקבעה פגישה</option><option value="source" ${node.data.field === 'source' ? 'selected' : ''}>מקור</option></select><label>ערך</label><input value="${esc(node.data.value || '')}" placeholder="interested" oninput="feUpdateData(${node.id},'value',this.value)">`;
+    } else if (node.type === 'webhook') {
+      bodyHTML = `<label>URL</label><input value="${esc(node.data.url || '')}" placeholder="https://..." oninput="feUpdateData(${node.id},'url',this.value)">`;
+    }
+
+    el.innerHTML = `
+      <div class="fe-node-header" style="background:${meta.bg};">
+        <div class="nh-icon" style="background:${meta.color}22;color:${meta.color};">${meta.icon}</div>
+        <div class="nh-label">${meta.label}</div>
+        ${node.type !== 'trigger' ? `<span class="nh-delete" onclick="feDeleteNode(${node.id})" title="מחק">×</span>` : ''}
+      </div>
+      <div class="fe-node-body">${bodyHTML}</div>
+      ${node.type !== 'trigger' ? `<div class="fe-port port-in" data-node="${node.id}" data-dir="in"></div>` : ''}
+      <div class="fe-port port-out" data-node="${node.id}" data-dir="out"></div>
+    `;
+
+    const header = el.querySelector('.fe-node-header');
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('nh-delete')) return;
+      e.stopPropagation();
+      feDragNode = node; feDragStartX = e.clientX; feDragStartY = e.clientY;
+      feNodeStartX = node.x; feNodeStartY = node.y;
+      el.classList.add('dragging'); feSelectedNode = node.id; renderFlowCanvas();
+    });
+    canvas.appendChild(el);
+  }
+  renderFlowConnections();
+}
+
+function renderFlowConnections() {
+  const svg = document.getElementById('fe-connections');
+  let paths = '';
+  for (const conn of feConnections) {
+    const fromNode = feNodes.find(n => n.id === conn.from);
+    const toNode = feNodes.find(n => n.id === conn.to);
+    if (!fromNode || !toNode) continue;
+    const x1 = fromNode.x + 110, y1 = fromNode.y + 90;
+    const x2 = toNode.x + 110, y2 = toNode.y;
+    const midY = (y1 + y2) / 2;
+    paths += `<path d="M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}" class="active"/>`;
+  }
+  svg.innerHTML = paths;
+}
+
+function feUpdateData(nodeId, key, value) {
+  const node = feNodes.find(n => n.id === nodeId);
+  if (node) node.data[key] = value;
+}
+
+function feDeleteNode(nodeId) {
+  feNodes = feNodes.filter(n => n.id !== nodeId);
+  const incoming = feConnections.filter(c => c.to === nodeId);
+  const outgoing = feConnections.filter(c => c.from === nodeId);
+  feConnections = feConnections.filter(c => c.from !== nodeId && c.to !== nodeId);
+  for (const inc of incoming) {
+    for (const out of outgoing) {
+      feConnections.push({ from: inc.from, to: out.to });
+    }
+  }
+  renderFlowCanvas();
+}
+
+function initFlowCanvasEvents() {
+  const wrap = document.getElementById('fe-canvas-wrap');
+  const onMouseMove = (e) => {
+    if (feDragNode) {
+      const dx = (e.clientX - feDragStartX) / feScale;
+      const dy = (e.clientY - feDragStartY) / feScale;
+      feDragNode.x = Math.round((feNodeStartX + dx) / 12) * 12;
+      feDragNode.y = Math.round((feNodeStartY + dy) / 12) * 12;
+      const el = document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`);
+      if (el) { el.style.left = feDragNode.x + 'px'; el.style.top = feDragNode.y + 'px'; }
+      renderFlowConnections();
+    } else if (fePanning) {
+      feOffsetX += (e.clientX - fePanStartX) / feScale;
+      feOffsetY += (e.clientY - fePanStartY) / feScale;
+      fePanStartX = e.clientX; fePanStartY = e.clientY;
+      document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+      wrap.classList.add('grabbing');
+    }
+  };
+  const onMouseUp = () => {
+    if (feDragNode) {
+      document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`)?.classList.remove('dragging');
+      feDragNode = null; renderFlowCanvas();
+    }
+    fePanning = false; wrap.classList.remove('grabbing');
+  };
+  wrap.onmousedown = (e) => {
+    if (e.target === wrap || e.target.classList.contains('fe-canvas-grid')) {
+      fePanning = true; fePanStartX = e.clientX; fePanStartY = e.clientY;
+      feSelectedNode = null; renderFlowCanvas();
+    }
+  };
+  wrap.addEventListener('mousedown', (e) => {
+    const port = e.target.closest('.fe-port');
+    if (port && port.dataset.dir === 'out') { e.stopPropagation(); feConnecting = { fromId: parseInt(port.dataset.node) }; }
+  });
+  wrap.addEventListener('mouseup', (e) => {
+    if (feConnecting) {
+      const port = e.target.closest('.fe-port');
+      if (port && port.dataset.dir === 'in') {
+        const toId = parseInt(port.dataset.node);
+        if (toId !== feConnecting.fromId && !feConnections.find(c => c.from === feConnecting.fromId && c.to === toId)) {
+          feConnections.push({ from: feConnecting.fromId, to: toId }); renderFlowConnections();
+        }
+      }
+      feConnecting = null;
+    }
+  });
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  wrap.onwheel = (e) => {
+    e.preventDefault();
+    feScale = Math.min(2, Math.max(0.3, feScale + (e.deltaY > 0 ? -0.05 : 0.05)));
+    document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+    document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+  };
+  document.getElementById('flow-editor').onkeydown = (e) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && feSelectedNode && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
+      const node = feNodes.find(n => n.id === feSelectedNode);
+      if (node && node.type !== 'trigger') feDeleteNode(feSelectedNode);
+    }
+  };
+}
+
+function feZoom(delta) {
+  if (delta === 0) { feScale = 1; feOffsetX = 0; feOffsetY = 0; }
+  else feScale = Math.min(2, Math.max(0.3, feScale + delta));
+  document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+}
+
+function onNodeTypeDrag(e, type) { e.dataTransfer.setData('text/plain', type); }
+
+function onCanvasDrop(e) {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  if (!type || !NODE_META[type]) return;
+  const wrap = document.getElementById('fe-canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.round(((e.clientX - rect.left) / feScale - feOffsetX) / 12) * 12;
+  const y = Math.round(((e.clientY - rect.top) / feScale - feOffsetY) / 12) * 12;
+  const data = {};
+  if (type === 'send_message') data.content = '';
+  else if (type === 'wait') data.duration = '1h';
+  else if (type === 'condition') { data.field = 'lead_status'; data.value = ''; }
+  else if (type === 'webhook') data.url = '';
+  const newNode = { id: feNodeIdCounter++, type, x, y, data };
+  feNodes.push(newNode);
+  const nodesAbove = feNodes.filter(n => n.id !== newNode.id && n.y < y).sort((a, b) => b.y - a.y);
+  for (const n of nodesAbove) {
+    if (!feConnections.find(c => c.from === n.id)) { feConnections.push({ from: n.id, to: newNode.id }); break; }
+  }
+  feSelectedNode = newNode.id;
+  renderFlowCanvas();
+}
+
+function nodesToSteps() {
+  const trigger = feNodes.find(n => n.type === 'trigger');
+  if (!trigger) return [];
+  const steps = []; const visited = new Set(); let currentId = trigger.id; visited.add(currentId);
+  while (true) {
+    const conn = feConnections.find(c => c.from === currentId);
+    if (!conn || visited.has(conn.to)) break;
+    visited.add(conn.to);
+    const node = feNodes.find(n => n.id === conn.to);
+    if (!node) break;
+    steps.push({ type: node.type, ...node.data });
+    currentId = node.id;
+  }
+  return steps;
+}
+
+async function saveFlow() {
+  const name = document.getElementById('fe-name').value.trim();
+  const trigger_type = document.getElementById('fe-trigger-type').value;
+  const trigger_value = document.getElementById('fe-trigger-value').value.trim() || '*';
+  if (!name) { alert('חובה למלא שם'); return; }
+  const steps = nodesToSteps();
+  const body = { name, trigger_type, trigger_value, steps: JSON.stringify(steps) };
+  try {
+    if (editingFlowId) {
+      await api('/flows/' + editingFlowId, { method: 'PATCH', body: JSON.stringify(body) });
+    } else {
+      await api('/flows', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeFlowEditor();
+    await loadFlows();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function deleteFlow() {
+  if (!editingFlowId) return;
+  if (!confirm('למחוק את הפלו?')) return;
+  try {
+    await api('/flows/' + editingFlowId, { method: 'DELETE' });
+    closeFlowEditor();
+    await loadFlows();
+  } catch(e) { alert('שגיאה: ' + e.message); }
 }
 
 init();

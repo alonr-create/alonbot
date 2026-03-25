@@ -3,6 +3,8 @@ import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { createMondayLead } from '../utils/monday-leads.js';
 import { withRetry } from '../utils/retry.js';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join } from 'path';
 import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
 
 const log = createLogger('whatsapp-cloud');
@@ -228,6 +230,29 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     }
 
     if (!text && !image && !document) return;
+
+    // Save incoming media to disk for dashboard display
+    let mediaPath: string | undefined;
+    if (image || document) {
+      try {
+        const mediaDir = join(config.dataDir, 'media');
+        if (!existsSync(mediaDir)) mkdirSync(mediaDir, { recursive: true });
+        const ext = image ? (imageMediaType === 'image/png' ? '.png' : '.jpg') : (documentName?.split('.').pop() || 'bin');
+        const filename = `${senderId}_${Date.now()}.${ext.replace(/^\./, '')}`;
+        const filepath = join(mediaDir, filename);
+        writeFileSync(filepath, Buffer.from((image || document)!, 'base64'));
+        mediaPath = filename;
+        // Prepend media tag to text for dashboard rendering
+        if (image) {
+          text = `[media:image:${filename}]${text ? ' ' + text : ''}`;
+        } else {
+          text = `[media:file:${filename}:${documentName || 'file'}]${text ? ' ' + text : ''}`;
+        }
+        log.debug({ filename, type: image ? 'image' : 'document' }, 'media saved for dashboard');
+      } catch (e: any) {
+        log.warn({ err: e.message }, 'media save failed');
+      }
+    }
 
     const unified: UnifiedMessage = {
       id: msg.id || `cloud_${Date.now()}`,
