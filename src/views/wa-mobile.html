@@ -1154,41 +1154,57 @@ if ('serviceWorker' in navigator) {
 }
 
 /* ===== NOTIFICATIONS ===== */
-// WhatsApp-style notification sound (short double-beep)
-const notifCtx = new (window.AudioContext || window.webkitAudioContext)();
-function playNotifSound() {
+// iOS requires AudioContext to be created AND resumed on user gesture
+let notifCtx = null;
+let audioUnlocked = false;
+
+// Unlock audio on first touch/click (iOS requirement)
+function unlockAudio() {
+  if (audioUnlocked) return;
   try {
+    notifCtx = new (window.AudioContext || window.webkitAudioContext)();
+    // Play silent buffer to unlock
+    const buf = notifCtx.createBuffer(1, 1, 22050);
+    const src = notifCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(notifCtx.destination);
+    src.start(0);
+    if (notifCtx.state === 'suspended') notifCtx.resume();
+    audioUnlocked = true;
+    console.log('Audio unlocked');
+  } catch(e) { console.error('Audio unlock failed', e); }
+}
+document.addEventListener('touchstart', unlockAudio, { once: true });
+document.addEventListener('click', unlockAudio, { once: true });
+
+function playNotifSound() {
+  if (!notifCtx || !audioUnlocked) return;
+  try {
+    if (notifCtx.state === 'suspended') notifCtx.resume();
     const now = notifCtx.currentTime;
-    // First beep
-    const o1 = notifCtx.createOscillator();
-    const g1 = notifCtx.createGain();
-    o1.type = 'sine'; o1.frequency.value = 880;
-    g1.gain.setValueAtTime(0.3, now);
-    g1.gain.exponentialRampToValueAtTime(0.001, now + 0.12);
-    o1.connect(g1); g1.connect(notifCtx.destination);
-    o1.start(now); o1.stop(now + 0.12);
-    // Second beep (higher)
-    const o2 = notifCtx.createOscillator();
-    const g2 = notifCtx.createGain();
-    o2.type = 'sine'; o2.frequency.value = 1100;
-    g2.gain.setValueAtTime(0.3, now + 0.15);
-    g2.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
-    o2.connect(g2); g2.connect(notifCtx.destination);
-    o2.start(now + 0.15); o2.stop(now + 0.3);
+    // WhatsApp-style double-beep
+    [880, 1100].forEach((freq, i) => {
+      const o = notifCtx.createOscillator();
+      const g = notifCtx.createGain();
+      o.type = 'sine'; o.frequency.value = freq;
+      const t = now + i * 0.15;
+      g.gain.setValueAtTime(0.4, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+      o.connect(g); g.connect(notifCtx.destination);
+      o.start(t); o.stop(t + 0.12);
+    });
   } catch(e) {}
 }
 
 // Track previous unread count to detect new messages
 let prevTotalUnread = -1;
 
-// Request notification permission
-if ('Notification' in window && Notification.permission === 'default') {
-  // Wait for user interaction to request
-  document.addEventListener('click', function askNotif() {
+// Request notification permission on first touch
+document.addEventListener('click', function askNotif() {
+  if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
-    document.removeEventListener('click', askNotif);
-  }, { once: true });
-}
+  }
+}, { once: true });
 
 function checkNewMessages() {
   const totalUnread = contacts.reduce((s, c) => s + (c.unread_count || 0), 0);
@@ -1199,10 +1215,14 @@ function checkNewMessages() {
     // Vibrate if supported
     if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
 
+    // Visual flash on title
+    document.title = '(' + totalUnread + ') 360Shmikley';
+    setTimeout(() => { document.title = '360Shmikley'; }, 3000);
+
     // Find who sent the new message
     const newMsg = contacts.find(c => (c.unread_count || 0) > 0 && c.last_message_role === 'user');
 
-    // Browser notification (works in PWA on iPhone)
+    // Browser/PWA notification
     if ('Notification' in window && Notification.permission === 'granted') {
       const name = newMsg ? (newMsg.name || newMsg.phone) : 'הודעה חדשה';
       const body = newMsg ? (newMsg.last_message || '').slice(0, 80) : 'קיבלת הודעה חדשה';
