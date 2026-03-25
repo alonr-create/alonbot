@@ -992,10 +992,10 @@ function renderContacts() {
         </div>
         <div class="contact-body" style="pointer-events:none;">
           <div class="contact-row" style="pointer-events:none;">
-            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}${c.isCampaign ? ' <span style="font-size:9px;background:#6366f1;color:#fff;border-radius:3px;padding:1px 5px;margin-right:4px;font-weight:400;">קמפיין</span>' : ''}</span>
+            <span class="contact-name" style="pointer-events:none;">${esc(c.name)}</span>
             <span class="${timeClass}" style="pointer-events:none;">${formatTime(c.lastTime)}</span>
           </div>
-          <div class="contact-preview" style="pointer-events:none;">${preview}</div>
+          <div class="contact-preview" style="pointer-events:none;">${c.isCampaign ? '<span style="font-size:9px;background:#6366f1;color:#fff;border-radius:3px;padding:0 4px;flex-shrink:0;">🚀</span> ' : ''}${preview}</div>
         </div>
         ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
       </div>
@@ -1530,9 +1530,19 @@ async function pollMessages() {
   if (!activePhone) return;
   try {
     const data = await api('/conversations/' + encodeURIComponent(activePhone));
-    const msgs = data.messages || data || [];
+    let msgs = data.messages || data || [];
+    // Merge campaign messages (same logic as loadMessages)
+    if (campaignCache[activePhone]) {
+      const campMsgs = buildCampaignMessages(activePhone);
+      if (msgs.length === 0) {
+        msgs = campMsgs;
+      } else {
+        msgs = [...campMsgs, ...msgs];
+      }
+    }
     if (msgs.length !== activeMessages.length) {
       activeMessages = msgs;
+      messageCache[activePhone] = activeMessages;
       renderMessages();
       // Update contact
       const c = contacts.find(c => c.phone === activePhone);
