@@ -779,6 +779,8 @@ let quickReplies = [];
 let allTags = [];
 let pollTimer = null;
 let lastMessageCount = 0;
+let campaignCache = {}; // phone -> {messages:[], calls:[], name, site_link}
+const CAMPAIGN_API = 'https://campaign-webhook-production.up.railway.app';
 
 // ===== AVATAR COLORS =====
 const AVATAR_COLORS = [
@@ -814,31 +816,45 @@ async function api(path, opts = {}) {
 }
 
 // ===== FORMAT TIME =====
+// DB stores datetime('now') as UTC without timezone — parse as UTC
+function parseUTC(ts) {
+  if (!ts) return null;
+  const s = String(ts).trim();
+  if (s.endsWith('Z') || s.includes('+') || (s.includes('T') && s.match(/[+-]\d{2}:/))) return new Date(s);
+  return new Date(s.replace(' ', 'T') + 'Z');
+}
+const TZ = {timeZone:'Asia/Jerusalem'};
 function formatTime(ts) {
   if (!ts) return '';
-  const d = new Date(ts);
+  const d = parseUTC(ts);
+  if (!d || isNaN(d)) return '';
   const now = new Date();
   const diffMs = now - d;
   const diffDays = Math.floor(diffMs / 86400000);
-  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit', ...TZ});
   if (diffDays === 0) return timeStr;
   if (diffDays === 1) return 'אתמול';
-  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short'});
-  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric'});
+  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short', ...TZ});
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', ...TZ});
 }
 function formatFullTime(ts) {
   if (!ts) return '';
-  return new Date(ts).toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  const d = parseUTC(ts);
+  if (!d || isNaN(d)) return '';
+  return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit', ...TZ});
 }
 function formatDate(ts) {
   if (!ts) return '';
-  const d = new Date(ts);
+  const d = parseUTC(ts);
+  if (!d || isNaN(d)) return '';
   const now = new Date();
-  if (d.toDateString() === now.toDateString()) return 'היום';
-  const yesterday = new Date(now);
+  const nowIL = new Date(now.toLocaleString('en-US', TZ));
+  const dIL = new Date(d.toLocaleString('en-US', TZ));
+  if (dIL.toDateString() === nowIL.toDateString()) return 'היום';
+  const yesterday = new Date(nowIL);
   yesterday.setDate(yesterday.getDate() - 1);
-  if (d.toDateString() === yesterday.toDateString()) return 'אתמול';
-  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+  if (dIL.toDateString() === yesterday.toDateString()) return 'אתמול';
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric', ...TZ});
 }
 
 // ===== LOAD CONTACTS =====
@@ -857,6 +873,53 @@ async function loadContacts() {
       messageCount: c.message_count || 0,
       online: false
     }));
+    // Merge campaign leads
+    try {
+      const campRes = await fetch(CAMPAIGN_API + '/api/campaign-messages');
+      const campData = await campRes.json();
+      const existingPhones = new Set(contacts.map(c => c.phone));
+      campaignCache = {};
+
+      // Build item_id -> phone map from messages
+      const itemPhoneMap = {};
+      for (const m of (campData.messages || [])) {
+        if (m.item_id && m.phone) itemPhoneMap[m.item_id] = m.phone;
+      }
+
+      // Index campaign messages/calls by phone
+      for (const m of (campData.messages || [])) {
+        const ph = m.phone || '';
+        if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: m.name, site_link: m.site_link};
+        campaignCache[ph].messages.push(m);
+      }
+      for (const c of (campData.calls || [])) {
+        const ph = c.phone || itemPhoneMap[c.item_id] || '';
+        if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: c.name, site_link: ''};
+        campaignCache[ph].calls.push(c);
+      }
+
+      // Add campaign-only contacts to the list
+      for (const [ph, info] of Object.entries(campaignCache)) {
+        if (!ph || existingPhones.has(ph)) continue;
+        const lastMsg = info.messages[0] || info.calls[0];
+        contacts.push({
+          phone: ph,
+          name: info.name || ph,
+          lastMessage: '🚀 קמפיין — הודעה נשלחה',
+          lastTime: lastMsg?.time || '',
+          unread: 0,
+          isOutgoing: true,
+          source: 'campaign',
+          status: 'campaign',
+          messageCount: info.messages.length + info.calls.length,
+          online: false,
+          isCampaign: true
+        });
+      }
+    } catch(e) {
+      console.error('Failed to load campaign data:', e);
+    }
+
     // Sort by last message time desc
     contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
     renderContacts();
@@ -927,6 +990,7 @@ function renderContacts() {
           <div class="contact-preview" style="pointer-events:none;">${preview}</div>
         </div>
         ${c.unread > 0 ? `<div class="unread-badge" style="pointer-events:none;">${c.unread}</div>` : ''}
+        ${c.isCampaign ? `<div style="pointer-events:none;position:absolute;top:6px;left:6px;font-size:10px;background:#6366f1;color:#fff;border-radius:4px;padding:1px 4px;">🚀</div>` : ''}
       </div>
     `;
   }).join('');
@@ -1038,13 +1102,52 @@ async function loadMessages(phone) {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
     messageCache[phone] = activeMessages;
+    // If no AalonBot messages, try campaign data
+    if (activeMessages.length === 0 && campaignCache[phone]) {
+      activeMessages = buildCampaignMessages(phone);
+      messageCache[phone] = activeMessages;
+    }
     if (activePhone === phone) renderMessages();
   } catch(e) {
     console.error('Failed to load messages:', e);
-    if (!messageCache[phone]) {
+    // Fallback to campaign messages
+    if (campaignCache[phone]) {
+      activeMessages = buildCampaignMessages(phone);
+      messageCache[phone] = activeMessages;
+      if (activePhone === phone) renderMessages();
+    } else if (!messageCache[phone]) {
       document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><p>שגיאה בטעינת השיחה</p></div>';
     }
   }
+}
+
+function buildCampaignMessages(phone) {
+  const info = campaignCache[phone];
+  if (!info) return [];
+  const msgs = [];
+  for (const m of (info.messages || [])) {
+    msgs.push({
+      role: 'assistant',
+      direction: 'outgoing',
+      fromMe: true,
+      body: m.text || '📱 הודעת וואטסאפ נשלחה',
+      timestamp: m.time,
+      source: 'campaign'
+    });
+  }
+  for (const c of (info.calls || [])) {
+    msgs.push({
+      role: 'assistant',
+      direction: 'outgoing',
+      fromMe: true,
+      body: c.text || '📞 שיחה בוצעה',
+      timestamp: c.time,
+      source: 'campaign'
+    });
+  }
+  // Sort by time
+  msgs.sort((a,b) => new Date(a.timestamp) - new Date(b.timestamp));
+  return msgs;
 }
 
 // ===== RENDER MESSAGES =====

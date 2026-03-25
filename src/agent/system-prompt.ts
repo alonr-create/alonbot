@@ -382,6 +382,13 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
         } else {
           leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש');
         }
+      } else {
+        // No workspace configured — still use sales mode for non-owner contacts
+        if (lead?.source === 'voice_agent' || lead?.source === 'dekel') {
+          leadPrompt = buildLeadSalesPrompt(lead || { phone: senderId, name: null, source: 'dekel', monday_item_id: null, last_call_summary: null, last_call_sentiment: null, last_call_duration_sec: null, was_booked: 0, call_mode: null, lead_status: null });
+        } else {
+          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש');
+        }
       }
     }
   }
