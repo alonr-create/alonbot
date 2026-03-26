@@ -1172,12 +1172,14 @@ function formatDate(ts) {
   const d = parseUTC(ts);
   if (!d || isNaN(d)) return '';
   const now = new Date();
-  const nowIL = new Date(now.toLocaleString('en-US', TZ));
-  const dIL = new Date(d.toLocaleString('en-US', TZ));
-  if (dIL.toDateString() === nowIL.toDateString()) return 'היום';
-  const yesterday = new Date(nowIL);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (dIL.toDateString() === yesterday.toDateString()) return 'אתמול';
+  // Compare dates in Israel timezone without double-conversion
+  const opts = {timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit'};
+  const dStr = d.toLocaleDateString('en-CA', opts);   // YYYY-MM-DD
+  const nowStr = now.toLocaleDateString('en-CA', opts);
+  if (dStr === nowStr) return 'היום';
+  const yesterday = new Date(now.getTime() - 86400000);
+  const yStr = yesterday.toLocaleDateString('en-CA', opts);
+  if (dStr === yStr) return 'אתמול';
   return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric', ...TZ});
 }
 
@@ -1646,10 +1648,23 @@ function renderMessages() {
     const rawText = msg.body || msg.message || msg.text || msg.content || '';
     const imgMatch = rawText.match(/\[media:image:([^\]]+)\]/);
     const fileMatch = rawText.match(/\[media:file:([^\]:]+):([^\]]+)\]/);
+    const screenshotMatch = rawText.match(/\[📸[^\]]*\]/);
     let cleanText = text;
     if (imgMatch) {
       mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
       cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
+    } else if (screenshotMatch) {
+      // Campaign image message — extract URL from text to show preview
+      const urlInText = rawText.match(/(https?:\/\/[^\s]+)/);
+      if (urlInText) {
+        mediaHtml = `<div style="background:#f0f4ff;border-radius:8px;padding:8px;margin-bottom:4px;text-align:center;">
+          <div style="font-size:11px;color:#6366f1;font-weight:600;">📸 צילום מסך של האתר</div>
+          <a href="${esc(urlInText[1])}" target="_blank" style="font-size:12px;color:#1a73e8;">לחץ לצפייה באתר →</a>
+        </div>`;
+      } else {
+        mediaHtml = `<div style="background:#f0f4ff;border-radius:8px;padding:6px;margin-bottom:4px;text-align:center;font-size:11px;color:#6366f1;">📸 נשלח צילום מסך</div>`;
+      }
+      cleanText = text.replace(/\[📸[^\]]*\]\s*/, '');
     } else if (fileMatch) {
       mediaHtml = `<a href="/media/${esc(fileMatch[1])}" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px;background:rgba(0,0,0,0.05);border-radius:6px;margin-bottom:4px;text-decoration:none;color:inherit;"><span style="font-size:20px;">📄</span><span style="font-size:12px;">${esc(fileMatch[2])}</span></a>`;
       cleanText = text.replace(/\[media:file:[^\]]+\]\s*/, '');
