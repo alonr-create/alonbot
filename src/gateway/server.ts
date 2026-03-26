@@ -658,6 +658,12 @@ app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any)
     const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
     const channel = direction === 'inbound' ? 'whatsapp-inbound' : 'whatsapp-outbound';
     const role = direction === 'inbound' ? 'user' : 'assistant';
+    // Ensure lead exists in leads table
+    const source = req.body.source || 'alon_dev';
+    db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at)
+      VALUES (?, ?, ?, datetime('now'), datetime('now'))
+      ON CONFLICT(phone) DO UPDATE SET updated_at = datetime('now')`)
+      .run(normalizedPhone, sender_name || normalizedPhone, source);
     db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))`)
       .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message);
