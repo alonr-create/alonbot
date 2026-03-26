@@ -31,4 +31,7 @@ export const config = {
   evolutionInstance: process.env.EVOLUTION_INSTANCE || 'alonbot',
   dataDir: process.env.DATA_DIR || (existsSync('/data') ? '/data' : join(process.cwd(), 'data')),
   skillsDir: join(process.cwd(), 'skills'),
+  growUserId: process.env.GROW_USER_ID || '',
+  growPageCode: process.env.GROW_PAGE_CODE || '',
+  growApiUrl: process.env.GROW_API_URL || 'https://grow.link/api/light/server/1.0',
 };

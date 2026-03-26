@@ -1966,65 +1966,145 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
   }
 });
 
-// ── Checkout webhook — receives order from checkout.alondev.site ──
-app.post('/api/checkout-webhook', (req, res) => {
+// ── Grow (Meshulam) Payment Integration ──
+
+// Create a Grow payment page and return the URL
+app.post('/api/create-payment', async (req, res) => {
   try {
-    const { name, phone, email, plan, price, discount, cardLast4, timestamp } = req.body || {};
+    const { name, phone, email, plan, discount } = req.body || {};
     if (!name || !phone || !plan) {
-      res.status(400).json({ success: false, error: 'Missing required fields' });
+      res.status(400).json({ success: false, error: 'Missing name, phone, or plan' });
       return;
     }
-    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
-    log.info({ name, phone: normalizedPhone, plan, price, discount }, '🎉 NEW CHECKOUT ORDER');
 
-    // Save order to DB
-    db.prepare(`CREATE TABLE IF NOT EXISTS orders (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT, phone TEXT, email TEXT, plan TEXT, price INTEGER,
-      discount INTEGER DEFAULT 0, card_last4 TEXT, status TEXT DEFAULT 'pending',
-      created_at TEXT DEFAULT (datetime('now'))
-    )`).run();
-    db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, card_last4)
-      VALUES (?, ?, ?, ?, ?, ?, ?)`)
-      .run(name, normalizedPhone, email || '', plan, price || 0, discount ? 1 : 0, cardLast4 || '');
+    const prices: Record<string, { regular: number; discount: number; label: string }> = {
+      basic: { regular: 990, discount: 790, label: 'אתר בסיסי — Alon.dev' },
+      premium: { regular: 1790, discount: 1590, label: 'אתר פרימיום — Alon.dev' },
+    };
+    const p = prices[plan] || prices.basic;
+    const amount = discount ? p.discount : p.regular;
 
-    // Update lead status in DB
-    db.prepare(`UPDATE leads SET lead_status = 'payment_pending', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
+    if (!config.growUserId || !config.growPageCode) {
+      // Fallback: save order without real payment
+      log.warn('Grow credentials not set — saving order as pending');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'pending_no_gateway');
+      res.json({ success: true, paymentUrl: null, fallback: true, message: 'Order saved — payment gateway not configured yet' });
+      return;
+    }
 
-    // Log as message for dashboard visibility
-    const orderMsg = `🎉 הזמנה חדשה!\nשם: ${name}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nמחיר: ${price}₪${discount ? ' (הנחה!)' : ''}\nכרטיס: ****${cardLast4 || '????'}`;
-    db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
-      VALUES ('whatsapp-inbound', ?, ?, 'system', ?, datetime('now'))`)
-      .run(normalizedPhone, name, orderMsg);
+    // Create Grow payment page
+    const FormData = (await import('form-data')).default;
+    const form = new FormData();
+    form.append('pageCode', config.growPageCode);
+    form.append('userId', config.growUserId);
+    form.append('sum', amount.toString());
+    form.append('description', p.label);
+    form.append('pageField[fullName]', name);
+    form.append('pageField[phone]', phone.replace(/^\+/, ''));
+    if (email) form.append('pageField[email]', email);
+    form.append('successUrl', 'https://checkout.alondev.site/?success=1');
+    form.append('cancelUrl', 'https://checkout.alondev.site/?cancelled=1');
+    form.append('notifyUrl', 'https://alonbot.onrender.com/api/grow-webhook');
+    form.append('cField1', plan);
+    form.append('cField2', discount ? 'discount' : 'regular');
 
-    // Send WhatsApp notification to Alon
-    (async () => {
-      try {
-        const { getAdapter } = await import('./router.js');
-        const wa = getAdapter('whatsapp');
-        if (wa) {
-          // Notify Alon
-          await wa.sendReply(
-            { id: 'checkout', channel: 'whatsapp', senderId: '972546300783', senderName: 'אלון', text: '', timestamp: Date.now(), raw: { from: '972546300783@s.whatsapp.net' } },
-            { text: `🎉 הזמנה חדשה!\n\nשם: ${name}\nטלפון: ${phone}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nמחיר: ₪${price}${discount ? ' (הנחה!)' : ''}\n\nצריך לסלוק ידנית — כרטיס ****${cardLast4 || '????'}` }
-          );
-          // Send confirmation to customer
-          await wa.sendReply(
-            { id: 'checkout', channel: 'whatsapp', senderId: normalizedPhone, senderName: name, text: '', timestamp: Date.now(), raw: { from: `${normalizedPhone}@s.whatsapp.net` } },
-            { text: `שלום ${name}! 🎉\n\nקיבלנו את ההזמנה שלך לחבילת ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}.\n\nאלון ייצור איתך קשר תוך שעה כדי להתחיל לעבוד על האתר שלך.\n\nתודה שבחרת ב-Alon.dev! ⭐` }
-          );
-        }
-      } catch (e: any) {
-        log.warn({ err: e.message }, 'checkout WA notification failed');
-      }
-    })();
+    const growRes = await fetch(`${config.growApiUrl}/createPaymentProcess`, {
+      method: 'POST',
+      body: form as any,
+      headers: form.getHeaders(),
+    });
+    const growData = await growRes.json() as any;
 
-    res.json({ success: true });
+    if (growData?.status === 1 && growData?.data?.url) {
+      const paymentUrl = growData.data.url;
+      log.info({ name, phone, plan, amount, paymentUrl }, 'Grow payment page created');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'payment_created', growData.data.processId || '');
+      res.json({ success: true, paymentUrl });
+    } else {
+      log.error({ growData }, 'Grow createPaymentProcess failed');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'grow_error');
+      res.json({ success: false, error: growData?.err?.message || 'Payment creation failed' });
+    }
   } catch (e: any) {
-    log.error({ err: e.message }, 'checkout webhook error');
+    log.error({ err: e.message }, 'create-payment error');
     res.status(500).json({ success: false, error: e.message });
   }
 });
+
+// Grow webhook — called server-to-server when payment completes
+app.post('/api/grow-webhook', (req, res) => {
+  try {
+    const data = req.body || {};
+    const { customFields, asmachta, cardSuffix, sum, statusCode, transactionId, paymentProcessId } = data;
+    const plan = customFields?.cField1 || 'basic';
+    const isDiscount = customFields?.cField2 === 'discount';
+
+    log.info({ transactionId, sum, statusCode, cardSuffix, plan }, '💳 Grow webhook received');
+
+    if (statusCode === 1 || statusCode === '1') {
+      // Payment successful!
+      db.prepare(`UPDATE orders SET status = 'paid', card_last4 = ?, updated_at = datetime('now') WHERE grow_process_id = ?`)
+        .run(cardSuffix || '', paymentProcessId || '');
+
+      // Find the order to get customer details
+      const order = db.prepare(`SELECT * FROM orders WHERE grow_process_id = ? OR (status = 'payment_created' AND plan = ?)`)
+        .get(paymentProcessId || '', plan) as any;
+
+      if (order) {
+        const normalizedPhone = order.phone;
+        db.prepare(`UPDATE leads SET lead_status = 'paid', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
+
+        // Log payment in messages for dashboard
+        const payMsg = `💳 תשלום התקבל! ₪${sum}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || transactionId || ''}`;
+        db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
+          VALUES ('whatsapp-inbound', ?, ?, 'system', ?, datetime('now'))`)
+          .run(normalizedPhone, order.name, payMsg);
+
+        // WhatsApp notifications
+        (async () => {
+          try {
+            const { getAdapter } = await import('./router.js');
+            const wa = getAdapter('whatsapp');
+            if (wa) {
+              // Notify Alon
+              await wa.sendReply(
+                { id: 'pay', channel: 'whatsapp', senderId: '972546300783', senderName: 'אלון', text: '', timestamp: Date.now(), raw: { from: '972546300783@s.whatsapp.net' } },
+                { text: `💳 תשלום חדש!\n\nשם: ${order.name}\nטלפון: ${order.phone}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nסכום: ₪${sum}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || ''}` }
+              );
+              // Confirm to customer
+              await wa.sendReply(
+                { id: 'pay', channel: 'whatsapp', senderId: normalizedPhone, senderName: order.name, text: '', timestamp: Date.now(), raw: { from: `${normalizedPhone}@s.whatsapp.net` } },
+                { text: `${order.name}, התשלום התקבל בהצלחה! 🎉\n\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nסכום: ₪${sum}\nאסמכתא: ${asmachta || transactionId || ''}\n\nאלון ייצור איתך קשר תוך שעה להתחיל לעבוד על האתר.\n\nתודה שבחרת ב-Alon.dev! ⭐` }
+              );
+            }
+          } catch (e: any) { log.warn({ err: e.message }, 'payment WA notification failed'); }
+        })();
+      }
+    } else {
+      log.warn({ statusCode, transactionId }, 'Grow payment not successful');
+    }
+
+    res.json({ success: true });
+  } catch (e: any) {
+    log.error({ err: e.message }, 'grow-webhook error');
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+function saveOrder(name: string, phone: string, email: string | undefined, plan: string, price: number, discount: boolean, status: string, growProcessId?: string) {
+  const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+  db.prepare(`CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT, phone TEXT, email TEXT, plan TEXT, price INTEGER,
+    discount INTEGER DEFAULT 0, card_last4 TEXT, status TEXT DEFAULT 'pending',
+    grow_process_id TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
+  )`).run();
+  db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, status, grow_process_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '');
+}
 
 app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
   const { phone, audio, leadName } = req.body;
