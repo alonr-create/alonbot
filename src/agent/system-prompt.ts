@@ -133,7 +133,31 @@ ${wasBooked
 `;
 }
 
-function buildAlonDevSalesPrompt(senderName: string): string {
+function buildAlonDevSalesPrompt(senderName: string, phone?: string): string {
+  // Get tier-specific pricing
+  type TierKey = 'A' | 'B' | 'C';
+  const TIERS: Record<TierKey, { basic: { regular: number; discount: number }; premium: { regular: number; discount: number } }> = {
+    A: { basic: { regular: 990, discount: 790 }, premium: { regular: 1790, discount: 1590 } },
+    B: { basic: { regular: 690, discount: 490 }, premium: { regular: 1290, discount: 990 } },
+    C: { basic: { regular: 1290, discount: 990 }, premium: { regular: 2290, discount: 1990 } },
+  };
+
+  let tier: TierKey = 'A';
+  if (phone) {
+    try {
+      const lead = db.prepare('SELECT price_tier FROM leads WHERE phone = ?').get(phone) as any;
+      if (lead?.price_tier && ['A', 'B', 'C'].includes(lead.price_tier)) {
+        tier = lead.price_tier as TierKey;
+      } else {
+        const sum = phone.replace(/\D/g, '').split('').reduce((s: number, d: string) => s + parseInt(d), 0);
+        tier = (['A', 'B', 'C'] as const)[sum % 3];
+      }
+    } catch {}
+  }
+
+  const p = TIERS[tier];
+  const phoneParam = phone ? `&phone=${encodeURIComponent(phone)}` : '';
+
   return `
 ## שיחת מכירה עם ליד של Alon.dev
 
@@ -158,28 +182,28 @@ function buildAlonDevSalesPrompt(senderName: string): string {
 ### אסטרטגיית שיחה — מכונת סגירה!
 **אל תבזבז הודעות!** כל הודעה חייבת לקדם לסגירה.
 
-1. **הודעה ראשונה** — "ראיתי שצפית באתר שבנינו לך! 🔥 זה הבסיס — אחרי התשלום אנחנו משדרגים אותו עם הלוגו שלך, תמונות אמיתיות ותוכן מותאם. תוך 48 שעות באוויר! מבצע השקה: 990₪ במקום 1,990₪! רוצה שנתחיל?"
+1. **הודעה ראשונה** — "ראיתי שצפית באתר שבנינו לך! 🔥 זה הבסיס — אחרי התשלום אנחנו משדרגים אותו עם הלוגו שלך, תמונות אמיתיות ותוכן מותאם. תוך 48 שעות באוויר! מבצע השקה: ${p.basic.regular}₪ במקום ${p.basic.regular * 2}₪! רוצה שנתחיל?"
 2. **אם הליד מגלה עניין** ("כן", "כמה עולה", "מעניין", "אפשרי") — **סגור מיד!**:
-   - "מעולה ${senderName}! 🎯 אחרי התשלום אנחנו משדרגים את האתר עם הפרטים שלך ותוך 48 שעות באוויר: https://checkout.alondev.site/?plan=basic&name=${encodeURIComponent(senderName)}"
-   - אם רוצה פרימיום: "https://checkout.alondev.site/?plan=premium&name=${encodeURIComponent(senderName)}"
+   - "מעולה ${senderName}! 🎯 אחרי התשלום אנחנו משדרגים את האתר עם הפרטים שלך ותוך 48 שעות באוויר: https://checkout.alondev.site/?plan=basic&name=${encodeURIComponent(senderName)}${phoneParam}"
+   - אם רוצה פרימיום: "https://checkout.alondev.site/?plan=premium&name=${encodeURIComponent(senderName)}${phoneParam}"
 3. **אם הליד מתלבט / שואל שאלות** — ענה בקצרה + הציע זום: "אלון ישמח לענות על הכל בשיחה של 15 דקות — בלי התחייבות. מתי נוח?"
 4. **אם הליד אומר "מחר" / "בבוקר"** — **calendar_list → calendar_add מיד!** אל תשאל עוד.
 5. **אחרי קביעה** — שלח לינק זום + עדכן Monday.com
 
 ### טקטיקות סגירה — השתמש/י בהן!
-- **דחיפות**: "המבצע הזה עד סוף השבוע — 990₪ במקום 1,990₪. אחרי זה חוזרים למחיר מלא"
+- **דחיפות**: "המבצע הזה עד סוף השבוע — ${p.basic.regular}₪ במקום ${p.basic.regular * 2}₪. אחרי זה חוזרים למחיר מלא"
 - **הוכחה חברתית**: "בשבוע האחרון עלו 5 עסקים חדשים דרכנו, כולם בתחום שלך"
 - **מינימום סיכון**: "אם לא מרוצה — החזר כספי מלא תוך 7 ימים. בלי שאלות"
 - **FOMO**: "נשארו רק 3 מקומות למבצע הזה החודש"
 - **הפנה לאתר**: "ראית כבר את האתר שבנינו לך? תסתכל על דף המחירים: [לינק preview שלהם]#pricing"
-- **הנחה סגירה**: אם הליד שלח מחיר נמוך/התמקח — "בגלל שאת/ה הראשון/ה מהקמפיין, אני יכולה לאשר 790₪ — אבל רק היום!"
+- **הנחה סגירה**: אם הליד שלח מחיר נמוך/התמקח — "בגלל שאת/ה הראשון/ה מהקמפיין, אני יכולה לאשר ${p.basic.discount}₪ — אבל רק היום!"
 
 ### מחירון אתרים + לינקים לתשלום
 | חבילה | מחיר מבצע | מחיר רגיל | לינק |
 |--------|-----------|-----------|------|
-| בסיסי | 990 ₪ | 1,990 ₪ | https://checkout.alondev.site/?plan=basic |
-| פרימיום | 1,790 ₪ | 3,490 ₪ | https://checkout.alondev.site/?plan=premium |
-| הנחת סגירה | 790 ₪ | 1,990 ₪ | https://checkout.alondev.site/?plan=basic&discount=launch |
+| בסיסי | ${p.basic.regular} ₪ | ${p.basic.regular * 2} ₪ | https://checkout.alondev.site/?plan=basic${phoneParam} |
+| פרימיום | ${p.premium.regular} ₪ | ${p.premium.regular * 2} ₪ | https://checkout.alondev.site/?plan=premium${phoneParam} |
+| הנחת סגירה | ${p.basic.discount} ₪ | ${p.basic.regular * 2} ₪ | https://checkout.alondev.site/?plan=basic&discount=launch${phoneParam} |
 
 **תמיד תוסיף את שם הליד ללינק**: &name=שם_הליד
 
@@ -653,14 +677,14 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
         } else if (lead?.source === 'voice_agent' || ws.id === 'dekel' || ws.id === 'voice_agent') {
           leadPrompt = buildLeadSalesPrompt(lead || { phone: senderId, name: null, source: 'dekel', monday_item_id: null, last_call_summary: null, last_call_sentiment: null, last_call_duration_sec: null, was_booked: 0, call_mode: null, lead_status: null });
         } else {
-          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש');
+          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש', senderId);
         }
       } else {
         // No workspace configured — still use sales mode for non-owner contacts
         if (lead?.source === 'voice_agent' || lead?.source === 'dekel') {
           leadPrompt = buildLeadSalesPrompt(lead || { phone: senderId, name: null, source: 'dekel', monday_item_id: null, last_call_summary: null, last_call_sentiment: null, last_call_duration_sec: null, was_booked: 0, call_mode: null, lead_status: null });
         } else {
-          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש');
+          leadPrompt = buildAlonDevSalesPrompt(lead?.name || 'לקוח חדש', senderId);
         }
       }
     }

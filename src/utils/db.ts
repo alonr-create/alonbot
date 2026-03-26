@@ -481,4 +481,8 @@ try { db.exec(`ALTER TABLE leads ADD COLUMN referred_by TEXT`); } catch { /* exi
 try { db.exec(`ALTER TABLE orders ADD COLUMN review_requested INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
 try { db.exec(`ALTER TABLE orders ADD COLUMN referral_code TEXT DEFAULT ''`); } catch { /* exists */ }
 
+// Migration: A/B/C price tier testing
+try { db.exec(`ALTER TABLE leads ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
+try { db.exec(`ALTER TABLE orders ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
+
 export { db };

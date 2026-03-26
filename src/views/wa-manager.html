@@ -1376,7 +1376,9 @@ function formatPhone(phone) {
 function formatTime(ts) {
   if (!ts) return '';
   try {
-    const d = new Date(ts);
+    // SQLite datetime('now') returns UTC without 'Z' — add it so browser parses correctly
+    const normalized = (typeof ts === 'string' && !ts.includes('Z') && !ts.includes('+')) ? ts.replace(' ', 'T') + 'Z' : ts;
+    const d = new Date(normalized);
     const now = new Date();
     const isToday = d.toDateString() === now.toDateString();
     const yesterday = new Date(now); yesterday.setDate(yesterday.getDate() - 1);

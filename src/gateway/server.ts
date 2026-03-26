@@ -2079,6 +2079,51 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
   }
 });
 
+// ── A/B/C Price Tier Analytics ──
+app.get('/api/tier-analytics', dashAuth, (_req, res) => {
+  try {
+    const tiers = db.prepare(`
+      SELECT
+        price_tier as tier,
+        COUNT(*) as total_checkouts,
+        SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) as paid,
+        SUM(CASE WHEN status = 'paid' THEN price ELSE 0 END) as revenue,
+        ROUND(100.0 * SUM(CASE WHEN status = 'paid' THEN 1 ELSE 0 END) / MAX(COUNT(*), 1), 1) as conversion_rate
+      FROM orders
+      WHERE price_tier IN ('A','B','C')
+      GROUP BY price_tier
+      ORDER BY price_tier
+    `).all();
+
+    const checkouts = db.prepare(`
+      SELECT
+        COALESCE(l.price_tier, '') as tier,
+        COUNT(*) as visits,
+        SUM(CASE WHEN cv.paid = 1 THEN 1 ELSE 0 END) as paid_visits
+      FROM checkout_visits cv
+      LEFT JOIN leads l ON l.phone = cv.phone
+      WHERE l.price_tier IN ('A','B','C')
+      GROUP BY l.price_tier
+    `).all();
+
+    res.json({ success: true, tiers, checkouts, priceTiers: PRICE_TIERS });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Get lead's assigned tier (for checkout page)
+app.get('/api/lead-tier/:phone', (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const tier = getLeadTier(phone);
+    const prices = getTierPrices(tier);
+    res.json({ success: true, tier, prices });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ── Grow (Meshulam) Payment Integration ──
 
 // Create a Grow payment page and return the URL
@@ -2120,7 +2165,7 @@ app.post('/api/create-payment', async (req, res) => {
     if (!config.growUserId || !config.growPageCode) {
       // Fallback: save order without real payment
       log.warn('Grow credentials not set — saving order as pending');
-      saveOrder(name, phone, email, plan, amount, !!discount, 'pending_no_gateway');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'pending_no_gateway', '', tier);
       res.json({ success: true, paymentUrl: null, fallback: true, message: 'Order saved — payment gateway not configured yet' });
       return;
     }
@@ -2151,11 +2196,11 @@ app.post('/api/create-payment', async (req, res) => {
     if (growData?.status === 1 && growData?.data?.url) {
       const paymentUrl = growData.data.url;
       log.info({ name, phone, plan, amount, paymentUrl }, 'Grow payment page created');
-      saveOrder(name, phone, email, plan, amount, !!discount, 'payment_created', growData.data.processId || '');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'payment_created', growData.data.processId || '', tier);
       res.json({ success: true, paymentUrl });
     } else {
       log.error({ growData }, 'Grow createPaymentProcess failed');
-      saveOrder(name, phone, email, plan, amount, !!discount, 'grow_error');
+      saveOrder(name, phone, email, plan, amount, !!discount, 'grow_error', '', tier);
       res.json({ success: false, error: growData?.err?.message || 'Payment creation failed' });
     }
   } catch (e: any) {
@@ -2255,7 +2300,7 @@ app.post('/api/grow-webhook', (req, res) => {
   }
 });
 
-function saveOrder(name: string, phone: string, email: string | undefined, plan: string, price: number, discount: boolean, status: string, growProcessId?: string) {
+function saveOrder(name: string, phone: string, email: string | undefined, plan: string, price: number, discount: boolean, status: string, growProcessId?: string, priceTier?: string) {
   const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
   db.prepare(`CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2264,12 +2309,13 @@ function saveOrder(name: string, phone: string, email: string | undefined, plan:
     grow_process_id TEXT DEFAULT '',
     review_requested INTEGER DEFAULT 0,
     referral_code TEXT DEFAULT '',
+    price_tier TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`).run();
-  db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, status, grow_process_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '');
+  db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, status, grow_process_id, price_tier)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '', priceTier || '');
 }
 
 app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
