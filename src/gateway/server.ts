@@ -854,11 +854,10 @@ app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
   try {
     const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
     const messages = db.prepare(`
-      SELECT MIN(id) as id, channel, sender_id, sender_name, role, content, created_at
+      SELECT id, channel, sender_id, sender_name, role, content, created_at
       FROM messages
-      WHERE sender_id = ? AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
-      GROUP BY content, created_at, role
-      ORDER BY MIN(id) ASC
+      WHERE sender_id = ? AND channel IN ('whatsapp-inbound','whatsapp-outbound')
+      ORDER BY id ASC
     `).all(phone);
     const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone);
     res.json({ success: true, lead, messages });
