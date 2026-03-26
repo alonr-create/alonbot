@@ -1363,6 +1363,110 @@ app.post('/api/wa-manager/followup/schedule', dashAuth, (req, res) => {
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
 
+// Lead score endpoint
+app.get('/api/wa-manager/followup/score/:phone', dashAuth, async (req, res) => {
+  try {
+    const { calculateLeadScore } = await import('./followup-engine.js');
+    const result = calculateLeadScore(req.params.phone);
+    res.json({ success: true, ...result });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Morning report endpoint
+app.get('/api/wa-manager/followup/morning-report', dashAuth, async (_req, res) => {
+  try {
+    const { generateMorningReport } = await import('./followup-engine.js');
+    const report = generateMorningReport();
+    res.json({ success: true, report });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Follow-up history for a lead
+app.get('/api/wa-manager/followup/history/:phone', dashAuth, (_req, res) => {
+  try {
+    const phone = _req.params.phone;
+    const history = db.prepare(`
+      SELECT content, created_at, role, channel FROM messages
+      WHERE sender_id = ? AND channel IN ('whatsapp-outbound','whatsapp','whatsapp-inbound')
+        AND (content LIKE '%[Template:%' OR content LIKE '%פולואפ%' OR content LIKE '%followup%')
+      ORDER BY created_at DESC LIMIT 20
+    `).all(phone);
+    const lead = db.prepare('SELECT followup_count, next_followup FROM leads WHERE phone = ?').get(phone) as any;
+    res.json({ success: true, history, followup_count: lead?.followup_count || 0, next_followup: lead?.next_followup });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Pipeline summary (kanban data)
+app.get('/api/wa-manager/followup/pipeline', dashAuth, (_req, res) => {
+  try {
+    const stages = ['new', 'contacted', 'interested', 'waiting', 'vip', 'closed', 'not_relevant', 'refused'];
+    const pipeline: Record<string, any[]> = {};
+    for (const stage of stages) {
+      pipeline[stage] = db.prepare(`
+        SELECT l.phone, l.name, l.source, l.lead_status, l.followup_count, l.next_followup,
+          (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) as replies
+        FROM leads l WHERE l.lead_status = ? ORDER BY l.updated_at DESC LIMIT 50
+      `).all(stage);
+    }
+    // Also get leads with NULL status (treat as 'new')
+    const noStatus = db.prepare(`
+      SELECT l.phone, l.name, l.source, 'new' as lead_status, l.followup_count, l.next_followup,
+        (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) as replies
+      FROM leads l WHERE l.lead_status IS NULL ORDER BY l.updated_at DESC LIMIT 50
+    `).all();
+    pipeline['new'] = [...(pipeline['new'] || []), ...noStatus];
+    // Count totals
+    const totals: Record<string, number> = {};
+    for (const [stage, leads] of Object.entries(pipeline)) {
+      totals[stage] = leads.length;
+    }
+    res.json({ success: true, pipeline, totals });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Re-engage old leads (monthly)
+app.post('/api/wa-manager/followup/reengage', dashAuth, async (req, res) => {
+  try {
+    const { days_inactive = 30 } = req.body || {};
+    const staleLeads = db.prepare(`
+      SELECT phone, name FROM leads
+      WHERE lead_status NOT IN ('closed','not_relevant','refused','done')
+        AND next_followup IS NULL
+        AND updated_at < datetime('now', '-${Math.max(7, Math.min(days_inactive, 90))} days')
+      ORDER BY updated_at DESC LIMIT 50
+    `).all() as any[];
+
+    let scheduled = 0;
+    const { scheduleFirstFollowup } = await import('./followup-engine.js');
+    for (const lead of staleLeads) {
+      scheduleFirstFollowup(lead.phone);
+      db.prepare("UPDATE leads SET followup_count = 0, updated_at = datetime('now') WHERE phone = ?").run(lead.phone);
+      scheduled++;
+    }
+    res.json({ success: true, scheduled, total_stale: staleLeads.length });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Quick reply (send a quick text message)
+app.post('/api/wa-manager/followup/quick-reply', dashAuth, async (req, res) => {
+  try {
+    const { phone, message } = req.body;
+    if (!phone || !message) { res.status(400).json({ success: false, error: 'Missing phone or message' }); return; }
+    const token = config.waCloudToken;
+    const phoneId = config.waCloudPhoneId;
+    if (!token || !phoneId) { res.status(500).json({ success: false, error: 'Cloud API not configured' }); return; }
+    const to = phone.replace(/\D/g, '');
+    const resp = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: message } })
+    });
+    if (!resp.ok) throw new Error(`WhatsApp API error: ${resp.status}`);
+    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, message);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
 // === Workspace CRUD Endpoints ===
 app.get('/api/wa-manager/workspaces', dashAuth, (_req, res) => {
   try {

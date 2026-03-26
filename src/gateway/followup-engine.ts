@@ -1,6 +1,8 @@
 import { db } from '../utils/db.js';
 import { config } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 
 const log = createLogger('followup-engine');
 
@@ -20,6 +22,29 @@ interface FollowupConfig {
   max_followups: number;
   skip_statuses: string[];
   skip_replied: boolean;
+}
+
+// ── Slug Mapping ──
+// Load slug_mapping.json for accurate preview site URLs
+let slugMapping: Record<string, string> = {};
+try {
+  const mappingPath = join(config.dataDir, 'slug_mapping.json');
+  if (existsSync(mappingPath)) {
+    slugMapping = JSON.parse(readFileSync(mappingPath, 'utf-8'));
+    log.info({ count: Object.keys(slugMapping).length }, 'loaded slug mapping');
+  }
+} catch { /* slug mapping not available */ }
+
+// Reload slug mapping (called from API)
+export function reloadSlugMapping() {
+  try {
+    const mappingPath = join(config.dataDir, 'slug_mapping.json');
+    if (existsSync(mappingPath)) {
+      slugMapping = JSON.parse(readFileSync(mappingPath, 'utf-8'));
+      return Object.keys(slugMapping).length;
+    }
+  } catch {}
+  return 0;
 }
 
 // Get follow-up config from DB
@@ -46,7 +71,6 @@ export function getPendingFollowups(): any[] {
   const cfg = getFollowupConfig();
   const skipStatusPlaceholders = cfg.skip_statuses.map(() => '?').join(',');
 
-  // Leads where next_followup <= today AND not in skip statuses AND followup_count < max
   const sql = `
     SELECT l.phone, l.name, l.source, l.lead_status, l.followup_count, l.next_followup, l.created_at,
       (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) as user_replies,
@@ -69,24 +93,108 @@ export function getPendingFollowups(): any[] {
 function getTemplateForCount(count: number): FollowupTemplate | null {
   const templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 ORDER BY sort_order ASC').all() as FollowupTemplate[];
   if (!templates.length) return null;
-  // Use template at index=count, or the last one if count exceeds templates
   return templates[Math.min(count, templates.length - 1)] || null;
 }
 
 // Meta template mapping: followup_count → approved template name
-// These templates accept {{1}}=name, {{2}}=site_url
 const META_TEMPLATE_MAP: Record<number, string> = {
   0: 'lead_followup_day3',
   1: 'lead_followup_day5',
   2: 'lead_followup_day8',
 };
 
-// Build preview site URL for a lead
+// Build preview site URL using slug_mapping.json for accuracy
 function getLeadSiteUrl(lead: any): string {
   const name = lead.name || '';
-  // Generate slug from name (same logic as lead-previews)
+
+  // First try exact match in slug mapping
+  if (slugMapping[name]) {
+    return `https://lead-previews.vercel.app/${slugMapping[name]}`;
+  }
+
+  // Try case-insensitive / partial match
+  const nameLower = name.toLowerCase();
+  for (const [key, slug] of Object.entries(slugMapping)) {
+    if (key.toLowerCase() === nameLower) {
+      return `https://lead-previews.vercel.app/${slug}`;
+    }
+  }
+
+  // Fallback: generate slug from name (may not match actual page)
   const slug = name.toLowerCase().replace(/[^a-z0-9\s]/gi, '').replace(/\s+/g, '-').slice(0, 50) || lead.phone;
   return `https://lead-previews.vercel.app/${slug}`;
+}
+
+// ── Lead Scoring ──
+export function calculateLeadScore(phone: string): { score: number; factors: string[] } {
+  const factors: string[] = [];
+  let score = 0;
+
+  const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone) as any;
+  if (!lead) return { score: 0, factors: ['ליד לא נמצא'] };
+
+  // Replied to messages (+30)
+  const replies = db.prepare("SELECT COUNT(*) as c FROM messages WHERE sender_id = ? AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')").get(phone) as any;
+  if (replies.c > 0) { score += 30; factors.push(`ענה ${replies.c} פעמים`); }
+
+  // Has booking (+40)
+  if (lead.was_booked) { score += 40; factors.push('נקבעה פגישה'); }
+
+  // Status is interested/vip (+20)
+  if (lead.lead_status === 'interested') { score += 20; factors.push('סטטוס: מעוניין'); }
+  if (lead.lead_status === 'vip') { score += 30; factors.push('סטטוס: VIP'); }
+
+  // Has tags indicating engagement (+10 each)
+  const tags = db.prepare('SELECT tag FROM lead_tags WHERE phone = ?').all(phone) as any[];
+  const engagementTags = tags.filter(t => ['welcome_sent', 'followup_sent', 'hot'].some(et => t.tag.includes(et)));
+  if (engagementTags.length) { score += engagementTags.length * 5; factors.push(`${engagementTags.length} תגיות מעורבות`); }
+
+  // Called (+15)
+  if (lead.last_call_summary) { score += 15; factors.push('היתה שיחה'); }
+
+  // Positive sentiment (+10)
+  if (lead.last_call_sentiment === 'positive') { score += 10; factors.push('סנטימנט חיובי'); }
+
+  // Recent activity (+10)
+  const lastMsg = db.prepare("SELECT created_at FROM messages WHERE sender_id = ? ORDER BY created_at DESC LIMIT 1").get(phone) as any;
+  if (lastMsg) {
+    const daysSince = (Date.now() - new Date(lastMsg.created_at).getTime()) / 86400000;
+    if (daysSince < 3) { score += 10; factors.push('פעילות אחרונה ב-3 ימים'); }
+  }
+
+  // Base score for being a lead (+10)
+  score += 10;
+
+  return { score: Math.min(score, 100), factors };
+}
+
+// Auto-tag leads based on behavior
+export function autoTagLead(phone: string) {
+  const { score } = calculateLeadScore(phone);
+
+  // Hot lead: score > 50
+  if (score > 50) {
+    db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'hot');
+  }
+
+  // Check for negative keywords in messages
+  const lastUserMsg = db.prepare("SELECT content FROM messages WHERE sender_id = ? AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound') ORDER BY created_at DESC LIMIT 1").get(phone) as any;
+  if (lastUserMsg?.content) {
+    const text = lastUserMsg.content.toLowerCase();
+    const negativeWords = ['לא מעוניין', 'לא רלוונטי', 'הסר', 'תפסיק', 'spam', 'ספאם', 'לא צריך', 'עזוב'];
+    if (negativeWords.some(w => text.includes(w))) {
+      db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'not_interested');
+      db.prepare("UPDATE leads SET lead_status = 'not_relevant', next_followup = NULL, updated_at = datetime('now') WHERE phone = ?").run(phone);
+      log.info({ phone }, 'auto-tagged as not_interested, cancelled follow-ups');
+    }
+
+    const positiveWords = ['מעוניין', 'כן', 'אני רוצה', 'בוא נדבר', 'שלח', 'תתקשר'];
+    if (positiveWords.some(w => text.includes(w))) {
+      db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'interested');
+      db.prepare("UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?").run(phone);
+      log.info({ phone }, 'auto-tagged as interested');
+    }
+  }
 }
 
 // Send a single follow-up to a lead
@@ -128,12 +236,10 @@ export async function sendFollowup(phone: string, templateId?: number) {
   const cfg = getFollowupConfig();
 
   if ((lead.followup_count || 0) + 1 >= cfg.max_followups || !nextTemplate) {
-    // Max follow-ups reached — clear next_followup
     db.prepare('UPDATE leads SET followup_count = followup_count + 1, next_followup = NULL, updated_at = datetime(\'now\') WHERE phone = ?').run(phone);
   } else {
-    // Schedule next follow-up
     const daysUntilNext = nextTemplate.day_offset - template.day_offset;
-    const nextDate = daysUntilNext > 0 ? daysUntilNext : 2; // minimum 2 days
+    const nextDate = daysUntilNext > 0 ? daysUntilNext : 2;
     db.prepare(`UPDATE leads SET followup_count = followup_count + 1, next_followup = date('now', '+${nextDate} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
   }
 
@@ -176,6 +282,52 @@ export async function runAutoFollowups(): Promise<{ sent: number; errors: number
 
   log.info({ sent, errors }, 'auto follow-ups completed');
   return { sent, errors, details };
+}
+
+// ── Morning Report ──
+export function generateMorningReport(): string {
+  const pending = getPendingFollowups();
+  const cfg = getFollowupConfig();
+
+  // Total leads stats
+  const totalLeads = (db.prepare('SELECT COUNT(*) as c FROM leads').get() as any).c;
+  const newLeads = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'new' OR lead_status IS NULL").get() as any).c;
+  const contacted = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'contacted'").get() as any).c;
+  const interested = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'interested'").get() as any).c;
+  const replied = (db.prepare("SELECT COUNT(DISTINCT sender_id) as c FROM messages WHERE role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')").get() as any).c;
+
+  // Hot leads (score > 50)
+  const allLeads = db.prepare('SELECT phone FROM leads').all() as any[];
+  let hotCount = 0;
+  for (const l of allLeads) {
+    const { score } = calculateLeadScore(l.phone);
+    if (score > 50) hotCount++;
+  }
+
+  // Messages last 24h
+  const msgs24h = (db.prepare("SELECT COUNT(*) as c FROM messages WHERE created_at > datetime('now', '-1 day') AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')").get() as any).c;
+
+  const lines = [
+    `📊 דוח בוקר — ${new Date().toLocaleDateString('he-IL')}`,
+    ``,
+    `📋 לידים: ${totalLeads} סה"כ`,
+    `   חדשים: ${newLeads} | פנו: ${contacted} | מעוניינים: ${interested}`,
+    `   ענו: ${replied} | חמים: ${hotCount}`,
+    ``,
+    `📨 הודעות 24 שעות: ${msgs24h}`,
+    `🔄 פולואפים היום: ${pending.length}`,
+    `⚙️ אוטומטי: ${cfg.auto_enabled ? 'פעיל' : 'כבוי'} (שעה ${cfg.send_hour}:00)`,
+  ];
+
+  if (pending.length > 0) {
+    lines.push(``, `📋 ממתינים:`);
+    for (const p of pending.slice(0, 10)) {
+      lines.push(`   • ${p.name || p.phone} (#${(p.followup_count || 0) + 1})`);
+    }
+    if (pending.length > 10) lines.push(`   ... ועוד ${pending.length - 10}`);
+  }
+
+  return lines.join('\n');
 }
 
 // Schedule next_followup for a lead (called after first contact)
@@ -227,7 +379,6 @@ async function sendWhatsAppTemplate(phone: string, templateName: string, params:
     throw new Error(`Template API error: ${resp.status} ${err}`);
   }
 
-  // Log outbound message
   const bodyText = `[Template: ${templateName}] ${params.join(' | ')}`;
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, bodyText);
 }
@@ -254,7 +405,6 @@ async function sendWhatsAppText(phone: string, text: string) {
     throw new Error(`WhatsApp API error: ${resp.status} ${err}`);
   }
 
-  // Log outbound message
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
 }
 
@@ -270,20 +420,37 @@ export function setupFollowupCron() {
     const currentHour = israelTime.getHours();
     const currentMinute = israelTime.getMinutes();
 
+    // Morning report — 30 mins before follow-up hour
+    const reportHour = hour > 0 ? hour - 1 : 23;
+    if (currentHour === reportHour && currentMinute >= 30 && currentMinute < 45) {
+      const today = israelTime.toISOString().split('T')[0];
+      const lastReport = db.prepare("SELECT value FROM followup_config WHERE key = 'last_morning_report'").get() as any;
+      if (lastReport?.value !== today) {
+        db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_morning_report', ?, datetime('now'))").run(today);
+        const report = generateMorningReport();
+        try {
+          const { sendPushNotification } = await import('./server.js');
+          sendPushNotification({
+            title: '📊 דוח בוקר',
+            body: report.split('\n').slice(2, 5).join(' | '),
+            tag: 'morning-report',
+          });
+        } catch { /* push not available */ }
+        log.info('morning report sent');
+      }
+    }
+
     // Run at configured hour, first 15-minute window
     if (currentHour === hour && currentMinute < 15) {
-      // Check if already ran today
       const today = israelTime.toISOString().split('T')[0];
       const lastRun = db.prepare("SELECT value FROM followup_config WHERE key = 'last_auto_run'").get() as any;
       if (lastRun?.value === today) return;
 
-      // Mark as ran today
       db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_auto_run', ?, datetime('now'))").run(today);
 
       log.info('running daily auto follow-ups');
       const result = await runAutoFollowups();
 
-      // Push notification about results
       if (result.sent > 0 || result.errors > 0) {
         try {
           const { sendPushNotification } = await import('./server.js');
@@ -295,7 +462,7 @@ export function setupFollowupCron() {
         } catch { /* push not available */ }
       }
     }
-  }, 15 * 60 * 1000); // Check every 15 minutes
+  }, 15 * 60 * 1000);
 
-  log.info({ hour }, 'follow-up cron scheduled');
+  log.info({ hour }, 'follow-up cron scheduled (with morning report)');
 }

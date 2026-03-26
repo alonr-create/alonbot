@@ -720,6 +720,7 @@ html,body{
         <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
         <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
         <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
+        <button class="filter-pill" data-filter="followup" onclick="setFilter('followup',this)">&#128257; פולואפ</button>
       </div>
       <div class="filter-pills" id="sourceFilters" style="margin-top:4px;"></div>
     </div>
@@ -821,6 +822,22 @@ html,body{
         <div style="color:var(--text-muted);font-size:13px;" id="tagsListContent">טוען...</div>
       </div>
 
+      <button class="tool-btn" onclick="showCampaignLauncher()">
+        <span class="tool-btn-icon">&#128640;</span>
+        <div class="tool-btn-info">
+          <div class="tool-btn-label">שיגור קמפיין</div>
+          <div class="tool-btn-desc">שלח פולואפ לכל הלידים החדשים בבת אחת</div>
+        </div>
+      </button>
+      <div id="campaignLauncher" style="display:none;background:var(--bg-secondary);border-radius:12px;padding:14px;margin:8px 0;">
+        <div style="font-size:13px;color:var(--text);margin-bottom:8px;">שליחת פולואפ אוטומטי לכל הלידים הממתינים:</div>
+        <div id="campaignPreview" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">טוען...</div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="launchCampaignNow()" style="flex:1;padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128640; שגר!</button>
+          <button onclick="document.getElementById('campaignLauncher').style.display='none'" style="padding:10px 16px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">ביטול</button>
+        </div>
+      </div>
+
       <div class="tool-section-title">אוטומציות</div>
       <div id="flowsList">
         <div style="color:var(--text-muted);font-size:13px;padding:8px;">טוען...</div>
@@ -883,6 +900,30 @@ html,body{
           <button onclick="saveTemplate()" style="flex:1;padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128190; שמור</button>
           <button onclick="hideTemplateEditor()" style="padding:10px 16px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">ביטול</button>
         </div>
+      </div>
+
+      <!-- Pipeline Kanban -->
+      <div class="tool-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Pipeline</span>
+        <button class="tool-btn" style="padding:4px 10px;font-size:12px;" onclick="loadPipeline()">&#8635;</button>
+      </div>
+      <div id="pipelineView" style="overflow-x:auto;white-space:nowrap;padding-bottom:12px;margin-bottom:12px;">
+        <div style="color:var(--text-muted);font-size:13px;padding:8px;">לחץ &#8635; לטעינה</div>
+      </div>
+
+      <!-- Morning Report -->
+      <div class="tool-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>דוח בוקר</span>
+        <button class="tool-btn" style="padding:4px 10px;font-size:12px;" onclick="loadMorningReport()">&#128200;</button>
+      </div>
+      <div id="morningReportContent" style="background:var(--bg-secondary);border-radius:12px;padding:14px;margin-bottom:16px;display:none;">
+        <pre style="color:var(--text);font-size:13px;white-space:pre-wrap;font-family:inherit;margin:0;"></pre>
+      </div>
+
+      <!-- Re-engage old leads -->
+      <div class="tool-section-title">כלים מתקדמים</div>
+      <div style="display:flex;gap:8px;margin-bottom:16px;">
+        <button onclick="reengageOldLeads()" style="flex:1;padding:10px;background:var(--bg-secondary);border:1px solid var(--border);border-radius:10px;color:var(--text);font-size:13px;cursor:pointer;">&#128260; ריענון לידים ישנים (30+ יום)</button>
       </div>
 
       <!-- Follow-up Config -->
@@ -1147,6 +1188,7 @@ function applyFilter() {
     if (currentFilter === 'vip' && c.lead_status !== 'vip') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
     if (currentFilter === 'replied' && !(c.user_reply_count > 0)) return false;
+    if (currentFilter === 'followup' && !c.next_followup) return false;
     if (q && !(c.name || '').toLowerCase().includes(q) && !(c.phone || '').includes(q)) return false;
     return true;
   });
@@ -1217,6 +1259,7 @@ function renderContactList() {
           <div class="contact-bottom">
             <span class="contact-preview">${isOut && !hasUnread ? '<span class="checks">✓✓</span> ' : ''}${preview}</span>
             ${hasUnread ? `<span class="unread-badge">${c.unread_count}</span>` : ''}
+            ${c.next_followup ? '<span style="font-size:10px;color:var(--blue);">&#128257;</span>' : ''}
             ${statusClass ? `<span class="contact-status-dot ${statusClass}"></span>` : ''}
           </div>
         </div>
@@ -1486,14 +1529,21 @@ async function openDetails(phone) {
 
   let lead = c;
   let tags = [];
+  let followupHistory = [];
+  let leadScore = { score: 0, factors: [] };
+  let fupCount = 0, nextFup = null;
 
   try {
-    const [leadData, tagData] = await Promise.all([
+    const [leadData, tagData, histData, scoreData] = await Promise.all([
       api('/leads/' + encodeURIComponent(phone)),
-      api('/tags/' + encodeURIComponent(phone))
+      api('/tags/' + encodeURIComponent(phone)),
+      api('/followup/history/' + encodeURIComponent(phone)).catch(() => ({})),
+      api('/followup/score/' + encodeURIComponent(phone)).catch(() => ({}))
     ]);
     if (leadData.success && leadData.lead) lead = { ...c, ...leadData.lead };
     if (tagData.success) tags = tagData.tags || [];
+    if (histData.success) { followupHistory = histData.history || []; fupCount = histData.followup_count || 0; nextFup = histData.next_followup; }
+    if (scoreData.success) leadScore = { score: scoreData.score, factors: scoreData.factors || [] };
   } catch (e) {}
 
   body.innerHTML = `
@@ -1539,6 +1589,39 @@ async function openDetails(phone) {
         <input class="tag-input" id="tagInput" placeholder="תגית חדשה...">
         <button class="tag-add-btn" onclick="addTag('${esc(phone)}')">הוסף</button>
       </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">ציון ליד</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:4px 0;">
+        <div style="width:48px;height:48px;border-radius:50%;background:${leadScore.score > 60 ? '#2ecc71' : leadScore.score > 30 ? '#f39c12' : '#e74c3c'};display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;font-weight:700;">${leadScore.score}</div>
+        <div style="flex:1;font-size:12px;color:var(--text-secondary);">${leadScore.factors.map(f => '• ' + esc(f)).join('<br>')}</div>
+      </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">שליחה מהירה</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;">
+        ${QUICK_REPLIES.map(qr => `<button onclick="quickReply('${esc(phone)}','${esc(qr.msg).replace(/'/g, "\\'")}')" style="padding:6px 12px;background:var(--bg-input);border:none;border-radius:16px;color:var(--text);font-size:12px;cursor:pointer;">${qr.label}</button>`).join('')}
+      </div>
+    </div>
+    <div class="details-section">
+      <div class="details-section-title">פולואפ</div>
+      <div class="details-row">
+        <span class="details-label">מספר פולואפים</span>
+        <span class="details-value">${fupCount}</span>
+      </div>
+      <div class="details-row">
+        <span class="details-label">פולואפ הבא</span>
+        <span class="details-value">${nextFup ? esc(nextFup) : 'לא מתוכנן'}</span>
+      </div>
+      ${!nextFup ? `<button onclick="scheduleFollowupFromDetails('${esc(phone)}')" style="width:100%;padding:8px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;margin-top:6px;">&#128197; תזמן פולואפ</button>` : ''}
+      ${followupHistory.length ? `
+      <div style="margin-top:10px;">
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">היסטוריה:</div>
+        ${followupHistory.slice(0, 5).map(h => `<div style="background:var(--bg);border-radius:8px;padding:8px;margin-bottom:4px;font-size:12px;">
+          <div style="color:var(--text-secondary);">${esc((h.content || '').slice(0, 80))}${(h.content || '').length > 80 ? '...' : ''}</div>
+          <div style="color:var(--text-muted);font-size:11px;margin-top:2px;">${esc(h.created_at || '')} · ${h.role === 'user' ? '&#129309; ליד' : '&#129302; בוט'}</div>
+        </div>`).join('')}
+      </div>` : '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">אין היסטוריית פולואפ</div>'}
     </div>
     <div class="details-section">
       <div class="details-section-title">הערות</div>
@@ -2295,22 +2378,34 @@ async function loadPendingFollowups() {
       el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px;text-align:center;">&#10003; אין פולואפים ממתינים להיום</div>';
       return;
     }
-    el.innerHTML = pending.map(p => `
+    // Load scores for pending leads
+    const scores = {};
+    await Promise.all(pending.slice(0, 20).map(async p => {
+      try { const s = await api('/followup/score/' + encodeURIComponent(p.phone)); if (s.success) scores[p.phone] = s.score; } catch {}
+    }));
+    el.innerHTML = pending.map(p => {
+      const score = scores[p.phone] || 0;
+      const scoreColor = score > 60 ? '#2ecc71' : score > 30 ? '#f39c12' : '#e74c3c';
+      return `
       <div style="background:var(--bg-secondary);border-radius:12px;padding:12px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <div>
-            <div style="font-size:15px;font-weight:600;color:var(--text);">${esc(p.name || p.phone)}</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:15px;font-weight:600;color:var(--text);">${esc(p.name || p.phone)}</span>
+              <span style="background:${scoreColor};color:#fff;font-size:10px;padding:2px 6px;border-radius:10px;font-weight:700;">${score}</span>
+            </div>
             <div style="font-size:12px;color:var(--text-muted);">${esc(p.source || '')} · פולואפ #${(p.followup_count || 0) + 1} · ${esc(p.next_followup || '')}</div>
           </div>
           <div style="font-size:11px;color:var(--text-muted);">${p.user_replies > 0 ? '&#128172; ענה' : '&#128164; לא ענה'}</div>
         </div>
-        <div style="display:flex;gap:6px;">
+        <div style="display:flex;gap:6px;flex-wrap:wrap;">
           <button onclick="sendFollowupNow('${esc(p.phone)}')" style="flex:1;padding:8px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;">&#9654; שלח עכשיו</button>
-          <button onclick="postponeFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128197; דחה יום</button>
+          <button onclick="postponeFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128197; דחה</button>
           <button onclick="cancelFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:#e74c3c;font-size:13px;cursor:pointer;">&#10005;</button>
+          <button onclick="openChat('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128172;</button>
         </div>
-      </div>
-    `).join('');
+      </div>`;
+    }).join('');
   } catch (e) {
     el.innerHTML = '<div style="color:#e74c3c;font-size:13px;padding:8px;">שגיאה בטעינה</div>';
   }
@@ -2480,6 +2575,115 @@ async function saveFollowupConfig() {
     });
     toast('הגדרות פולואפ נשמרו');
   } catch { toast('שגיאה בשמירה'); }
+}
+
+/* ===== PIPELINE KANBAN ===== */
+const STAGE_LABELS = { new:'חדש', contacted:'פנו', interested:'מעוניין', waiting:'ממתין', vip:'VIP', closed:'סגור', not_relevant:'לא רלוונטי', refused:'סירב' };
+const STAGE_COLORS = { new:'#3498db', contacted:'#f39c12', interested:'#2ecc71', waiting:'#9b59b6', vip:'#e67e22', closed:'#95a5a6', not_relevant:'#7f8c8d', refused:'#e74c3c' };
+async function loadPipeline() {
+  const el = document.getElementById('pipelineView');
+  if (!el) return;
+  el.innerHTML = '<div class="spinner" style="margin:12px;"></div>';
+  try {
+    const data = await api('/followup/pipeline');
+    if (!data.success) throw new Error();
+    const stages = ['new','contacted','interested','waiting','vip','closed'];
+    el.innerHTML = stages.map(s => {
+      const leads = data.pipeline[s] || [];
+      const color = STAGE_COLORS[s] || '#666';
+      return `<div style="display:inline-block;vertical-align:top;width:160px;margin-left:8px;white-space:normal;">
+        <div style="background:${color};color:#fff;padding:6px 10px;border-radius:8px 8px 0 0;font-size:13px;font-weight:600;text-align:center;">
+          ${STAGE_LABELS[s] || s} (${leads.length})
+        </div>
+        <div style="background:var(--bg-secondary);border-radius:0 0 8px 8px;padding:6px;min-height:60px;max-height:200px;overflow-y:auto;">
+          ${leads.length ? leads.slice(0, 8).map(l => `<div style="background:var(--bg);border-radius:6px;padding:6px 8px;margin-bottom:4px;font-size:12px;cursor:pointer;" onclick="openChat('${esc(l.phone)}')">
+            <div style="font-weight:600;color:var(--text);">${esc((l.name || l.phone).slice(0, 18))}</div>
+            <div style="color:var(--text-muted);font-size:11px;">${l.replies > 0 ? '&#128172;' + l.replies : '&#128164;'} ${l.next_followup ? '&#128197;' + l.next_followup.slice(5) : ''}</div>
+          </div>`).join('') : '<div style="color:var(--text-muted);font-size:12px;text-align:center;padding:12px;">ריק</div>'}
+          ${leads.length > 8 ? `<div style="color:var(--text-muted);font-size:11px;text-align:center;">+${leads.length - 8} עוד</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  } catch { el.innerHTML = '<div style="color:#e74c3c;font-size:13px;padding:8px;">שגיאה</div>'; }
+}
+
+/* ===== MORNING REPORT ===== */
+async function loadMorningReport() {
+  const el = document.getElementById('morningReportContent');
+  if (!el) return;
+  el.style.display = 'block';
+  el.querySelector('pre').textContent = 'טוען...';
+  try {
+    const data = await api('/followup/morning-report');
+    if (data.success) {
+      el.querySelector('pre').textContent = data.report;
+    } else throw new Error();
+  } catch { el.querySelector('pre').textContent = 'שגיאה בטעינה'; }
+}
+
+/* ===== RE-ENGAGE OLD LEADS ===== */
+async function reengageOldLeads() {
+  if (!confirm('לתזמן פולואפ מחדש ללידים שלא היה להם פולואפ 30+ יום?')) return;
+  toast('מחפש לידים ישנים...');
+  try {
+    const res = await api('/followup/reengage', { method: 'POST', body: JSON.stringify({ days_inactive: 30 }) });
+    if (res.success) {
+      toast(`תוזמנו ${res.scheduled} לידים לפולואפ מחדש`);
+      loadPendingFollowups();
+    } else { toast('שגיאה: ' + (res.error || '')); }
+  } catch { toast('שגיאה'); }
+}
+
+/* ===== QUICK REPLY ===== */
+const QUICK_REPLIES = [
+  { label: '&#128075; שלום', msg: 'היי! מה שלומך? ראיתי שפנית אלינו — אשמח לעזור &#128578;' },
+  { label: '&#128279; אתר', msg: 'הנה הדוגמה לאתר שהכנתי בשבילך — תגיד לי מה אתה חושב!' },
+  { label: '&#9742; חזרה', msg: 'ראיתי שניסית להתקשר — מתי נוח לך שאחזור?' },
+  { label: '&#128640; מבצע', msg: 'יש לנו מבצע מיוחד השבוע — אתר מקצועי ב-48 שעות! מעוניין לשמוע פרטים?' },
+];
+async function quickReply(phone, msg) {
+  toast('שולח...');
+  try {
+    const lead = contacts.find(c => c.phone === phone);
+    const text = msg.replace(/\{name\}/g, lead?.name || '');
+    const res = await api('/followup/quick-reply', { method: 'POST', body: JSON.stringify({ phone, message: text }) });
+    if (res.success) { toast('נשלח!'); loadChatMessages(phone); }
+    else toast('שגיאה: ' + (res.error || ''));
+  } catch { toast('שגיאה בשליחה'); }
+}
+
+/* ===== CAMPAIGN LAUNCHER ===== */
+async function showCampaignLauncher() {
+  const el = document.getElementById('campaignLauncher');
+  el.style.display = el.style.display === 'none' ? 'block' : 'none';
+  if (el.style.display === 'block') {
+    const preview = document.getElementById('campaignPreview');
+    try {
+      const data = await api('/followup/pending');
+      const count = data.pending?.length || 0;
+      preview.textContent = count > 0 ? `${count} לידים ממתינים לפולואפ` : 'אין לידים ממתינים כרגע';
+    } catch { preview.textContent = 'שגיאה בטעינה'; }
+  }
+}
+async function launchCampaignNow() {
+  if (!confirm('לשלוח פולואפ לכל הלידים הממתינים?')) return;
+  toast('משגר קמפיין...');
+  try {
+    const res = await api('/followup/run-auto', { method: 'POST' });
+    if (res.success) {
+      toast(`נשלחו ${res.sent} הודעות!${res.errors > 0 ? ` (${res.errors} שגיאות)` : ''}`);
+      document.getElementById('campaignLauncher').style.display = 'none';
+    } else toast('שגיאה: ' + (res.error || ''));
+  } catch { toast('שגיאה'); }
+}
+
+async function scheduleFollowupFromDetails(phone) {
+  toast('מתזמן פולואפ...');
+  try {
+    await api('/followup/schedule', { method: 'POST', body: JSON.stringify({ phone }) });
+    toast('פולואפ תוזמן');
+    openDetails(phone);
+  } catch { toast('שגיאה'); }
 }
 
 // Load pending count for badge on startup
