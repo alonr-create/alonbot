@@ -2055,7 +2055,8 @@ app.post('/api/grow-webhook', (req, res) => {
         db.prepare(`UPDATE leads SET lead_status = 'paid', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
 
         // Log payment in messages for dashboard
-        const payMsg = `💳 תשלום התקבל! ₪${sum}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || transactionId || ''}`;
+        const planLabel = plan === 'premium' ? 'פרימיום' : 'בסיסי';
+        const payMsg = `💳 תשלום התקבל! ₪${sum}\nחבילה: ${planLabel}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || transactionId || ''}`;
         db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
           VALUES ('whatsapp-inbound', ?, ?, 'system', ?, datetime('now'))`)
           .run(normalizedPhone, order.name, payMsg);
@@ -2066,15 +2067,36 @@ app.post('/api/grow-webhook', (req, res) => {
             const { getAdapter } = await import('./router.js');
             const wa = getAdapter('whatsapp');
             if (wa) {
-              // Notify Alon
+              const makeMsg = (senderId: string, senderName: string) => ({
+                id: 'pay', channel: 'whatsapp' as const, senderId, senderName, text: '', timestamp: Date.now(), raw: { from: `${senderId}@s.whatsapp.net` },
+              });
+
+              // 1. Notify Alon
               await wa.sendReply(
-                { id: 'pay', channel: 'whatsapp', senderId: '972546300783', senderName: 'אלון', text: '', timestamp: Date.now(), raw: { from: '972546300783@s.whatsapp.net' } },
-                { text: `💳 תשלום חדש!\n\nשם: ${order.name}\nטלפון: ${order.phone}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nסכום: ₪${sum}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || ''}` }
+                makeMsg('972546300783', 'אלון'),
+                { text: `💳 תשלום חדש!\n\nשם: ${order.name}\nטלפון: ${order.phone}\nחבילה: ${planLabel}\nסכום: ₪${sum}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || ''}` }
               );
-              // Confirm to customer
+
+              // 2. Customer confirmation — immediate
               await wa.sendReply(
-                { id: 'pay', channel: 'whatsapp', senderId: normalizedPhone, senderName: order.name, text: '', timestamp: Date.now(), raw: { from: `${normalizedPhone}@s.whatsapp.net` } },
-                { text: `${order.name}, התשלום התקבל בהצלחה! 🎉\n\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nסכום: ₪${sum}\nאסמכתא: ${asmachta || transactionId || ''}\n\nאלון ייצור איתך קשר תוך שעה להתחיל לעבוד על האתר.\n\nתודה שבחרת ב-Alon.dev! ⭐` }
+                makeMsg(normalizedPhone, order.name),
+                { text: `${order.name}, התשלום התקבל בהצלחה! 🎉\n\nחבילה: ${planLabel}\nסכום: ₪${sum}\nאסמכתא: ${asmachta || transactionId || ''}\n\nתודה שבחרת ב-Alon.dev! ⭐` }
+              );
+
+              // 3. What happens next — after 3 seconds
+              await new Promise(r => setTimeout(r, 3000));
+              await wa.sendReply(
+                makeMsg(normalizedPhone, order.name),
+                { text: `אז מה קורה עכשיו? 👇\n\n🚀 *אנחנו משדרגים את האתר שלך!*\nהאתר שראית — זה הבסיס. עכשיו אנחנו מתאימים אותו בדיוק לעסק שלך.\n\n📋 *השלבים הבאים:*\n1️⃣ אלון יצור איתך קשר תוך כמה שעות\n2️⃣ שלח לנו פה: לוגו, תמונות אמיתיות של העסק, וטקסטים שרוצה לשנות\n3️⃣ אנחנו משדרגים — צבעים, תוכן, תמונות, דומיין\n4️⃣ תוך 24-48 שעות האתר המשודרג באוויר! 🔥\n\n💡 *כלול בחבילה:*\n${plan === 'premium'
+                    ? '• שדרוג עיצוב + תוכן מותאם\n• קידום SEO\n• Google Business\n• תמיכה 24/7 ל-3 חודשים\n• כפתור WhatsApp חכם'
+                    : '• שדרוג עיצוב + תוכן מותאם\n• דומיין לשנה\n• כפתור WhatsApp\n• אתר מהיר ומאובטח'}\n\nשאלות? פשוט שלח הודעה פה ואני כאן 💬` }
+              );
+
+              // 4. Upsell hint — after 30 seconds
+              await new Promise(r => setTimeout(r, 27000));
+              await wa.sendReply(
+                makeMsg(normalizedPhone, order.name),
+                { text: `💡 אגב ${order.name}, הרבה לקוחות שלנו משדרגים עם שירותים נוספים:\n\n🔍 קידום SEO — שיופיעו ראשונים בגוגל\n📣 קמפיינים ממומנים — לידים חמים ישירות לפלאפון\n💬 בוט WhatsApp חכם — עונה ללקוחות 24/7\n🤖 נציגה קולית AI — עונה לטלפון בשבילך\n\nרוצה לשמוע על החבילות? יש לנו מבצעי באנדל משתלמים 🔥` }
               );
             }
           } catch (e: any) { log.warn({ err: e.message }, 'payment WA notification failed'); }

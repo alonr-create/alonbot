@@ -1,5 +1,9 @@
 import type { ToolHandler } from '../types.js';
 import { withRetry } from '../../utils/retry.js';
+import { db } from '../../utils/db.js';
+import { createLogger } from '../../utils/logger.js';
+
+const log = createLogger('calendar');
 
 const handlers: ToolHandler[] = [
   {
@@ -82,7 +86,44 @@ const handlers: ToolHandler[] = [
         }));
         if (!res.ok) return `Error: Calendar API returned ${res.status}`;
         const data = await res.json() as any;
-        return data.success ? `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}` : `Error: ${data.error || 'Unknown'}`;
+        if (!data.success) return `Error: ${data.error || 'Unknown'}`;
+
+        // Auto-schedule 15-minute reminders for Alon + customer (if meeting has time)
+        if (input.time && input.date) {
+          try {
+            const [hours, minutes] = input.time.split(':').map(Number);
+            const meetingDate = new Date(`${input.date}T${input.time}:00+03:00`); // Israel time
+            const reminderDate = new Date(meetingDate.getTime() - 15 * 60 * 1000);
+            const reminderStr = `${reminderDate.getFullYear()}-${String(reminderDate.getMonth() + 1).padStart(2, '0')}-${String(reminderDate.getDate()).padStart(2, '0')} ${String(reminderDate.getHours()).padStart(2, '0')}:${String(reminderDate.getMinutes()).padStart(2, '0')}`;
+
+            // Only schedule if the meeting is in the future
+            if (reminderDate.getTime() > Date.now()) {
+              // Reminder for Alon (Telegram)
+              const alonTarget = ctx.config.allowedTelegram?.[0] || '';
+              if (alonTarget) {
+                db.prepare('INSERT INTO scheduled_messages (label, message, send_at, channel, target_id) VALUES (?, ?, ?, ?, ?)')
+                  .run(`תזכורת: ${input.title}`, `⏰ תזכורת — בעוד 15 דקות:\n\n📅 *${input.title}*\n🕐 ${input.time}\n📆 ${input.date}`, reminderStr, 'telegram', alonTarget);
+              }
+
+              // Reminder for customer via WhatsApp (extract phone from description if available)
+              const descText = input.description || '';
+              const phoneMatch = descText.match(/(?:טלפון|phone)[:\s]*(\+?972[\d\-\s]+|0\d[\d\-\s]{7,})/i);
+              if (phoneMatch) {
+                const customerPhone = phoneMatch[1].replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+                const nameMatch = descText.match(/(?:ליד|שם)[:\s]*([^\n]+)/i);
+                const customerName = nameMatch ? nameMatch[1].trim() : '';
+                db.prepare('INSERT INTO scheduled_messages (label, message, send_at, channel, target_id) VALUES (?, ?, ?, ?, ?)')
+                  .run(`תזכורת ללקוח: ${input.title}`, `היי${customerName ? ' ' + customerName : ''} 👋\n\nתזכורת — יש לנו פגישה בעוד 15 דקות! ⏰\n🕐 ${input.time}\n\nנתראה בזום 🎥`, reminderStr, 'whatsapp', customerPhone);
+              }
+
+              log.info({ title: input.title, reminderAt: reminderStr }, 'scheduled 15min meeting reminders');
+            }
+          } catch (e: any) {
+            log.warn({ err: e.message }, 'failed to schedule meeting reminders');
+          }
+        }
+
+        return `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}\n📢 תזכורת 15 דקות לפני נקבעה אוטומטית`;
       } catch (e: any) {
         return `Error: Calendar request failed.`;
       }
