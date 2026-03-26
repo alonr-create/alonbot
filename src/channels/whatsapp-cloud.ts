@@ -394,6 +394,17 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
               caption: reply.text || undefined,
             },
           });
+          // Save outbound image to disk + tag DB for dashboard display
+          try {
+            const mediaDir = join(config.dataDir, 'media');
+            if (!existsSync(mediaDir)) mkdirSync(mediaDir, { recursive: true });
+            const filename = `out_${to}_${Date.now()}.png`;
+            writeFileSync(join(mediaDir, filename), reply.image);
+            const taggedContent = `[media:image:${filename}]${reply.text ? ' ' + reply.text : ''}`;
+            db.prepare(`UPDATE messages SET content = ? WHERE rowid = (SELECT MAX(rowid) FROM messages WHERE channel = 'whatsapp-outbound' AND sender_id = ? AND role = 'assistant')`).run(taggedContent, to);
+          } catch (e: any) {
+            log.warn({ err: e.message }, 'outbound image save failed (non-critical)');
+          }
           return; // Caption included with image
         }
       }

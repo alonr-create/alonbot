@@ -1966,6 +1966,66 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
   }
 });
 
+// ── Checkout webhook — receives order from checkout.alondev.site ──
+app.post('/api/checkout-webhook', (req, res) => {
+  try {
+    const { name, phone, email, plan, price, discount, cardLast4, timestamp } = req.body || {};
+    if (!name || !phone || !plan) {
+      res.status(400).json({ success: false, error: 'Missing required fields' });
+      return;
+    }
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    log.info({ name, phone: normalizedPhone, plan, price, discount }, '🎉 NEW CHECKOUT ORDER');
+
+    // Save order to DB
+    db.prepare(`CREATE TABLE IF NOT EXISTS orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT, phone TEXT, email TEXT, plan TEXT, price INTEGER,
+      discount INTEGER DEFAULT 0, card_last4 TEXT, status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now'))
+    )`).run();
+    db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, card_last4)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`)
+      .run(name, normalizedPhone, email || '', plan, price || 0, discount ? 1 : 0, cardLast4 || '');
+
+    // Update lead status in DB
+    db.prepare(`UPDATE leads SET lead_status = 'payment_pending', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
+
+    // Log as message for dashboard visibility
+    const orderMsg = `🎉 הזמנה חדשה!\nשם: ${name}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nמחיר: ${price}₪${discount ? ' (הנחה!)' : ''}\nכרטיס: ****${cardLast4 || '????'}`;
+    db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
+      VALUES ('whatsapp-inbound', ?, ?, 'system', ?, datetime('now'))`)
+      .run(normalizedPhone, name, orderMsg);
+
+    // Send WhatsApp notification to Alon
+    (async () => {
+      try {
+        const { getAdapter } = await import('./router.js');
+        const wa = getAdapter('whatsapp');
+        if (wa) {
+          // Notify Alon
+          await wa.sendReply(
+            { id: 'checkout', channel: 'whatsapp', senderId: '972546300783', senderName: 'אלון', text: '', timestamp: Date.now(), raw: { from: '972546300783@s.whatsapp.net' } },
+            { text: `🎉 הזמנה חדשה!\n\nשם: ${name}\nטלפון: ${phone}\nחבילה: ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}\nמחיר: ₪${price}${discount ? ' (הנחה!)' : ''}\n\nצריך לסלוק ידנית — כרטיס ****${cardLast4 || '????'}` }
+          );
+          // Send confirmation to customer
+          await wa.sendReply(
+            { id: 'checkout', channel: 'whatsapp', senderId: normalizedPhone, senderName: name, text: '', timestamp: Date.now(), raw: { from: `${normalizedPhone}@s.whatsapp.net` } },
+            { text: `שלום ${name}! 🎉\n\nקיבלנו את ההזמנה שלך לחבילת ${plan === 'premium' ? 'פרימיום' : 'בסיסי'}.\n\nאלון ייצור איתך קשר תוך שעה כדי להתחיל לעבוד על האתר שלך.\n\nתודה שבחרת ב-Alon.dev! ⭐` }
+          );
+        }
+      } catch (e: any) {
+        log.warn({ err: e.message }, 'checkout WA notification failed');
+      }
+    })();
+
+    res.json({ success: true });
+  } catch (e: any) {
+    log.error({ err: e.message }, 'checkout webhook error');
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
   const { phone, audio, leadName } = req.body;
   if (!phone || !audio) {
