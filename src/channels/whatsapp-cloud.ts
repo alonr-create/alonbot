@@ -106,6 +106,8 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
 
   // Dedup at adapter level — prevent processing same wamid twice
   const processedWamIds = new Map<string, number>();
+  // Outbound dedup — prevent sending identical messages within 30s
+  const lastOutbound = new Map<string, { text: string; ts: number }>();
   setInterval(() => {
     const cutoff = Date.now() - 600_000; // 10 min
     for (const [k, v] of processedWamIds) if (v < cutoff) processedWamIds.delete(k);
@@ -326,6 +328,21 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     async sendReply(original: UnifiedMessage, reply: UnifiedReply) {
       if (!token || !phoneNumberId) return;
       const to = original.senderId;
+
+      // Dedup: skip if exact same text was sent to same number within 30s
+      if (reply.text && !reply.template && !reply.image && !reply.voice && !reply.document) {
+        const last = lastOutbound.get(to);
+        if (last && last.text === reply.text && Date.now() - last.ts < 30_000) {
+          log.warn({ to, chars: reply.text.length }, 'outbound dedup — skipping duplicate reply');
+          return;
+        }
+        lastOutbound.set(to, { text: reply.text, ts: Date.now() });
+        // Cleanup old entries
+        if (lastOutbound.size > 100) {
+          const cutoff = Date.now() - 60_000;
+          for (const [k, v] of lastOutbound) if (v.ts < cutoff) lastOutbound.delete(k);
+        }
+      }
 
       // Template message (works outside 24-hour window)
       if (reply.template) {
