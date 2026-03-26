@@ -139,6 +139,74 @@ const handlers: ToolHandler[] = [
           }
         }
 
+        // ── Auto-update lead as booked + sync Monday.com ──
+        if (ctx.isLeadConversation && ctx.senderId) {
+          const phone = ctx.senderId;
+          try {
+            // 1. Mark was_booked in DB
+            db.prepare('UPDATE leads SET was_booked = 1, lead_status = ?, updated_at = datetime(\'now\') WHERE phone = ?').run('דובר', phone);
+            log.info({ phone, title: input.title }, 'lead marked as booked');
+
+            // 2. Bump lead score to max
+            db.prepare('UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), 3) WHERE phone = ?').run(phone);
+
+            // 3. Sync to Monday.com — update or create item
+            const lead = db.prepare('SELECT monday_item_id, name, source FROM leads WHERE phone = ?').get(phone) as any;
+            const mondayKey = ctx.config.mondayApiKey;
+            if (mondayKey) {
+              const boardId = 5092777389; // לידים אלון
+              const leadName = lead?.name || ctx.senderName || 'ליד';
+              const localPhone = phone.replace(/^972/, '0');
+
+              if (lead?.monday_item_id) {
+                // Update existing Monday item — set date + move to "נוצר קשר"
+                await fetch('https://api.monday.com/v2', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: mondayKey },
+                  body: JSON.stringify({
+                    query: `mutation { change_multiple_column_values(board_id: ${boardId}, item_id: ${lead.monday_item_id}, column_values: "{\\"date4\\":{\\"date\\":\\"${input.date}\\"},\\"status\\":{\\"label\\":\\"Working on it\\"}}") { id } }`,
+                  }),
+                }).catch(() => {});
+                // Move to "נוצר קשר" group
+                await fetch('https://api.monday.com/v2', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: mondayKey },
+                  body: JSON.stringify({
+                    query: `mutation { move_item_to_group(item_id: ${lead.monday_item_id}, group_id: "group_mm1s9vs5") { id } }`,
+                  }),
+                }).catch(() => {});
+                log.info({ phone, mondayItemId: lead.monday_item_id }, 'Monday.com item updated with meeting date');
+              } else {
+                // Create new Monday item
+                const colVals = JSON.stringify({
+                  phone_mm16hqz2: localPhone,
+                  text_mm16pfzp: lead?.source || 'alon_dev',
+                  date4: { date: input.date },
+                  status: { label: 'Working on it' },
+                  long_text_mm16k6vr: `פגישת זום ${input.date} ${input.time || ''}\n${input.description || ''}`,
+                }).replace(/"/g, '\\"');
+                const createResp = await fetch('https://api.monday.com/v2', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json', Authorization: mondayKey },
+                  body: JSON.stringify({
+                    query: `mutation { create_item(board_id: ${boardId}, group_id: "group_mm1s9vs5", item_name: "${leadName.replace(/"/g, '\\"')}", column_values: "${colVals}") { id } }`,
+                  }),
+                });
+                if (createResp.ok) {
+                  const createData = await createResp.json() as any;
+                  const newItemId = createData?.data?.create_item?.id;
+                  if (newItemId) {
+                    db.prepare('UPDATE leads SET monday_item_id = ? WHERE phone = ?').run(String(newItemId), phone);
+                    log.info({ phone, mondayItemId: newItemId }, 'Monday.com item created for booked lead');
+                  }
+                }
+              }
+            }
+          } catch (e: any) {
+            log.warn({ phone, err: e.message }, 'failed to auto-update lead booking status');
+          }
+        }
+
         return `אירוע נוצר: "${input.title}" ב-${input.date}${input.time ? ' ' + input.time : ''}\n📢 תזכורת 15 דקות לפני נקבעה אוטומטית`;
       } catch (e: any) {
         return `Error: Calendar request failed.`;
