@@ -931,6 +931,29 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <div id="analyticsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
     <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📈 אנליטיקס</h2>
+    <!-- Health cards -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;" id="analyticsHealthCards">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:var(--accent);" id="statTotalMessages">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">הודעות היום</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#25D366;" id="statButtons">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">כפתורים נשלחו</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#7b2ff7;" id="statLists">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">רשימות נשלחו</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#e68a00;" id="statVoice">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">הודעות קוליות</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#0099cc;" id="statAvgResponse">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">זמן תגובה (דק׳)</div>
+      </div>
+    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
         <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">הודעות ליום (30 ימים)</h3>
@@ -2962,6 +2985,13 @@ const STATUS_MAP = {
 async function loadAnalytics() {
   try {
     const data = await api('/stats');
+    // Health cards
+    document.getElementById('statTotalMessages').textContent = data.messagesToday ?? '-';
+    document.getElementById('statButtons').textContent = data.buttonsCount ?? 0;
+    document.getElementById('statLists').textContent = data.listsCount ?? 0;
+    document.getElementById('statVoice').textContent = data.voiceCount ?? 0;
+    document.getElementById('statAvgResponse').textContent = data.avgResponseMin != null ? data.avgResponseMin + '′' : '—';
+    // Charts
     renderAnalyticsBarChart('analyticsChartMessages', data.messagesPerDay || [], 'הודעות');
     renderAnalyticsBarChart('analyticsChartLeads', data.leadsPerDay || [], 'לידים');
     renderAnalyticsSourceTable(data.sourceBreakdown || []);

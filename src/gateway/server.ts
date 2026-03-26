@@ -1001,6 +1001,33 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
       SELECT COUNT(*) as count FROM leads WHERE bot_paused = 1
     `).get() as any;
 
+    // Interactive messages stats (buttons, lists, CTA)
+    const interactiveCount = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND content LIKE '%[interactive:%'
+      AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+    `).get() as any;
+    const buttonsCount = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND content LIKE '%[interactive:buttons:%'
+      AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+    `).get() as any;
+    const listsCount = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND content LIKE '%[interactive:list:%'
+      AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+    `).get() as any;
+    const ctaCount = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND content LIKE '%[interactive:cta:%'
+      AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+    `).get() as any;
+    const voiceCount = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND content LIKE '%[media:voice%'
+      AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+    `).get() as any;
+
     res.json({
       success: true,
       totalLeads: totalLeads.count,
@@ -1019,6 +1046,11 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
       leadsRepliedToday: leadsRepliedToday.count,
       hotLeads: hotLeads.count,
       botPausedCount: botPausedCount.count,
+      interactiveCount: interactiveCount.count,
+      buttonsCount: buttonsCount.count,
+      listsCount: listsCount.count,
+      ctaCount: ctaCount.count,
+      voiceCount: voiceCount.count,
     });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });

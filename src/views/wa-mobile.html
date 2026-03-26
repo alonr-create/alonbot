@@ -2508,6 +2508,19 @@ async function loadAnalytics() {
       </div>
       ${stats.botPausedCount > 0 ? `<div class="ana-row" style="margin-top:8px;"><span class="ana-label">מצב ידני</span><span class="ana-badge yellow">${stats.botPausedCount} לידים</span></div>` : ''}
     </div>`;
+
+    // Interactive messages card
+    if (stats.interactiveCount > 0 || stats.buttonsCount > 0 || stats.voiceCount > 0) {
+      html += `<div class="ana-card">
+        <div class="ana-card-title">&#128377; הודעות אינטראקטיביות</div>
+        <div class="ana-grid">
+          <div class="ana-mini-card"><div class="ana-mini-num">${stats.buttonsCount || 0}</div><div class="ana-mini-label">כפתורים</div></div>
+          <div class="ana-mini-card"><div class="ana-mini-num">${stats.listsCount || 0}</div><div class="ana-mini-label">רשימות</div></div>
+          <div class="ana-mini-card"><div class="ana-mini-num">${stats.ctaCount || 0}</div><div class="ana-mini-label">CTA לינקים</div></div>
+          <div class="ana-mini-card"><div class="ana-mini-num">${stats.voiceCount || 0}</div><div class="ana-mini-label">הודעות קול</div></div>
+        </div>
+      </div>`;
+    }
   }
 
   // Internal Stats
