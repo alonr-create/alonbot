@@ -172,6 +172,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
   CREATE INDEX IF NOT EXISTS idx_leads_source ON leads(source);
 
+  -- Lead scoring + referral columns (added safely)
+  -- lead_score: 0=unknown, 1=cold, 2=warm, 3=hot, 4=fire
+
   CREATE TABLE IF NOT EXISTS lead_tags (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     phone TEXT NOT NULL,
@@ -470,5 +473,12 @@ try {
 try {
   db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();
 } catch { /* ok */ }
+
+// Migration: lead scoring + referral
+try { db.exec(`ALTER TABLE leads ADD COLUMN lead_score INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
+try { db.exec(`ALTER TABLE leads ADD COLUMN referral_code TEXT`); } catch { /* exists */ }
+try { db.exec(`ALTER TABLE leads ADD COLUMN referred_by TEXT`); } catch { /* exists */ }
+try { db.exec(`ALTER TABLE orders ADD COLUMN review_requested INTEGER NOT NULL DEFAULT 0`); } catch { /* exists */ }
+try { db.exec(`ALTER TABLE orders ADD COLUMN referral_code TEXT DEFAULT ''`); } catch { /* exists */ }
 
 export { db };

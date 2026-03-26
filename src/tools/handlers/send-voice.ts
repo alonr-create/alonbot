@@ -11,6 +11,7 @@ export const VOICE_PRESETS: Record<string, { id: string; name: string; settings:
   santa:   { id: 'pqHfZKP75CvOlQylNhV4', name: 'סנטה 🎅',            settings: { stability: 0.65, similarity_boost: 0.8, style: 0.5 } },
   english: { id: 'nPczCjzI2devNBz1zQrb', name: 'Brian (English)',     settings: { stability: 0.5, similarity_boost: 0.75, style: 0.3 } },
   woman:   { id: 'EXAVITQu4vr4xnSDxMaL', name: 'Sarah (Woman)',        settings: { stability: 0.55, similarity_boost: 0.8, style: 0.4 } },
+  yael:    { id: 'albaa6OioIhKtKdCEkQw', name: 'יעל (Laloosh)',       settings: { stability: 0.55, similarity_boost: 0.85, style: 0.35 } },
 };
 
 // LOCKED — do not let auto_improve change this. turbo/multilingual break Hebrew pronunciation.
@@ -20,7 +21,7 @@ const handler: ToolHandler = {
   name: 'send_voice',
   definition: {
     name: 'send_voice',
-    description: 'TTS voice message. Available voices: alon (default), robot 🤖, monster 👹, wizard 🧙, santa 🎅, english. NOTE: model is locked to eleven_v3 — do NOT try to change it, turbo models break Hebrew.',
+    description: 'TTS voice message. Available voices: alon (default), yael (יעל — for lead conversations), robot 🤖, monster 👹, wizard 🧙, santa 🎅, english. NOTE: model is locked to eleven_v3 — do NOT try to change it, turbo models break Hebrew.',
     input_schema: {
       type: 'object' as const,
       properties: {

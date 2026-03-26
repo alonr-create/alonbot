@@ -47,6 +47,22 @@ app.use('/assets', express.static(join(config.dataDir), {
   },
 }));
 
+// ── Lead Scoring Helper ──
+// 0=unknown, 1=cold, 2=warm, 3=hot, 4=fire
+function bumpLeadScore(phone: string, action: 'message' | 'checkout' | 'paid' | 'booked' | 'clicked_link') {
+  const scoreMap = { message: 2, clicked_link: 2, checkout: 3, booked: 3, paid: 4 };
+  const newScore = scoreMap[action] || 1;
+  try {
+    db.prepare(`UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), ?), updated_at = datetime('now') WHERE phone = ?`).run(newScore, phone);
+  } catch {} // best-effort
+}
+
+// ── Smart Timing Helper — Israel quiet hours ──
+function isQuietHours(): boolean {
+  const israelHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }));
+  return israelHour >= 22 || israelHour < 8;
+}
+
 // Security headers
 app.use((_req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -665,6 +681,7 @@ app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any)
       VALUES (?, ?, ?, datetime('now'), datetime('now'))
       ON CONFLICT(phone) DO UPDATE SET updated_at = datetime('now')`)
       .run(normalizedPhone, sender_name || normalizedPhone, source);
+    bumpLeadScore(normalizedPhone, 'message');
     db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
       VALUES (?, ?, ?, ?, ?, datetime('now'))`)
       .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message);
@@ -1984,6 +2001,20 @@ app.post('/api/create-payment', async (req, res) => {
     const p = prices[plan] || prices.basic;
     const amount = discount ? p.discount : p.regular;
 
+    // Track checkout visit for abandoned cart recovery
+    const normalizedCartPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    try {
+      db.prepare(`CREATE TABLE IF NOT EXISTS checkout_visits (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        phone TEXT NOT NULL, name TEXT, plan TEXT, amount INTEGER,
+        paid INTEGER DEFAULT 0, reminded INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now'))
+      )`).run();
+      db.prepare('INSERT INTO checkout_visits (phone, name, plan, amount) VALUES (?, ?, ?, ?)').run(normalizedCartPhone, name, plan, amount);
+      bumpLeadScore(normalizedCartPhone, 'checkout');
+      log.info({ phone: normalizedCartPhone, plan, amount }, 'checkout visit tracked');
+    } catch (e: any) { log.warn({ err: e.message }, 'checkout visit tracking failed'); }
+
     if (!config.growUserId || !config.growPageCode) {
       // Fallback: save order without real payment
       log.warn('Grow credentials not set — saving order as pending');
@@ -2046,6 +2077,14 @@ app.post('/api/grow-webhook', (req, res) => {
       db.prepare(`UPDATE orders SET status = 'paid', card_last4 = ?, updated_at = datetime('now') WHERE grow_process_id = ?`)
         .run(cardSuffix || '', paymentProcessId || '');
 
+      // Mark checkout_visits as paid (for abandoned cart recovery)
+      try {
+        const order = db.prepare(`SELECT phone FROM orders WHERE grow_process_id = ?`).get(paymentProcessId || '') as any;
+        if (order?.phone) {
+          db.prepare('UPDATE checkout_visits SET paid = 1 WHERE phone = ? AND paid = 0').run(order.phone);
+        }
+      } catch {} // best-effort
+
       // Find the order to get customer details
       const order = db.prepare(`SELECT * FROM orders WHERE grow_process_id = ? OR (status = 'payment_created' AND plan = ?)`)
         .get(paymentProcessId || '', plan) as any;
@@ -2053,6 +2092,7 @@ app.post('/api/grow-webhook', (req, res) => {
       if (order) {
         const normalizedPhone = order.phone;
         db.prepare(`UPDATE leads SET lead_status = 'paid', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
+        bumpLeadScore(normalizedPhone, 'paid');
 
         // Log payment in messages for dashboard
         const planLabel = plan === 'premium' ? 'פרימיום' : 'בסיסי';
@@ -2120,6 +2160,8 @@ function saveOrder(name: string, phone: string, email: string | undefined, plan:
     name TEXT, phone TEXT, email TEXT, plan TEXT, price INTEGER,
     discount INTEGER DEFAULT 0, card_last4 TEXT, status TEXT DEFAULT 'pending',
     grow_process_id TEXT DEFAULT '',
+    review_requested INTEGER DEFAULT 0,
+    referral_code TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
     updated_at TEXT DEFAULT (datetime('now'))
   )`).run();

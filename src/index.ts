@@ -222,6 +222,68 @@ cron.schedule('* * * * *', async () => {
   }
 }, { timezone: 'Asia/Jerusalem' });
 
+// Abandoned cart recovery — every 10 minutes, check for unpaid checkout visits older than 30 min
+cron.schedule('*/10 * * * *', async () => {
+  if (config.mode !== 'cloud') return;
+  // Skip quiet hours (22:00-08:00 Israel time)
+  const israelHour = parseInt(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', hour: 'numeric', hour12: false }));
+  if (israelHour >= 22 || israelHour < 8) return;
+  try {
+    const unpaid = db.prepare(
+      `SELECT * FROM checkout_visits WHERE paid = 0 AND reminded = 0 AND created_at <= datetime('now', '-30 minutes') LIMIT 10`
+    ).all() as any[];
+
+    for (const visit of unpaid) {
+      const phone = visit.phone;
+      const name = visit.name || '';
+      const plan = visit.plan === 'premium' ? 'פרימיום' : 'בסיסי';
+      try {
+        const { getAdapter } = await import('./gateway/router.js');
+        const wa = getAdapter('whatsapp');
+        if (wa) {
+          await wa.sendReply(
+            { id: 'cart', channel: 'whatsapp' as const, senderId: phone, senderName: name, text: '', timestamp: Date.now(), raw: { from: `${phone}@s.whatsapp.net` } },
+            { text: `היי${name ? ' ' + name : ''} 👋\n\nראיתי שהתחלת להזמין אתר (חבילת ${plan}) אבל לא סיימת — הכל בסדר?\n\n💡 אם נתקעת או יש שאלות — אני כאן!\nאם רוצה להמשיך: https://checkout.alondev.site/?plan=${visit.plan || 'basic'}${name ? '&name=' + encodeURIComponent(name) : ''}\n\n⏰ המבצע עדיין בתוקף, אבל לא לעוד הרבה זמן!` }
+          );
+          log.info({ phone, plan: visit.plan }, 'abandoned cart follow-up sent');
+        }
+      } catch (e: any) { log.warn({ err: e.message, phone }, 'abandoned cart WA send failed'); }
+      db.prepare('UPDATE checkout_visits SET reminded = 1 WHERE id = ?').run(visit.id);
+    }
+  } catch (e: any) {
+    log.error({ err: e.message }, 'abandoned cart cron failed');
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Google Review request — daily at 11:00, check for orders delivered 48h ago
+cron.schedule('0 11 * * *', async () => {
+  if (config.mode !== 'cloud') return;
+  try {
+    const delivered = db.prepare(
+      `SELECT * FROM orders WHERE status = 'delivered' AND review_requested = 0 AND updated_at <= datetime('now', '-48 hours') LIMIT 20`
+    ).all() as any[];
+
+    for (const order of delivered) {
+      const phone = order.phone;
+      const name = order.name || '';
+      try {
+        const { getAdapter } = await import('./gateway/router.js');
+        const wa = getAdapter('whatsapp');
+        if (wa) {
+          await wa.sendReply(
+            { id: 'review', channel: 'whatsapp' as const, senderId: phone, senderName: name, text: '', timestamp: Date.now(), raw: { from: `${phone}@s.whatsapp.net` } },
+            { text: `היי${name ? ' ' + name : ''} 😊\n\nמקווה שאת/ה מרוצה מהאתר החדש! 🎉\n\nיש לנו בקשה קטנה — ביקורת בגוגל עוזרת לנו מאוד להגיע ליותר עסקים כמוך:\n⭐ https://g.page/r/alon-dev/review\n\nתודה רבה! 🙏` }
+          );
+          log.info({ phone, name }, 'Google review request sent');
+        }
+      } catch (e: any) { log.warn({ err: e.message, phone }, 'review request WA send failed'); }
+      db.prepare(`UPDATE orders SET review_requested = 1 WHERE id = ?`).run(order.id);
+    }
+  } catch (e: any) {
+    log.error({ err: e.message }, 'review request cron failed');
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
 // Simple cron expression matcher for current minute (Israel timezone)
 function matchesCronNow(expr: string, now: Date): boolean {
   const parts = expr.split(/\s+/);
