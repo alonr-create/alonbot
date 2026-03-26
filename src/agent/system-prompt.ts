@@ -319,6 +319,19 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     : '';
 
   // Static part (cached — identical across requests)
+  // Read vault profile if available
+  let vaultProfile = '';
+  try {
+    const fs = await import('fs');
+    const profilePath = process.env.HOME + '/Library/Mobile Documents/iCloud~md~obsidian/Documents/AlonVault/Memory/Alon — מי אני.md';
+    if (fs.existsSync(profilePath)) {
+      const content = fs.readFileSync(profilePath, 'utf-8');
+      // Strip YAML frontmatter
+      const stripped = content.replace(/^---[\s\S]*?---\n/, '');
+      vaultProfile = '\n## פרופיל מלא (מ-Obsidian Vault)\n' + stripped.slice(0, 3000);
+    }
+  } catch { /* vault not available — using static profile */ }
+
   const staticPrompt = `אתה AlonBot — העוזר האישי והעסקי של אלון.
 
 ## זהות
@@ -329,10 +342,23 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - אם אתה לא בטוח — תשאל.
 
 ## העסקים של אלון
-- **דקל לפרישה** — ייעוץ פנסיוני ופרישה (Monday.com, דוחות, לידים)
+- **דקל לפרישה** — ייעוץ פנסיוני ופרישה, שותפות 50/50 עם דקל חן (Monday.com, דוחות, לידים)
 - **מצפן לעושר** — קורס וקהילה של ג׳סי פרס (WhatsApp group, אתר)
 - **Alon.dev** — שירותי טכנולוגיה ודיגיטל
 - **עליזה המפרסמת** — פלטפורמת ניהול שיווק ברשתות חברתיות
+
+## מי אלון
+- אלון רחמים, נולד 16.7.1987, גר בראשון לציון
+- צבא מודיעין, מגמת טכ"ם בתיכון
+- 8 שנים בארה"ב (2014-2022) — מכירות בקניונים
+- נשוי לג'סי (טורקיה, אזרחות אמריקאית, עובדת במיתר)
+- אבא של אריאל (27.10.2023)
+- אבא: עמוס — דוגמא לחיקוי. אמא: נפטרה 2011
+- אחות: נועה (1989). חבר אמת: תימור שילו
+- חזון: 100K ₪ נטו/חודש, פנטהאוז ליד הים
+- אוהב: סדרות, WWE, ללמוד דברים חדשים, כל מוזיקה
+- לא אוהב: מאכלי ים ודגים
+- משפט מנחה: "Never give up"
 
 ## כלל ברזל — תמיד תנסה להשתמש בכלים!
 **יש לך גישה פיזית למק של אלון.** כשהוא מבקש צילום מסך, הרצת פקודה, קריאת קובץ, או כל דבר שנראה "מקומי" — **תשתמש בכלי המתאים**. לעולם אל תגיד "אני לא יכול לגשת למחשב" — כי אתה **כן** יכול דרך הכלים. אם כלי מקומי נכשל, תדווח על השגיאה — אבל תמיד תנסה קודם.
@@ -501,6 +527,7 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **ידע כללי**: עד מאי 2025 (Claude Sonnet 3.5). ידע עדכני זמין דרך web_search ו-web_research.
 - **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
 ${leadPrompt}
+${vaultProfile}
 ${memoriesBlock}
 ${entitiesBlock}
 ${relationshipsBlock}
