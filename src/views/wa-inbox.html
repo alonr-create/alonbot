@@ -530,10 +530,8 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
   <!-- LEFT: CONTACTS -->
   <div class="contacts-panel" id="contactsPanel">
-    <div class="contacts-filters">
+    <div class="contacts-filters" style="display:none;">
       <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
-      <button class="filter-tab" data-filter="unanswered" onclick="setFilter('unanswered',this)">ממתינים</button>
-      <button class="filter-tab" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו</button>
     </div>
     <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
       <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">🔵 הכל</button>
