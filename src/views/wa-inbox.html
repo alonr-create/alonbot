@@ -1195,7 +1195,8 @@ async function loadContacts() {
       source: c.source || 'whatsapp',
       status: c.status || c.lead_status || 'new',
       messageCount: c.message_count || 0,
-      online: false
+      online: false,
+      profile_pic_url: c.profile_pic_url || null
     }));
     // Merge campaign leads
     try {
@@ -1288,6 +1289,7 @@ async function loadContacts() {
     }
 
     // Sort by last message time desc (normalize to ms for consistent comparison)
+    lazyLoadProfilePics();
     contacts.sort((a,b) => {
       const ta = a.lastTime ? new Date(a.lastTime).getTime() : 0;
       const tb = b.lastTime ? new Date(b.lastTime).getTime() : 0;
@@ -1298,6 +1300,25 @@ async function loadContacts() {
   } catch(e) {
     console.error('Failed to load contacts:', e);
   }
+}
+
+let _picLoading = false;
+async function lazyLoadProfilePics() {
+  if (_picLoading) return;
+  const missing = contacts.filter(c => !c.profile_pic_url).slice(0, 20).map(c => c.phone);
+  if (!missing.length) return;
+  _picLoading = true;
+  try {
+    const data = await api('/profile-pics-batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phones: missing }) });
+    if (data.success && data.results) {
+      let updated = false;
+      for (const c of contacts) {
+        if (data.results[c.phone]) { c.profile_pic_url = data.results[c.phone]; updated = true; }
+      }
+      if (updated) renderContacts();
+    }
+  } catch(e) { console.error('Profile pics error:', e); }
+  _picLoading = false;
 }
 
 // ===== RENDER CONTACTS =====
@@ -1366,8 +1387,8 @@ function renderContacts() {
     const timeStyle = isNew ? 'color:var(--accent);font-weight:700;' : '';
     return `
       <div class="contact-item ${isActive ? 'active' : ''} ${isNew ? 'has-new' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
-        <div class="contact-avatar" style="background:${color};pointer-events:none;position:relative;">
-          ${initials}
+        <div class="contact-avatar" style="${c.profile_pic_url ? '' : 'background:'+color+';'}pointer-events:none;position:relative;${c.profile_pic_url ? 'overflow:hidden;' : ''}">
+          ${c.profile_pic_url ? `<img src="${esc(c.profile_pic_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentElement.style.background='${color}';this.parentElement.insertAdjacentText('afterbegin','${initials}')">` : initials}
           ${c.online ? '<div class="online-dot" style="pointer-events:none;"></div>' : ''}
           ${isNew ? '<div style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#ea4335;border:2px solid #fff;pointer-events:none;"></div>' : ''}
         </div>
