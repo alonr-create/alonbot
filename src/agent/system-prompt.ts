@@ -455,6 +455,31 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     }
   } catch { /* people.json not available */ }
 
+  // Read synced Claude Memory files (from /data/claude-memory/)
+  let claudeMemoryBlock = '';
+  try {
+    const fs3 = await import('fs');
+    const path3 = await import('path');
+    const memDir = path3.join(config.dataDir, 'claude-memory');
+    if (fs3.existsSync(memDir)) {
+      const memFiles = fs3.readdirSync(memDir).filter((f: string) => f.endsWith('.md') && f !== 'MEMORY.md');
+      const keyFiles = ['user_profile.md', 'projects-index.md', 'long-term-memory.md', 'recent-memory.md', 'session_handoff.md'];
+      const toRead = keyFiles.filter(f => memFiles.includes(f));
+      if (toRead.length > 0) {
+        claudeMemoryBlock = '\n## זיכרון Claude Code (סונכרן אוטומטית)\n';
+        let totalChars = 0;
+        for (const f of toRead) {
+          if (totalChars > 6000) break; // cap total size
+          const content = fs3.readFileSync(path3.join(memDir, f), 'utf-8');
+          const stripped = content.replace(/^---[\s\S]*?---\n/, '');
+          const snippet = stripped.slice(0, 2000);
+          claudeMemoryBlock += `\n### ${f.replace('.md', '')}\n${snippet}\n`;
+          totalChars += snippet.length;
+        }
+      }
+    }
+  } catch { /* claude-memory not synced yet */ }
+
   const staticPrompt = `אתה AlonBot — העוזר האישי והעסקי של אלון.
 
 ## זהות
@@ -681,6 +706,7 @@ ${leadPrompt}`;
 - **ידע כללי**: עד מאי 2025 (Claude Sonnet 3.5). ידע עדכני זמין דרך web_search ו-web_research.
 - **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
 ${vaultProfile}
+${claudeMemoryBlock}
 ${peopleBlock}
 ${memoriesBlock}
 ${entitiesBlock}

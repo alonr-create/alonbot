@@ -1913,6 +1913,75 @@ app.post('/api/sync/import', externalAuth, (req, res) => {
   }
 });
 
+// --- Claude Memory Sync ---
+// Upload memory files from Claude Code / Obsidian → AlonBot
+import { existsSync as fsExists, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'fs';
+const MEMORY_DIR = join(config.dataDir, 'claude-memory');
+if (!fsExists(MEMORY_DIR)) mkdirSync(MEMORY_DIR, { recursive: true });
+
+// POST /api/memory/sync — bulk upload memory files
+app.post('/api/memory/sync', externalAuth, (req, res) => {
+  try {
+    const { files } = req.body; // [{name: "user_profile.md", content: "..."}]
+    if (!Array.isArray(files)) {
+      res.status(400).json({ success: false, error: 'files array required' });
+      return;
+    }
+    let written = 0;
+    for (const f of files) {
+      if (!f.name || !f.content) continue;
+      const safeName = f.name.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+      writeFileSync(join(MEMORY_DIR, safeName), f.content, 'utf-8');
+      written++;
+    }
+    log.info({ written }, 'memory sync completed');
+    res.json({ success: true, written });
+  } catch (e: any) {
+    log.error({ error: e.message }, 'memory sync failed');
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/memory/list — list all memory files
+app.get('/api/memory/list', externalAuth, (_req, res) => {
+  try {
+    const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.md'));
+    res.json({ success: true, files });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/memory/read/:name — read a specific memory file
+app.get('/api/memory/read/:name', externalAuth, (req, res) => {
+  try {
+    const safeName = req.params.name.replace(/[^a-zA-Z0-9_\-\.]/g, '_');
+    const filePath = join(MEMORY_DIR, safeName);
+    if (!fsExists(filePath)) {
+      res.status(404).json({ success: false, error: 'not found' });
+      return;
+    }
+    const content = readFileSync(filePath, 'utf-8');
+    res.json({ success: true, name: safeName, content });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /api/memory/all — return all memory files as JSON (for system prompt injection)
+app.get('/api/memory/all', externalAuth, (_req, res) => {
+  try {
+    const files = readdirSync(MEMORY_DIR).filter(f => f.endsWith('.md'));
+    const memories: Record<string, string> = {};
+    for (const f of files) {
+      memories[f] = readFileSync(join(MEMORY_DIR, f), 'utf-8');
+    }
+    res.json({ success: true, count: files.length, memories });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
   const { phone, message, leadName, leadContext, template, templateParams } = req.body;
   if (!phone || (!message && !template)) {
