@@ -8,6 +8,10 @@ export interface ToolContext {
   addPendingMedia: (item: { type: 'image' | 'voice' | 'document'; data: Buffer; filename?: string; mimetype?: string }) => void;
   /** True when the conversation is with an external lead (not Alon) — redact private details */
   isLeadConversation?: boolean;
+  /** The phone/ID of the person the bot is chatting with */
+  senderId?: string;
+  /** The name of the person the bot is chatting with */
+  senderName?: string;
 }
 
 export interface ToolHandler {

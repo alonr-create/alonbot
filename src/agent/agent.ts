@@ -359,7 +359,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         log.info({ tool: block.name, input: JSON.stringify(block.input).slice(0, 100) }, 'tool call');
         const toolStart = Date.now();
         const result = await Promise.race([
-          executeTool(block.name, block.input as Record<string, any>, { isLeadConversation }),
+          executeTool(block.name, block.input as Record<string, any>, { isLeadConversation, senderId: msg.senderId, senderName: msg.senderName }),
           new Promise<string>((_, reject) => setTimeout(() => reject(new Error(`Tool ${block.name} timed out after ${TOOL_TIMEOUT_MS / 1000}s`)), TOOL_TIMEOUT_MS)),
         ]).catch((err: Error) => `Error: ${err.message}`);
         const toolDuration = Date.now() - toolStart;

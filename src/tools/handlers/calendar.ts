@@ -105,13 +105,29 @@ const handlers: ToolHandler[] = [
                   .run(`תזכורת: ${input.title}`, `⏰ תזכורת — בעוד 15 דקות:\n\n📅 *${input.title}*\n🕐 ${input.time}\n📆 ${input.date}`, reminderStr, 'telegram', alonTarget);
               }
 
-              // Reminder for customer via WhatsApp (extract phone from description if available)
+              // Reminder for customer via WhatsApp
+              // Use ctx.senderId (the lead's phone) directly, or fallback to extracting from description
               const descText = input.description || '';
-              const phoneMatch = descText.match(/(?:טלפון|phone)[:\s]*(\+?972[\d\-\s]+|0\d[\d\-\s]{7,})/i);
-              if (phoneMatch) {
-                const customerPhone = phoneMatch[1].replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+              let customerPhone = '';
+              let customerName = ctx.senderName || '';
+
+              if (ctx.senderId && ctx.isLeadConversation) {
+                // Direct: we're in a lead conversation, senderId IS the customer phone
+                customerPhone = ctx.senderId;
+              } else {
+                // Fallback: extract from event description
+                const phoneMatch = descText.match(/(?:טלפון|phone)[:\s]*(\+?972[\d\-\s]+|0\d[\d\-\s]{7,})/i);
+                if (phoneMatch) {
+                  customerPhone = phoneMatch[1].replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+                }
+              }
+
+              if (!customerName) {
                 const nameMatch = descText.match(/(?:ליד|שם)[:\s]*([^\n]+)/i);
-                const customerName = nameMatch ? nameMatch[1].trim() : '';
+                if (nameMatch) customerName = nameMatch[1].trim();
+              }
+
+              if (customerPhone) {
                 db.prepare('INSERT INTO scheduled_messages (label, message, send_at, channel, target_id) VALUES (?, ?, ?, ?, ?)')
                   .run(`תזכורת ללקוח: ${input.title}`, `היי${customerName ? ' ' + customerName : ''} 👋\n\nתזכורת — יש לנו פגישה בעוד 15 דקות! ⏰\n🕐 ${input.time}\n\nנתראה בזום 🎥`, reminderStr, 'whatsapp', customerPhone);
               }
