@@ -210,8 +210,9 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   let totalOutputTokens = 0;
 
   // FREE TIER SHORTCUT — simple queries go to Gemini/Groq (no tools needed, saves $$$)
+  // NEVER use free tier for lead conversations — they need tools (calendar, monday, send_voice)
   let usedFreeTier = false;
-  if (isFreeTier) {
+  if (isFreeTier && !isLeadConversation) {
     try {
       const flatMessages = messages
         .filter(m => typeof m.content === 'string')
@@ -450,6 +451,19 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       modelUsed, totalInputTokens, totalOutputTokens, totalCost
     );
   } catch (e: any) { log.debug({ err: e.message }, 'api usage tracking failed'); }
+
+  // Strip leaked tool call descriptions from text (e.g. "**כלי שנקרא:** `send_voice`")
+  // This happens when the model describes tool calls in text instead of using tool_use API
+  if (isLeadConversation) {
+    replyText = replyText
+      .replace(/\*\*כלי שנקרא:?\*\*[^\n]*/gi, '')
+      .replace(/\*\*עם הטקסט:?\*\*[^\n]*/gi, '')
+      .replace(/\*\*עם הקול:?\*\*[^\n]*/gi, '')
+      .replace(/\(שלחתי לך גם הודעה קולית[^)]*\)/gi, '')
+      .replace(/כלי שנקרא:?\s*`[^`]*`/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
 
   // Save assistant response WITHOUT footer (keeps history clean for Claude)
   saveMessage(msg.channel, msg.senderId, msg.senderName, 'assistant', replyText);
