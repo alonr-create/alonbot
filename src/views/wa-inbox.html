@@ -931,6 +931,11 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <div id="analyticsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
     <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📈 אנליטיקס</h2>
+    <!-- Phone health -->
+    <div id="phoneHealthCard" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;display:none;">
+      <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;">📞 בריאות הקו</h3>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;" id="phoneHealthGrid"></div>
+    </div>
     <!-- Health cards -->
     <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;" id="analyticsHealthCards">
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
@@ -2984,8 +2989,34 @@ const STATUS_MAP = {
 
 async function loadAnalytics() {
   try {
-    const data = await api('/stats');
-    // Health cards
+    const [data, meta] = await Promise.all([api('/stats'), api('/meta-health').catch(() => null)]);
+    // Phone health card
+    if (meta?.success && meta.phone) {
+      const p = meta.phone;
+      const qColor = p.quality_rating === 'GREEN' ? '#25D366' : p.quality_rating === 'YELLOW' ? '#e68a00' : '#e53e3e';
+      const limitMap = { TIER_1K: '1,000', TIER_10K: '10,000', TIER_100K: '100,000', TIER_UNLIMITED: 'ללא הגבלה' };
+      const card = document.getElementById('phoneHealthCard');
+      card.style.display = 'block';
+      document.getElementById('phoneHealthGrid').innerHTML = `
+        <div style="text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:${qColor};">${p.quality_rating || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">איכות</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:15px;font-weight:700;color:var(--text);">${limitMap[p.messaging_limit_tier] || p.messaging_limit_tier || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">מגבלת הודעות</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:15px;font-weight:700;color:${p.name_status === 'APPROVED' ? '#25D366' : '#e68a00'};">${p.name_status || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">סטטוס שם</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:14px;font-weight:600;color:var(--text);" dir="ltr">${esc(p.display_phone_number || '-')}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${esc(p.verified_name || 'לא מאומת')}</div>
+        </div>
+      `;
+    }
+    // Stat cards
     document.getElementById('statTotalMessages').textContent = data.messagesToday ?? '-';
     document.getElementById('statButtons').textContent = data.buttonsCount ?? 0;
     document.getElementById('statLists').textContent = data.listsCount ?? 0;
