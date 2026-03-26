@@ -73,6 +73,22 @@ function getTemplateForCount(count: number): FollowupTemplate | null {
   return templates[Math.min(count, templates.length - 1)] || null;
 }
 
+// Meta template mapping: followup_count → approved template name
+// These templates accept {{1}}=name, {{2}}=site_url
+const META_TEMPLATE_MAP: Record<number, string> = {
+  0: 'lead_followup_day3',
+  1: 'lead_followup_day5',
+  2: 'lead_followup_day8',
+};
+
+// Build preview site URL for a lead
+function getLeadSiteUrl(lead: any): string {
+  const name = lead.name || '';
+  // Generate slug from name (same logic as lead-previews)
+  const slug = name.toLowerCase().replace(/[^a-z0-9\s]/gi, '').replace(/\s+/g, '-').slice(0, 50) || lead.phone;
+  return `https://lead-previews.vercel.app/${slug}`;
+}
+
 // Send a single follow-up to a lead
 export async function sendFollowup(phone: string, templateId?: number) {
   const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone) as any;
@@ -86,13 +102,24 @@ export async function sendFollowup(phone: string, templateId?: number) {
 
   const name = lead.name || '';
   const text = template.message.replace(/\{name\}/g, name);
+  const siteUrl = getLeadSiteUrl(lead);
 
-  if (template.message_type === 'text') {
-    await sendWhatsAppText(phone, text);
-  } else if (template.message_type === 'voice') {
-    // For voice, send as text for now (voice note generation would need ElevenLabs)
-    await sendWhatsAppText(phone, text);
-  } else {
+  // Try to send via Meta template first (works outside 24h window)
+  const metaTemplateName = META_TEMPLATE_MAP[lead.followup_count || 0];
+  let sentViaTemplate = false;
+
+  if (metaTemplateName) {
+    try {
+      await sendWhatsAppTemplate(phone, metaTemplateName, [name || 'שלום', siteUrl]);
+      sentViaTemplate = true;
+      log.info({ phone, template: metaTemplateName }, 'follow-up sent via Meta template');
+    } catch (e: any) {
+      log.warn({ phone, template: metaTemplateName, err: e.message }, 'Meta template failed, falling back to text');
+    }
+  }
+
+  // Fallback to regular text (works inside 24h window)
+  if (!sentViaTemplate) {
     await sendWhatsAppText(phone, text);
   }
 
@@ -167,6 +194,42 @@ export function postponeFollowup(phone: string, days: number = 1) {
 // Cancel all follow-ups for a lead
 export function cancelFollowup(phone: string) {
   db.prepare('UPDATE leads SET next_followup = NULL, updated_at = datetime(\'now\') WHERE phone = ?').run(phone);
+}
+
+async function sendWhatsAppTemplate(phone: string, templateName: string, params: string[]) {
+  const token = config.waCloudToken;
+  const phoneId = config.waCloudPhoneId;
+  if (!token || !phoneId) throw new Error('Cloud API not configured');
+
+  const to = phone.replace(/\D/g, '');
+  const resp = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: 'he' },
+        components: [
+          {
+            type: 'body',
+            parameters: params.map(p => ({ type: 'text', text: p }))
+          }
+        ]
+      }
+    })
+  });
+
+  if (!resp.ok) {
+    const err = await resp.text();
+    throw new Error(`Template API error: ${resp.status} ${err}`);
+  }
+
+  // Log outbound message
+  const bodyText = `[Template: ${templateName}] ${params.join(' | ')}`;
+  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, bodyText);
 }
 
 async function sendWhatsAppText(phone: string, text: string) {
