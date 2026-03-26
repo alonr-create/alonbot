@@ -770,7 +770,8 @@ app.post('/api/wa-manager/profile-pics-batch', dashAuth, async (req, res) => {
     }
     res.json({ success: true, results });
   } catch (e: any) {
-    res.json({ success: false, results: {} });
+    console.error('profile-pics-batch error:', e?.message || e);
+    res.json({ success: false, results: {}, error: e?.message });
   }
 });
 
