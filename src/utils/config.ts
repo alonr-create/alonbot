@@ -26,6 +26,9 @@ export const config = {
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
+  evolutionApiUrl: process.env.EVOLUTION_API_URL || '',
+  evolutionApiKey: process.env.EVOLUTION_API_KEY || '',
+  evolutionInstance: process.env.EVOLUTION_INSTANCE || 'alonbot',
   dataDir: process.env.DATA_DIR || (existsSync('/data') ? '/data' : join(process.cwd(), 'data')),
   skillsDir: join(process.cwd(), 'skills'),
 };

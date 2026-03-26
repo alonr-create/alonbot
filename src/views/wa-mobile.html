@@ -131,17 +131,29 @@ html,body{
 }
 
 /* Filter pills */
-.filters{display:flex;gap:8px;padding-bottom:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.filters-row{display:flex;gap:6px;align-items:center;padding-bottom:4px;}
+.filters{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;min-width:0;}
 .filters::-webkit-scrollbar{display:none;}
 .filter-pill{
-  padding:6px 16px;border-radius:18px;
-  font-size:13px;font-weight:500;
+  padding:5px 12px;border-radius:16px;
+  font-size:12px;font-weight:500;
   border:none;cursor:pointer;white-space:nowrap;
   background:var(--bg-input);color:var(--text-secondary);
   transition:all .15s;flex-shrink:0;
 }
 .filter-pill.active{background:var(--blue);color:#fff;}
 .filter-pill:active{opacity:.7;}
+.source-select{
+  padding:5px 8px;border-radius:10px;
+  font-size:12px;font-weight:500;
+  border:1px solid var(--border);cursor:pointer;
+  background:var(--bg-input);color:var(--text-secondary);
+  font-family:inherit;outline:none;flex-shrink:0;
+  -webkit-appearance:none;appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238696a0'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:left 8px center;padding-left:22px;
+}
+.source-select:focus{border-color:var(--blue);}
 
 /* Contact list */
 .contact-list{
@@ -714,15 +726,19 @@ html,body{
         <input type="text" id="searchInput" placeholder="חיפוש..." oninput="filterContacts()">
         <span class="search-icon">&#128269;</span>
       </div>
-      <div class="filters">
-        <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
-        <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
-        <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
-        <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
-        <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
-        <button class="filter-pill" data-filter="followup" onclick="setFilter('followup',this)">&#128257; פולואפ</button>
+      <div class="filters-row">
+        <div class="filters">
+          <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+          <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
+          <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
+          <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
+          <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
+          <button class="filter-pill" data-filter="followup" onclick="setFilter('followup',this)">&#128257;</button>
+        </div>
+        <select class="source-select" id="sourceSelect" onchange="setSource(this.value)">
+          <option value="all">כל המקורות</option>
+        </select>
       </div>
-      <div class="filter-pills" id="sourceFilters" style="margin-top:4px;"></div>
     </div>
     <div class="ptr-indicator" id="ptrIndicator">&#8635; שחרר לרענון</div>
     <div class="stats-bar" id="leadStats"></div>
@@ -1174,10 +1190,37 @@ async function loadContacts() {
       applyFilter();
       updateUnreadBadge();
       if (typeof checkNewMessages === 'function') checkNewMessages();
+      lazyLoadProfilePics();
     }
   } catch (e) {
     console.error('Load contacts error:', e);
   }
+}
+
+let _picLoadPending = false;
+async function lazyLoadProfilePics() {
+  if (_picLoadPending) return;
+  const missing = contacts.filter(c => !c.profile_pic_url).slice(0, 20).map(c => c.phone);
+  if (!missing.length) return;
+  _picLoadPending = true;
+  try {
+    const data = await api('/profile-pics-batch', {
+      method: 'POST',
+      body: JSON.stringify({ phones: missing })
+    });
+    if (data.success && data.results) {
+      let updated = false;
+      for (const c of contacts) {
+        if (data.results[c.phone]) {
+          c.profile_pic_url = data.results[c.phone];
+          updated = true;
+          const av = document.getElementById('av-' + c.phone);
+          if (av) renderAvatar(av, c.name, c.profile_pic_url);
+        }
+      }
+    }
+  } catch {}
+  _picLoadPending = false;
 }
 
 function applyFilter() {
@@ -1204,10 +1247,8 @@ function setFilter(f, el) {
   applyFilter();
 }
 
-function setSource(src, el) {
+function setSource(src) {
   currentSource = src;
-  document.querySelectorAll('[data-source]').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
   applyFilter();
 }
 
@@ -1225,14 +1266,15 @@ function buildSourcePills() {
     const s = c.source || 'other';
     sources[s] = (sources[s] || 0) + 1;
   });
-  const el = document.getElementById('sourceFilters');
-  if (!el || Object.keys(sources).length <= 1) { if (el) el.innerHTML = ''; return; }
-  let html = '<button class="filter-pill ' + (currentSource === 'all' ? 'active' : '') + '" data-source="all" onclick="setSource(\'all\',this)">הכל</button>';
+  const el = document.getElementById('sourceSelect');
+  if (!el) return;
+  let html = `<option value="all">כל המקורות (${contacts.length})</option>`;
   Object.entries(sources).sort((a, b) => b[1] - a[1]).forEach(([src, count]) => {
     const label = SOURCE_LABELS[src] || src;
-    html += `<button class="filter-pill ${currentSource === src ? 'active' : ''}" data-source="${esc(src)}" onclick="setSource('${esc(src)}',this)">${esc(label)} (${count})</button>`;
+    html += `<option value="${esc(src)}" ${currentSource === src ? 'selected' : ''}>${esc(label)} (${count})</option>`;
   });
   el.innerHTML = html;
+  el.value = currentSource;
 }
 
 function renderContactList() {

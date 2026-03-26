@@ -703,7 +703,6 @@ app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
 app.get('/api/wa-manager/profile-pic/:phone', dashAuth, async (req, res) => {
   try {
     const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
-    const token = config.waCloudToken;
 
     // Check cache in DB first
     const cached = db.prepare('SELECT profile_pic_url FROM leads WHERE phone = ?').get(phone) as any;
@@ -712,22 +711,66 @@ app.get('/api/wa-manager/profile-pic/:phone', dashAuth, async (req, res) => {
       return;
     }
 
-    // Try WhatsApp Cloud API contacts endpoint
-    if (token && config.waCloudPhoneId) {
+    // Try Evolution API (Baileys) — supports profile pictures
+    if (config.evolutionApiUrl && config.evolutionApiKey) {
       try {
-        const contactRes = await fetch(`https://graph.facebook.com/v21.0/${config.waCloudPhoneId}/contacts`, {
+        const evoRes = await fetch(`${config.evolutionApiUrl}/chat/fetchProfilePictureUrl/${config.evolutionInstance}`, {
           method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ blocking: 'wait', contacts: [`+${phone}`] })
+          headers: { apikey: config.evolutionApiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number: phone })
         });
-        const contactData = await contactRes.json();
-        // Note: Cloud API doesn't actually return profile pics, this is a best-effort attempt
+        const evoData = await evoRes.json();
+        if (evoData?.profilePictureUrl) {
+          // Cache in DB
+          db.prepare('UPDATE leads SET profile_pic_url = ? WHERE phone = ?').run(evoData.profilePictureUrl, phone);
+          res.json({ success: true, url: evoData.profilePictureUrl });
+          return;
+        }
       } catch {}
     }
 
     res.json({ success: true, url: null });
   } catch (e: any) {
     res.json({ success: false, url: null });
+  }
+});
+
+// ── Batch Profile Pictures ──
+app.post('/api/wa-manager/profile-pics-batch', dashAuth, async (req, res) => {
+  try {
+    const phones: string[] = (req.body.phones || []).slice(0, 20);
+    if (!config.evolutionApiUrl || !config.evolutionApiKey) {
+      res.json({ success: true, results: {} });
+      return;
+    }
+    const results: Record<string, string | null> = {};
+    for (const rawPhone of phones) {
+      const phone = rawPhone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+      const cached = db.prepare('SELECT profile_pic_url FROM leads WHERE phone = ?').get(phone) as any;
+      if (cached?.profile_pic_url) {
+        results[rawPhone] = cached.profile_pic_url;
+        continue;
+      }
+      try {
+        const evoRes = await fetch(`${config.evolutionApiUrl}/chat/fetchProfilePictureUrl/${config.evolutionInstance}`, {
+          method: 'POST',
+          headers: { apikey: config.evolutionApiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ number: phone })
+        });
+        const evoData = await evoRes.json();
+        if (evoData?.profilePictureUrl) {
+          db.prepare('UPDATE leads SET profile_pic_url = ? WHERE phone = ?').run(evoData.profilePictureUrl, phone);
+          results[rawPhone] = evoData.profilePictureUrl;
+        } else {
+          results[rawPhone] = null;
+        }
+      } catch {
+        results[rawPhone] = null;
+      }
+    }
+    res.json({ success: true, results });
+  } catch (e: any) {
+    res.json({ success: false, results: {} });
   }
 });
 
