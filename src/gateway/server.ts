@@ -2124,6 +2124,74 @@ app.get('/api/lead-tier/:phone', (req, res) => {
   }
 });
 
+// ── Page Visit Tracking ──
+
+// Collect visit data (time on site, scroll depth)
+app.post('/api/track', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  try {
+    const { phone, site, page, referrer, duration, scroll, ua } = req.body || {};
+    if (!site) { res.json({ ok: true }); return; }
+    const normPhone = phone ? phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '') : null;
+    db.prepare(
+      'INSERT INTO page_visits (phone, site, page, referrer, duration_sec, scroll_pct, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(normPhone, site, page || '/', referrer || null, Math.round(duration || 0), Math.round(scroll || 0), ua || null);
+    if (normPhone && (duration || 0) > 30) bumpLeadScore(normPhone, 'clicked_link');
+    res.json({ ok: true });
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'track failed');
+    res.json({ ok: true }); // never block the client
+  }
+});
+
+// CORS preflight for track endpoint
+app.options('/api/track', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'POST');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.sendStatus(204);
+});
+
+// Visit analytics — time on site per site/lead
+app.get('/api/visit-analytics', (req, res) => {
+  if (!req.query.token || req.query.token !== config.dashboardSecret) {
+    res.status(401).json({ error: 'Unauthorized — add ?token=YOUR_SECRET' });
+    return;
+  }
+  try {
+    const bySite = db.prepare(`
+      SELECT site,
+        COUNT(*) as visits,
+        ROUND(AVG(duration_sec)) as avg_duration_sec,
+        ROUND(AVG(scroll_pct)) as avg_scroll_pct,
+        MAX(duration_sec) as max_duration_sec
+      FROM page_visits
+      WHERE created_at >= datetime('now', '-30 days')
+      GROUP BY site ORDER BY visits DESC
+    `).all();
+
+    const topLeads = db.prepare(`
+      SELECT phone, site,
+        COUNT(*) as visits,
+        SUM(duration_sec) as total_sec,
+        ROUND(AVG(duration_sec)) as avg_sec,
+        MAX(scroll_pct) as max_scroll
+      FROM page_visits
+      WHERE phone IS NOT NULL AND created_at >= datetime('now', '-30 days')
+      GROUP BY phone, site ORDER BY total_sec DESC LIMIT 30
+    `).all();
+
+    const recent = db.prepare(`
+      SELECT phone, site, page, duration_sec, scroll_pct, created_at
+      FROM page_visits ORDER BY id DESC LIMIT 50
+    `).all();
+
+    res.json({ success: true, bySite, topLeads, recent });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ── Grow (Meshulam) Payment Integration ──
 
 // Create a Grow payment page and return the URL

@@ -255,6 +255,21 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_flow_runs_phone ON flow_runs(phone, status);
 
+  CREATE TABLE IF NOT EXISTS page_visits (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT,
+    site TEXT NOT NULL,
+    page TEXT NOT NULL DEFAULT '/',
+    referrer TEXT,
+    duration_sec INTEGER NOT NULL DEFAULT 0,
+    scroll_pct INTEGER NOT NULL DEFAULT 0,
+    user_agent TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_page_visits_site ON page_visits(site, created_at);
+  CREATE INDEX IF NOT EXISTS idx_page_visits_phone ON page_visits(phone);
+
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
