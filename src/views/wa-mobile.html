@@ -1588,7 +1588,47 @@ function renderMessages() {
     }
 
     if (body) {
-      content += `<div class="msg-text">${esc(body)}</div>`;
+      let displayBody = esc(body);
+
+      // Render interactive buttons
+      const btnM = body.match(/\[interactive:buttons:(\[.*?\])\]/);
+      if (btnM) {
+        try {
+          const titles = JSON.parse(btnM[1]);
+          displayBody = displayBody.replace(/\[interactive:buttons:[^\]]+\]/, '') +
+            `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
+            titles.map(t => `<div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;">${esc(t)}</div>`).join('') +
+            `</div>`;
+        } catch {}
+      }
+
+      // Render interactive list
+      const lstM = body.match(/\[interactive:list:(\[.*?\])\]/);
+      if (lstM) {
+        try {
+          const titles = JSON.parse(lstM[1]);
+          displayBody = displayBody.replace(/\[interactive:list:[^\]]+\]/, '') +
+            `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">
+              <div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;">☰ בחר (${titles.length})</div>
+            </div>`;
+        } catch {}
+      }
+
+      // Render CTA button
+      const ctaM = body.match(/\[interactive:cta:([^:]+):([^\]]+)\]/);
+      if (ctaM) {
+        displayBody = displayBody.replace(/\[interactive:cta:[^\]]+\]/, '') +
+          `<div style="margin-top:6px;"><a href="${esc(ctaM[2])}" target="_blank" style="display:block;text-align:center;padding:8px;background:#25D366;border-radius:8px;color:white;font-size:13px;font-weight:600;text-decoration:none;">🔗 ${esc(ctaM[1])}</a></div>`;
+      }
+
+      // Link preview
+      const urlM = body.match(/(https?:\/\/[^\s]+)/);
+      if (urlM && !btnM && !lstM && !ctaM) {
+        const domain = urlM[1].replace(/https?:\/\//, '').split('/')[0];
+        displayBody += `<a href="${esc(urlM[1])}" target="_blank" style="display:block;margin-top:4px;padding:4px 6px;background:rgba(0,0,0,0.04);border-radius:4px;border-right:2px solid #25D366;text-decoration:none;font-size:11px;color:#1a73e8;">${esc(domain)}</a>`;
+      }
+
+      content += `<div class="msg-text">${displayBody}</div>`;
     }
 
     content += `<div class="msg-footer">

@@ -263,7 +263,18 @@ export function registerAdapter(adapter: ChannelAdapter) {
       // Log bot reply for ALL WhatsApp conversations (dashboard visibility)
       if (msg.channel === 'whatsapp') {
         const replyNow = new Date().toISOString().replace('T', ' ').slice(0, 19);
-        const replyContent = reply.text.substring(0, 2000);
+        let replyContent = reply.text.substring(0, 2000);
+        // Tag interactive messages so dashboard can render buttons/lists
+        if (reply.buttons) {
+          replyContent += `\n[interactive:buttons:${JSON.stringify(reply.buttons.map(b => b.title))}]`;
+        }
+        if (reply.listSections) {
+          const rows = reply.listSections.flatMap(s => s.rows.map(r => r.title));
+          replyContent += `\n[interactive:list:${JSON.stringify(rows)}]`;
+        }
+        if (reply.ctaUrl) {
+          replyContent += `\n[interactive:cta:${reply.ctaUrl.display_text}:${reply.ctaUrl.url}]`;
+        }
         try {
           const { db } = await import('../utils/db.js');
           db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, ?)`)

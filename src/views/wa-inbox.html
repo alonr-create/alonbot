@@ -1668,12 +1668,60 @@ function renderMessages() {
       cleanText = text.replace(/\[media:file:[^\]]+\]\s*/, '');
     }
 
+    // Render interactive buttons (WhatsApp style)
+    let buttonsHtml = '';
+    const btnMatch = rawText.match(/\[interactive:buttons:(\[.*?\])\]/);
+    const listMatch = rawText.match(/\[interactive:list:(\[.*?\])\]/);
+    const ctaMatch = rawText.match(/\[interactive:cta:([^:]+):([^\]]+)\]/);
+
+    if (btnMatch) {
+      try {
+        const titles = JSON.parse(btnMatch[1]);
+        buttonsHtml = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
+          titles.map(t => `<div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;cursor:default;">${esc(t)}</div>`).join('') +
+          `</div>`;
+      } catch {}
+      cleanText = cleanText.replace(/\[interactive:buttons:[^\]]+\]\s*/, '');
+    }
+
+    if (listMatch) {
+      try {
+        const titles = JSON.parse(listMatch[1]);
+        buttonsHtml = `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">
+          <div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;cursor:default;">☰ בחר אופציה (${titles.length})</div>
+          <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">${titles.map(t => `<span style="font-size:10px;background:rgba(37,211,102,0.1);color:#128C7E;padding:2px 6px;border-radius:4px;">${esc(t)}</span>`).join('')}</div>
+        </div>`;
+      } catch {}
+      cleanText = cleanText.replace(/\[interactive:list:[^\]]+\]\s*/, '');
+    }
+
+    if (ctaMatch) {
+      buttonsHtml = `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">
+        <a href="${esc(ctaMatch[2])}" target="_blank" style="display:block;text-align:center;padding:8px;background:#25D366;border-radius:8px;color:white;font-size:13px;font-weight:600;text-decoration:none;">🔗 ${esc(ctaMatch[1])}</a>
+      </div>`;
+      cleanText = cleanText.replace(/\[interactive:cta:[^\]]+\]\s*/, '');
+    }
+
+    // Render inline link previews for URLs in messages
+    let linkPreviewHtml = '';
+    const urlMatch = cleanText.match(/(https?:\/\/[^\s<"]+)/);
+    if (urlMatch && !imgMatch && !screenshotMatch && !ctaMatch) {
+      const url = urlMatch[1].replace(/&amp;/g, '&');
+      const domain = url.replace(/https?:\/\//, '').split('/')[0];
+      linkPreviewHtml = `<a href="${esc(url)}" target="_blank" style="display:block;margin-top:4px;padding:6px 8px;background:rgba(0,0,0,0.04);border-radius:6px;border-right:3px solid #25D366;text-decoration:none;color:inherit;">
+        <div style="font-size:10px;color:#128C7E;font-weight:600;">${esc(domain)}</div>
+        <div style="font-size:11px;color:#1a73e8;word-break:break-all;">${esc(url.length > 60 ? url.slice(0, 60) + '...' : url)}</div>
+      </a>`;
+    }
+
     html += `
       <div class="msg-wrapper ${dir}">
         <div class="msg-bubble ${dir}">
           ${sender ? `<div style="font-size:10px;font-weight:600;color:${msg.source === 'campaign' ? '#6366f1' : (isOut ? '#128C7E' : '#e17076')};margin-bottom:2px;">${sender}</div>` : ''}
           ${mediaHtml}
           <div class="msg-text">${cleanText}</div>
+          ${linkPreviewHtml}
+          ${buttonsHtml}
           <div class="msg-meta">
             <span class="msg-time">${time}</span>
             ${checks}
