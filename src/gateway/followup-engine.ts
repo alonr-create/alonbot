@@ -66,10 +66,29 @@ export function getFollowupTemplates(): FollowupTemplate[] {
   return db.prepare('SELECT * FROM followup_templates ORDER BY sort_order ASC, id ASC').all() as FollowupTemplate[];
 }
 
+// Workspace → source mapping (same as server.ts)
+function workspaceSources(workspace: string): string[] {
+  const map: Record<string, string[]> = {
+    'dekel': ['dekel', 'voice_agent'],
+    'alon_dev': ['alon_dev', 'alon_dev_whatsapp'],
+  };
+  return map[workspace] || [workspace];
+}
+
+// Determine workspace for a lead based on source
+function getLeadWorkspace(source: string): string {
+  if (['dekel', 'voice_agent'].includes(source)) return 'dekel';
+  return 'alon_dev';
+}
+
 // Get leads that need follow-up today
-export function getPendingFollowups(): any[] {
+export function getPendingFollowups(workspace?: string): any[] {
   const cfg = getFollowupConfig();
   const skipStatusPlaceholders = cfg.skip_statuses.map(() => '?').join(',');
+
+  // Workspace source filter
+  const sources = workspace ? workspaceSources(workspace) : [];
+  const srcFilter = workspace ? `AND l.source IN (${sources.map(() => '?').join(',')})` : '';
 
   const sql = `
     SELECT l.phone, l.name, l.source, l.lead_status, l.followup_count, l.next_followup, l.created_at,
@@ -82,16 +101,24 @@ export function getPendingFollowups(): any[] {
       AND l.followup_count < ?
       ${skipStatusPlaceholders ? `AND (l.lead_status IS NULL OR l.lead_status NOT IN (${skipStatusPlaceholders}))` : ''}
       ${cfg.skip_replied ? `AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) = 0` : ''}
+      ${srcFilter}
     ORDER BY l.next_followup ASC
   `;
 
-  const params = [cfg.max_followups, ...cfg.skip_statuses];
+  const params = [cfg.max_followups, ...cfg.skip_statuses, ...sources];
   return db.prepare(sql).all(...params) as any[];
 }
 
-// Get the right template for a lead's current followup_count
-function getTemplateForCount(count: number): FollowupTemplate | null {
-  const templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 ORDER BY sort_order ASC').all() as FollowupTemplate[];
+// Get the right template for a lead's current followup_count (workspace-aware)
+function getTemplateForCount(count: number, workspace?: string): FollowupTemplate | null {
+  // First try workspace-specific templates, then fall back to any
+  let templates: FollowupTemplate[];
+  if (workspace) {
+    templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 AND workspace_id = ? ORDER BY sort_order ASC').all(workspace) as FollowupTemplate[];
+  }
+  if (!templates! || !templates.length) {
+    templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 ORDER BY sort_order ASC').all() as FollowupTemplate[];
+  }
   if (!templates.length) return null;
   return templates[Math.min(count, templates.length - 1)] || null;
 }
@@ -202,9 +229,12 @@ export async function sendFollowup(phone: string, templateId?: number) {
   const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone) as any;
   if (!lead) throw new Error(`Lead ${phone} not found`);
 
+  // Determine workspace from lead source
+  const workspace = getLeadWorkspace(lead.source || 'alon_dev');
+
   const template = templateId
     ? db.prepare('SELECT * FROM followup_templates WHERE id = ?').get(templateId) as FollowupTemplate
-    : getTemplateForCount(lead.followup_count || 0);
+    : getTemplateForCount(lead.followup_count || 0, workspace);
 
   if (!template) throw new Error('No follow-up template available');
 
@@ -212,15 +242,15 @@ export async function sendFollowup(phone: string, templateId?: number) {
   const text = template.message.replace(/\{name\}/g, name);
   const siteUrl = getLeadSiteUrl(lead);
 
-  // Try to send via Meta template first (works outside 24h window)
-  const metaTemplateName = META_TEMPLATE_MAP[lead.followup_count || 0];
+  // Only use Meta templates for alon_dev leads (they reference Alon.dev sites)
+  const metaTemplateName = workspace === 'alon_dev' ? META_TEMPLATE_MAP[lead.followup_count || 0] : undefined;
   let sentViaTemplate = false;
 
   if (metaTemplateName) {
     try {
       await sendWhatsAppTemplate(phone, metaTemplateName, [name || 'שלום', siteUrl]);
       sentViaTemplate = true;
-      log.info({ phone, template: metaTemplateName }, 'follow-up sent via Meta template');
+      log.info({ phone, template: metaTemplateName, workspace }, 'follow-up sent via Meta template');
     } catch (e: any) {
       log.warn({ phone, template: metaTemplateName, err: e.message }, 'Meta template failed, falling back to text');
     }
@@ -232,7 +262,7 @@ export async function sendFollowup(phone: string, templateId?: number) {
   }
 
   // Update lead: increment followup_count, set next follow-up
-  const nextTemplate = getTemplateForCount((lead.followup_count || 0) + 1);
+  const nextTemplate = getTemplateForCount((lead.followup_count || 0) + 1, workspace);
   const cfg = getFollowupConfig();
 
   if ((lead.followup_count || 0) + 1 >= cfg.max_followups || !nextTemplate) {
@@ -251,16 +281,16 @@ export async function sendFollowup(phone: string, templateId?: number) {
   return { phone, name, template: template.name, followupNum: (lead.followup_count || 0) + 1 };
 }
 
-// Run the daily auto follow-up job
-export async function runAutoFollowups(): Promise<{ sent: number; errors: number; details: any[] }> {
+// Run the daily auto follow-up job (optionally filtered by workspace)
+export async function runAutoFollowups(workspace?: string): Promise<{ sent: number; errors: number; details: any[] }> {
   const cfg = getFollowupConfig();
   if (!cfg.auto_enabled) {
     log.info('auto follow-up disabled');
     return { sent: 0, errors: 0, details: [] };
   }
 
-  const pending = getPendingFollowups();
-  log.info({ count: pending.length }, 'starting auto follow-ups');
+  const pending = getPendingFollowups(workspace);
+  log.info({ count: pending.length, workspace: workspace || 'all' }, 'starting auto follow-ups');
 
   const details: any[] = [];
   let sent = 0;
@@ -452,8 +482,15 @@ export function setupFollowupCron() {
 
       db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_auto_run', ?, datetime('now'))").run(today);
 
-      log.info('running daily auto follow-ups');
-      const result = await runAutoFollowups();
+      log.info('running daily auto follow-ups (per workspace)');
+      // Run separately per workspace so each gets its own templates
+      const resultAlonDev = await runAutoFollowups('alon_dev');
+      const resultDekel = await runAutoFollowups('dekel');
+      const result = {
+        sent: resultAlonDev.sent + resultDekel.sent,
+        errors: resultAlonDev.errors + resultDekel.errors,
+        details: [...resultAlonDev.details, ...resultDekel.details],
+      };
 
       if (result.sent > 0 || result.errors > 0) {
         try {

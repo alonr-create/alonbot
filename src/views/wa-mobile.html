@@ -1942,13 +1942,23 @@ function toggleBroadcastForm() {
 async function sendBroadcast() {
   const msg = document.getElementById('broadcastMsg').value.trim();
   if (!msg) { toast('כתוב הודעה לשידור'); return; }
-  const filtered = contacts.filter(c => currentFilter === 'all' || c.lead_status === currentFilter);
+
+  // CRITICAL: Filter by BOTH status AND source to prevent cross-business sends
+  const filtered = contacts.filter(c => {
+    if (currentSource !== 'all' && c.source !== currentSource) return false;
+    if (currentFilter !== 'all' && c.lead_status !== currentFilter) return false;
+    return true;
+  });
   const count = filtered.length;
   if (!count) { toast('אין אנשי קשר'); return; }
 
+  // Safety: warn if no source filter is active
+  const sourceLabel = currentSource !== 'all' ? (SOURCE_LABELS[currentSource] || currentSource) : null;
+  const sourceWarning = !sourceLabel ? '\n\n⚠️ שים לב: לא נבחר מקור — ההודעה תישלח לכל העסקים!' : `\n\nמקור: ${sourceLabel}`;
+
   // Step 1: Preview dialog
   const preview = msg.length > 120 ? msg.slice(0, 120) + '...' : msg;
-  if (!confirm(`⚠️ שידור הודעה ל-${count} אנשי קשר!\n\nתצוגה מקדימה:\n"${preview}"\n\nלהמשיך?`)) return;
+  if (!confirm(`⚠️ שידור הודעה ל-${count} אנשי קשר!${sourceWarning}\n\nתצוגה מקדימה:\n"${preview}"\n\nלהמשיך?`)) return;
 
   // Step 2: Final confirmation with count
   if (!confirm(`אישור סופי: לשלוח עכשיו ל-${count} אנשי קשר?`)) return;
@@ -2654,18 +2664,36 @@ async function cancelFollowup(phone) {
 }
 
 async function runAutoFollowups() {
+  // Determine workspace from current source filter
+  const workspace = sourceToWorkspace(currentSource);
+  const wsLabel = workspace === 'dekel' ? 'דקל לפרישה' : workspace === 'alon_dev' ? 'Alon.dev' : 'כל העסקים';
+
   // Fetch pending count first
   let pendingCount = 0;
   try {
     const data = await api('/followup/pending');
-    pendingCount = data.pending?.length || 0;
+    // Filter by workspace client-side for accurate count
+    const pending = data.pending || [];
+    const filtered = workspace ? pending.filter(p => {
+      const src = p.source || '';
+      if (workspace === 'dekel') return ['dekel', 'voice_agent'].includes(src);
+      if (workspace === 'alon_dev') return ['alon_dev', 'alon_dev_whatsapp'].includes(src);
+      return true;
+    }) : pending;
+    pendingCount = filtered.length;
   } catch {}
   if (!pendingCount) { toast('אין לידים ממתינים'); return; }
-  if (!confirm(`⚠️ פולואפ אוטומטי ל-${pendingCount} לידים!\n\nכל הלידים ברשימה יקבלו הודעה.\nלהמשיך?`)) return;
-  if (!confirm(`אישור סופי: לשלוח פולואפ ל-${pendingCount} לידים עכשיו?`)) return;
+
+  // Safety warning if no workspace filter
+  const wsWarning = !workspace ? '\n\n⚠️ לא נבחר מקור — הפולואפים יישלחו לכל העסקים!' : `\nעסק: ${wsLabel}`;
+  if (!confirm(`⚠️ פולואפ אוטומטי ל-${pendingCount} לידים!${wsWarning}\n\nכל הלידים ברשימה יקבלו הודעה.\nלהמשיך?`)) return;
+  if (!confirm(`אישור סופי: לשלוח פולואפ ל-${pendingCount} לידים (${wsLabel}) עכשיו?`)) return;
   toast('מריץ פולואפים...');
   try {
-    const res = await api('/followup/run-auto', { method: 'POST' });
+    const res = await api('/followup/run-auto', {
+      method: 'POST',
+      body: JSON.stringify({ workspace })
+    });
     if (res.success) {
       toast(`נשלחו ${res.sent} הודעות${res.errors > 0 ? ` (${res.errors} שגיאות)` : ''}`);
       loadPendingFollowups();
@@ -2673,6 +2701,14 @@ async function runAutoFollowups() {
       toast('שגיאה: ' + (res.error || ''));
     }
   } catch { toast('שגיאה'); }
+}
+
+// Map source filter to workspace
+function sourceToWorkspace(source) {
+  if (source === 'dekel' || source === 'voice_agent') return 'dekel';
+  if (source === 'alon_dev' || source === 'alon_dev_whatsapp') return 'alon_dev';
+  if (source === 'all' || !source) return null; // no filter
+  return null;
 }
 
 async function loadFollowupTemplates() {
@@ -2876,25 +2912,49 @@ async function showCampaignLauncher() {
   el.style.display = el.style.display === 'none' ? 'block' : 'none';
   if (el.style.display === 'block') {
     const preview = document.getElementById('campaignPreview');
+    const workspace = sourceToWorkspace(currentSource);
+    const wsLabel = workspace === 'dekel' ? 'דקל לפרישה' : workspace === 'alon_dev' ? 'Alon.dev' : 'כל העסקים';
     try {
       const data = await api('/followup/pending');
-      const count = data.pending?.length || 0;
-      preview.textContent = count > 0 ? `${count} לידים ממתינים לפולואפ` : 'אין לידים ממתינים כרגע';
+      const pending = data.pending || [];
+      const filtered = workspace ? pending.filter(p => {
+        const src = p.source || '';
+        if (workspace === 'dekel') return ['dekel', 'voice_agent'].includes(src);
+        if (workspace === 'alon_dev') return ['alon_dev', 'alon_dev_whatsapp'].includes(src);
+        return true;
+      }) : pending;
+      const count = filtered.length;
+      preview.textContent = count > 0 ? `${count} לידים ממתינים לפולואפ (${wsLabel})` : 'אין לידים ממתינים כרגע';
     } catch { preview.textContent = 'שגיאה בטעינה'; }
   }
 }
 async function launchCampaignNow() {
+  const workspace = sourceToWorkspace(currentSource);
+  const wsLabel = workspace === 'dekel' ? 'דקל לפרישה' : workspace === 'alon_dev' ? 'Alon.dev' : 'כל העסקים';
+
   let pendingCount = 0;
   try {
     const data = await api('/followup/pending');
-    pendingCount = data.pending?.length || 0;
+    const pending = data.pending || [];
+    const filtered = workspace ? pending.filter(p => {
+      const src = p.source || '';
+      if (workspace === 'dekel') return ['dekel', 'voice_agent'].includes(src);
+      if (workspace === 'alon_dev') return ['alon_dev', 'alon_dev_whatsapp'].includes(src);
+      return true;
+    }) : pending;
+    pendingCount = filtered.length;
   } catch {}
   if (!pendingCount) { toast('אין לידים ממתינים'); return; }
-  if (!confirm(`⚠️ שיגור קמפיין ל-${pendingCount} לידים!\n\nכולם יקבלו פולואפ.\nלהמשיך?`)) return;
-  if (!confirm(`אישור סופי: לשגר עכשיו ל-${pendingCount} לידים?`)) return;
+
+  const wsWarning = !workspace ? '\n\n⚠️ לא נבחר מקור — יישלח לכל העסקים!' : `\nעסק: ${wsLabel}`;
+  if (!confirm(`⚠️ שיגור קמפיין ל-${pendingCount} לידים!${wsWarning}\n\nכולם יקבלו פולואפ.\nלהמשיך?`)) return;
+  if (!confirm(`אישור סופי: לשגר עכשיו ל-${pendingCount} לידים (${wsLabel})?`)) return;
   toast('משגר קמפיין...');
   try {
-    const res = await api('/followup/run-auto', { method: 'POST' });
+    const res = await api('/followup/run-auto', {
+      method: 'POST',
+      body: JSON.stringify({ workspace })
+    });
     if (res.success) {
       toast(`נשלחו ${res.sent} הודעות!${res.errors > 0 ? ` (${res.errors} שגיאות)` : ''}`);
       document.getElementById('campaignLauncher').style.display = 'none';

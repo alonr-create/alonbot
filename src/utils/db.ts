@@ -446,6 +446,26 @@ try {
   }
 } catch { /* workspaces already seeded */ }
 
+// Migration: add workspace_id to followup_templates for business segmentation
+try {
+  db.exec(`ALTER TABLE followup_templates ADD COLUMN workspace_id TEXT`);
+  // Tag existing templates as alon_dev (they have Alon.dev-specific content)
+  db.prepare("UPDATE followup_templates SET workspace_id = 'alon_dev' WHERE workspace_id IS NULL").run();
+  log.info('migrated followup_templates: added workspace_id');
+} catch { /* column already exists */ }
+
+// Seed dekel-specific follow-up templates if missing
+try {
+  const dekelTemplates = db.prepare("SELECT COUNT(*) as c FROM followup_templates WHERE workspace_id = 'dekel'").get() as any;
+  if (dekelTemplates.c === 0) {
+    const ins = db.prepare('INSERT INTO followup_templates (name, day_offset, message, message_type, sort_order, workspace_id) VALUES (?, ?, ?, ?, ?, ?)');
+    ins.run('פולואפ ראשון — דקל', 3, 'היי {name}, כאן יעל מדקל לפרישה 🏦\nרציתי לוודא שקיבלת את המידע שלנו. יש לנו ליווי מקצועי לתכנון פרישה — אשמח לעזור!', 'text', 1, 'dekel');
+    ins.run('פולואפ שני — דקל', 5, 'היי {name}, זו יעל מדקל לפרישה. לא רציתי שתפספס — יש לנו שיחת ייעוץ ראשונית בחינם לתכנון הפנסיה שלך. מעוניין/ת?', 'text', 2, 'dekel');
+    ins.run('פולואפ אחרון — דקל', 8, 'היי {name}, רק רציתי לוודא שראית 🙂\nאם יש שאלות על פרישה, פנסיה או ביטוח — אנחנו כאן. אפשר לקבוע שיחה קצרה?', 'text', 3, 'dekel');
+    log.info('seeded 3 dekel follow-up templates');
+  }
+} catch { /* ok */ }
+
 // Normalize legacy source values
 try {
   db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();

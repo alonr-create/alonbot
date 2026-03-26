@@ -1424,10 +1424,11 @@ app.post('/api/wa-manager/followup/cancel', dashAuth, (req, res) => {
 });
 
 // Run auto follow-ups now (manual trigger)
-app.post('/api/wa-manager/followup/run-auto', dashAuth, async (_req, res) => {
+app.post('/api/wa-manager/followup/run-auto', dashAuth, async (req, res) => {
   try {
+    const workspace = req.body?.workspace as string | undefined;
     const { runAutoFollowups } = await import('./followup-engine.js');
-    const result = await runAutoFollowups();
+    const result = await runAutoFollowups(workspace);
     res.json({ success: true, ...result });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
