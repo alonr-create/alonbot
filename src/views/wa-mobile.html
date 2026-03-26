@@ -648,6 +648,13 @@ html,body{
 .version-info{
   text-align:center;padding:20px;color:var(--text-muted);font-size:13px;
 }
+.guide-section{background:var(--bg-secondary);border-radius:12px;margin-bottom:10px;overflow:hidden;}
+.guide-section-header{display:flex;justify-content:space-between;align-items:center;padding:12px 14px;cursor:pointer;font-size:14px;font-weight:600;}
+.guide-arrow{font-size:10px;transition:transform .2s;color:var(--text-muted);}
+.guide-section.open .guide-arrow{transform:rotate(180deg);}
+.guide-section-body{display:none;padding:0 14px 12px;}
+.guide-section.open .guide-section-body{display:block;}
+.guide-item{font-size:12px;line-height:1.7;padding:4px 0;}
 
 /* ===== ANALYTICS SCREEN ===== */
 .analytics-content{flex:1;overflow-y:auto;padding:16px;-webkit-overflow-scrolling:touch;}
@@ -1048,7 +1055,130 @@ html,body{
           &#128194; פתח ב-Desktop Inbox
         </a>
       </div>
+      <div class="settings-section">
+        <button class="tool-btn" style="width:100%;" onclick="openGuide()">
+          <span class="tool-btn-icon">&#128218;</span>
+          <div class="tool-btn-info">
+            <div class="tool-btn-label">מדריך למשתמש</div>
+            <div class="tool-btn-desc">הסבר על כל הפיצ'רים באפליקציה</div>
+          </div>
+        </button>
+      </div>
       <div class="version-info">360Shmikley v2.0</div>
+    </div>
+  </div>
+
+  <!-- ===== IN-APP GUIDE OVERLAY ===== -->
+  <div id="guideOverlay" style="display:none;position:fixed;inset:0;z-index:9999;background:var(--bg);overflow-y:auto;direction:rtl;">
+    <div style="padding:16px 16px 100px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+        <span style="font-size:20px;font-weight:700;">&#128218; מדריך 360Shmikley</span>
+        <button onclick="closeGuide()" style="background:var(--bg-secondary);border:none;border-radius:50%;width:32px;height:32px;font-size:18px;color:var(--text);cursor:pointer;">&#10005;</button>
+      </div>
+
+      <!-- Legend -->
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:12px;margin-bottom:14px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:6px;">מקרא סימנים</div>
+        <div style="font-size:12px;line-height:1.8;">
+          <span style="color:#4ade80;">&#9679;</span> <b>בטוח</b> — רק צפייה, לא שולח כלום<br>
+          <span style="color:#facc15;">&#9679;</span> <b>זהירות</b> — שולח הודעה לליד בודד<br>
+          <span style="color:#f87171;">&#9679;</span> <b>מסוכן</b> — שולח הודעות לכולם בבת אחת
+        </div>
+      </div>
+
+      <!-- Tab: Conversations -->
+      <div class="guide-section" onclick="toggleGuideSection(this)">
+        <div class="guide-section-header">
+          <span>&#128172; שיחות (מסך ראשי)</span>
+          <span class="guide-arrow">&#9660;</span>
+        </div>
+        <div class="guide-section-body">
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>חיפוש</b> — מחפש לפי שם או מספר טלפון</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>פילטרים</b> — הכל / חדש / ממתין / ענו / פולואפ. מסנן את הרשימה</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>דרופדאון מקור</b> — סינון לפי מקור: Cold Calling, דקל לפרישה, WA Campaign</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>שורת סטטיסטיקות</b> — סה"כ לידים, חדשים, ענו, ממתינים לפולואפ</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>לחיצה על שיחה</b> — פותח פרטי איש קשר + היסטוריית הודעות + ציון ליד</div>
+          <div class="guide-item"><span style="color:#facc15;">&#9679;</span> <b>שליחת הודעה (בתוך שיחה)</b> — כותבים טקסט ושולחים לליד הספציפי</div>
+        </div>
+      </div>
+
+      <!-- Tab: Analytics -->
+      <div class="guide-section" onclick="toggleGuideSection(this)">
+        <div class="guide-section-header">
+          <span>&#128200; אנליטיקס</span>
+          <span class="guide-arrow">&#9660;</span>
+        </div>
+        <div class="guide-section-body">
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>סטטיסטיקות כלליות</b> — כמות לידים, סטטוסים, פעילות. רק צפייה</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>כפתור רענון</b> — טוען מחדש את הנתונים</div>
+        </div>
+      </div>
+
+      <!-- Tab: Follow-up -->
+      <div class="guide-section" onclick="toggleGuideSection(this)">
+        <div class="guide-section-header">
+          <span>&#128257; פולואפ</span>
+          <span class="guide-arrow">&#9660;</span>
+        </div>
+        <div class="guide-section-body">
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>ממתינים להיום</b> — רשימת לידים שמגיע להם פולואפ. צפייה בלבד</div>
+          <div class="guide-item"><span style="color:#facc15;">&#9679;</span> <b>שלח (ליד בודד)</b> — שולח את הפולואפ הבא לליד הספציפי בלבד</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>דחה (ליד בודד)</b> — דוחה את הפולואפ ביום אחד</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>בטל (ליד בודד)</b> — מבטל את כל הפולואפים העתידיים לליד הזה</div>
+          <div class="guide-item"><span style="color:#f87171;">&#9679;</span> <b>&#9654; הרץ אוטומטי</b> — <b>שולח פולואפ לכל הלידים הממתינים ברשימה!</b> יש confirm לפני. מציג כמה לידים יקבלו הודעה</div>
+          <div class="guide-item" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+            <b>תבניות הודעה</b> — הודעות מוכנות מראש לפולואפ. אפשר לערוך, להוסיף, להפעיל/לכבות
+          </div>
+          <div class="guide-item">
+            <b>הגדרות פולואפ:</b><br>
+            &#8226; <b>אוטומטי פעיל</b> — מפעיל שליחה יומית אוטומטית (בלי לחיצה). כבוי = שולח רק כשלוחצים<br>
+            &#8226; <b>שעת שליחה</b> — מתי יישלח אוטומטית (ברירת מחדל 10:00)<br>
+            &#8226; <b>מקס' פולואפים</b> — כמה פעמים לנסות (2-5)<br>
+            &#8226; <b>דלג על מי שענה</b> — אם הליד ענה, לא שולח לו יותר
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab: Tools -->
+      <div class="guide-section" onclick="toggleGuideSection(this)">
+        <div class="guide-section-header">
+          <span>&#128295; כלים</span>
+          <span class="guide-arrow">&#9660;</span>
+        </div>
+        <div class="guide-section-body">
+          <div class="guide-item"><span style="color:#f87171;">&#9679;</span> <b>&#128226; שידור</b> — כותבים הודעה ולוחצים "שלח לכולם". <b>שולח לכל אנשי הקשר ברשימה!</b></div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>&#128196; ייצוא CSV</b> — מוריד קובץ אקסל עם כל הלידים. לא שולח כלום</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>&#127991; תגיות</b> — מציג רשימת תגיות וכמה לידים בכל אחת. רק צפייה</div>
+          <div class="guide-item"><span style="color:#f87171;">&#9679;</span> <b>&#128640; שיגור קמפיין</b> — <b>שולח פולואפ לכל הלידים החדשים הממתינים בבת אחת!</b> מציג preview לפני</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>אוטומציות (Flows)</b> — רשימת flows שרצים ברקע (מילות מפתח). צפייה בלבד</div>
+        </div>
+      </div>
+
+      <!-- Tab: Settings -->
+      <div class="guide-section" onclick="toggleGuideSection(this)">
+        <div class="guide-section-header">
+          <span>&#9881; הגדרות</span>
+          <span class="guide-arrow">&#9660;</span>
+        </div>
+        <div class="guide-section-body">
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>צליל התראה</b> — הפעלה/כיבוי צליל בקבלת הודעה</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>Push Notifications</b> — בדיקה ושליחת push לנייד</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>תדירות רענון</b> — כל כמה זמן לבדוק הודעות חדשות (5/15/30 שניות)</div>
+        </div>
+      </div>
+
+      <!-- Tips -->
+      <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:14px;margin-top:14px;">
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;">&#128161; טיפים</div>
+        <div style="font-size:12px;line-height:1.8;color:#ccc;">
+          &#8226; לידים שענו מסומנים אוטומטית כ"מעוניינים"<br>
+          &#8226; לידים שכתבו "לא מעוניין" / "הסר" מסומנים אוטומטית ולא יקבלו יותר פולואפ<br>
+          &#8226; ציון ליד (Score) מחושב לפי: ענה? נקבעה פגישה? סנטימנט חיובי? פעילות אחרונה<br>
+          &#8226; הבוט (יעל) עונה אוטומטית ללידים שכותבים בוואטסאפ<br>
+          &#8226; כל פגישה שנקבעת מתעדכנת גם ביומן וגם ב-Monday.com
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -2755,6 +2885,19 @@ if (!TOKEN) {
   setTimeout(loadLeadStats, 2000);
   // Load follow-up badge
   setTimeout(loadFollowupBadge, 3000);
+}
+
+// ── In-App Guide ──
+function openGuide() {
+  document.getElementById('guideOverlay').style.display = 'block';
+  document.body.style.overflow = 'hidden';
+}
+function closeGuide() {
+  document.getElementById('guideOverlay').style.display = 'none';
+  document.body.style.overflow = '';
+}
+function toggleGuideSection(el) {
+  el.classList.toggle('open');
 }
 </script>
 </body>
