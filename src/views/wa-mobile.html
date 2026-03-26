@@ -828,6 +828,120 @@ html,body{
     </div>
   </div>
 
+  <!-- ===== FOLLOWUP SCREEN ===== -->
+  <div id="screen-followup" class="screen hidden">
+    <div class="list-header">
+      <div class="list-header-row">
+        <span class="list-title">פולואפ</span>
+        <div style="display:flex;gap:6px;">
+          <button class="tool-btn" style="padding:6px 10px;font-size:12px;" onclick="runAutoFollowups()">&#9654; הרץ אוטומטי</button>
+        </div>
+      </div>
+    </div>
+    <div class="tools-content" style="padding-bottom:120px;">
+
+      <!-- Pending follow-ups today -->
+      <div class="tool-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>ממתינים להיום</span>
+        <span id="pendingCount" style="font-size:12px;color:var(--blue);"></span>
+      </div>
+      <div id="pendingFollowups" style="margin-bottom:16px;">
+        <div style="color:var(--text-muted);font-size:13px;padding:8px;">טוען...</div>
+      </div>
+
+      <!-- Follow-up Templates -->
+      <div class="tool-section-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>תבניות הודעה</span>
+        <button class="tool-btn" style="padding:4px 10px;font-size:12px;" onclick="showAddTemplate()">+ חדש</button>
+      </div>
+      <div id="followupTemplates">
+        <div style="color:var(--text-muted);font-size:13px;padding:8px;">טוען...</div>
+      </div>
+
+      <!-- Template editor (hidden by default) -->
+      <div id="templateEditor" style="display:none;background:var(--bg-secondary);border-radius:12px;padding:14px;margin:12px 0;">
+        <input type="hidden" id="editTemplateId">
+        <div style="margin-bottom:10px;">
+          <label style="font-size:12px;color:var(--text-secondary);">שם</label>
+          <input type="text" id="tplName" placeholder="פולואפ ראשון" style="width:100%;padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;margin-top:4px;">
+        </div>
+        <div style="margin-bottom:10px;">
+          <label style="font-size:12px;color:var(--text-secondary);">הודעה (השתמש ב-{name} לשם הליד)</label>
+          <textarea id="tplMessage" rows="4" placeholder="היי {name}, ..." style="width:100%;padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;margin-top:4px;resize:vertical;font-family:inherit;"></textarea>
+        </div>
+        <div style="display:flex;gap:10px;margin-bottom:10px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-secondary);">אחרי כמה ימים</label>
+            <input type="number" id="tplDayOffset" value="3" min="1" max="30" style="width:100%;padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;margin-top:4px;">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-secondary);">סדר</label>
+            <input type="number" id="tplSortOrder" value="1" min="0" max="10" style="width:100%;padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;margin-top:4px;">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onclick="saveTemplate()" style="flex:1;padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128190; שמור</button>
+          <button onclick="hideTemplateEditor()" style="padding:10px 16px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">ביטול</button>
+        </div>
+      </div>
+
+      <!-- Follow-up Config -->
+      <div class="tool-section-title">הגדרות פולואפ</div>
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:14px;">
+        <div class="settings-row" style="padding:8px 0;">
+          <div class="settings-label">
+            פולואפ אוטומטי
+            <small>שליחה אוטומטית בשעה שנקבעה</small>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="cfgAutoEnabled" onchange="saveFollowupConfig()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="settings-row" style="padding:8px 0;">
+          <div class="settings-label">
+            שעת שליחה
+            <small>שעה בזמן ישראל</small>
+          </div>
+          <select id="cfgSendHour" onchange="saveFollowupConfig()" style="padding:6px 10px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;">
+            <option value="8">08:00</option>
+            <option value="9">09:00</option>
+            <option value="10">10:00</option>
+            <option value="11">11:00</option>
+            <option value="12">12:00</option>
+            <option value="14">14:00</option>
+            <option value="16">16:00</option>
+            <option value="18">18:00</option>
+            <option value="19">19:00</option>
+            <option value="20">20:00</option>
+          </select>
+        </div>
+        <div class="settings-row" style="padding:8px 0;">
+          <div class="settings-label">
+            מקסימום פולואפים
+            <small>כמה פעמים לנסות</small>
+          </div>
+          <select id="cfgMaxFollowups" onchange="saveFollowupConfig()" style="padding:6px 10px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;">
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+        <div class="settings-row" style="padding:8px 0;">
+          <div class="settings-label">
+            דלג על לידים שענו
+            <small>אם ענו — לא שולחים פולואפ</small>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="cfgSkipReplied" onchange="saveFollowupConfig()">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== SETTINGS SCREEN ===== -->
   <div id="screen-settings" class="screen hidden">
     <div class="list-header">
@@ -895,6 +1009,11 @@ html,body{
       <div class="tab-icon">&#128172;</div>
       <div class="tab-label">שיחות</div>
       <div class="tab-badge" id="totalUnread" style="display:none;">0</div>
+    </div>
+    <div class="tab-item" data-tab="followup" onclick="switchTab('followup')">
+      <div class="tab-icon">&#128257;</div>
+      <div class="tab-label">פולואפ</div>
+      <div class="tab-badge" id="followupBadge" style="display:none;">0</div>
     </div>
     <div class="tab-item" data-tab="tools" onclick="switchTab('tools')">
       <div class="tab-icon">&#128295;</div>
@@ -1128,8 +1247,9 @@ function switchTab(tab) {
   document.querySelectorAll('.tab-item').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
 
   // Switch screens
-  ['list', 'updates', 'tools', 'settings'].forEach(s => {
+  ['list', 'updates', 'tools', 'settings', 'followup'].forEach(s => {
     const el = document.getElementById('screen-' + s);
+    if (!el) return;
     if (s === tab) {
       el.className = 'screen active';
     } else {
@@ -1139,6 +1259,7 @@ function switchTab(tab) {
 
   if (tab === 'updates') loadAnalytics();
   if (tab === 'tools') loadFlows();
+  if (tab === 'followup') { loadPendingFollowups(); loadFollowupTemplates(); loadFollowupConfig(); }
 
   // Show/hide tab bar
   document.getElementById('tabBar').style.display = 'flex';
@@ -2151,6 +2272,230 @@ function connectWebSocket() {
   };
 }
 
+/* ===== FOLLOW-UP MANAGEMENT ===== */
+async function loadPendingFollowups() {
+  const el = document.getElementById('pendingFollowups');
+  const countEl = document.getElementById('pendingCount');
+  const badgeEl = document.getElementById('followupBadge');
+  if (!el) return;
+  try {
+    const data = await api('/followup/pending');
+    if (!data.success) throw new Error(data.error);
+    const pending = data.pending || [];
+    if (countEl) countEl.textContent = pending.length > 0 ? `(${pending.length})` : '';
+    if (badgeEl) {
+      if (pending.length > 0) {
+        badgeEl.textContent = pending.length > 99 ? '99+' : pending.length;
+        badgeEl.style.display = 'flex';
+      } else {
+        badgeEl.style.display = 'none';
+      }
+    }
+    if (!pending.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:12px;text-align:center;">&#10003; אין פולואפים ממתינים להיום</div>';
+      return;
+    }
+    el.innerHTML = pending.map(p => `
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:12px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div>
+            <div style="font-size:15px;font-weight:600;color:var(--text);">${esc(p.name || p.phone)}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${esc(p.source || '')} · פולואפ #${(p.followup_count || 0) + 1} · ${esc(p.next_followup || '')}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text-muted);">${p.user_replies > 0 ? '&#128172; ענה' : '&#128164; לא ענה'}</div>
+        </div>
+        <div style="display:flex;gap:6px;">
+          <button onclick="sendFollowupNow('${esc(p.phone)}')" style="flex:1;padding:8px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;">&#9654; שלח עכשיו</button>
+          <button onclick="postponeFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128197; דחה יום</button>
+          <button onclick="cancelFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:#e74c3c;font-size:13px;cursor:pointer;">&#10005;</button>
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    el.innerHTML = '<div style="color:#e74c3c;font-size:13px;padding:8px;">שגיאה בטעינה</div>';
+  }
+}
+
+async function sendFollowupNow(phone) {
+  if (!confirm('לשלוח פולואפ עכשיו?')) return;
+  toast('שולח...');
+  try {
+    const res = await api('/followup/send', { method: 'POST', body: JSON.stringify({ phone }) });
+    if (res.success) {
+      toast(`פולואפ #${res.followupNum} נשלח ל-${res.name || phone}`);
+      loadPendingFollowups();
+    } else {
+      toast('שגיאה: ' + (res.error || ''));
+    }
+  } catch { toast('שגיאה בשליחה'); }
+}
+
+async function postponeFollowup(phone) {
+  toast('דוחה ליום...');
+  try {
+    await api('/followup/postpone', { method: 'POST', body: JSON.stringify({ phone, days: 1 }) });
+    toast('נדחה ליום');
+    loadPendingFollowups();
+  } catch { toast('שגיאה'); }
+}
+
+async function cancelFollowup(phone) {
+  if (!confirm('לבטל את כל הפולואפים לליד הזה?')) return;
+  try {
+    await api('/followup/cancel', { method: 'POST', body: JSON.stringify({ phone }) });
+    toast('פולואפ בוטל');
+    loadPendingFollowups();
+  } catch { toast('שגיאה'); }
+}
+
+async function runAutoFollowups() {
+  if (!confirm('להריץ פולואפ אוטומטי לכל הממתינים עכשיו?')) return;
+  toast('מריץ פולואפים...');
+  try {
+    const res = await api('/followup/run-auto', { method: 'POST' });
+    if (res.success) {
+      toast(`נשלחו ${res.sent} הודעות${res.errors > 0 ? ` (${res.errors} שגיאות)` : ''}`);
+      loadPendingFollowups();
+    } else {
+      toast('שגיאה: ' + (res.error || ''));
+    }
+  } catch { toast('שגיאה'); }
+}
+
+async function loadFollowupTemplates() {
+  const el = document.getElementById('followupTemplates');
+  if (!el) return;
+  try {
+    const data = await api('/followup/templates');
+    if (!data.success) throw new Error();
+    const templates = data.templates || [];
+    if (!templates.length) {
+      el.innerHTML = '<div style="color:var(--text-muted);font-size:13px;padding:8px;">אין תבניות</div>';
+      return;
+    }
+    el.innerHTML = templates.map(t => `
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:12px;margin-bottom:8px;opacity:${t.enabled ? 1 : 0.5};">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div style="flex:1;">
+            <div style="font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px;">${esc(t.name)}</div>
+            <div style="font-size:12px;color:var(--text-muted);">יום ${t.day_offset} · ${t.message_type === 'voice' ? '&#127908; קולי' : '&#128172; טקסט'}</div>
+            <div style="font-size:13px;color:var(--text-secondary);margin-top:6px;white-space:pre-wrap;max-height:60px;overflow:hidden;">${esc(t.message).slice(0, 120)}${t.message.length > 120 ? '...' : ''}</div>
+          </div>
+          <div style="display:flex;gap:4px;margin-right:8px;">
+            <button onclick="editTemplate(${t.id})" style="padding:6px 8px;background:var(--bg-input);border:none;border-radius:6px;color:var(--text);font-size:12px;cursor:pointer;">&#9998;</button>
+            <button onclick="toggleTemplate(${t.id}, ${t.enabled ? 0 : 1})" style="padding:6px 8px;background:var(--bg-input);border:none;border-radius:6px;color:${t.enabled ? '#e74c3c' : '#2ecc71'};font-size:12px;cursor:pointer;">${t.enabled ? '&#9724;' : '&#9654;'}</button>
+            <button onclick="deleteTemplate(${t.id})" style="padding:6px 8px;background:var(--bg-input);border:none;border-radius:6px;color:#e74c3c;font-size:12px;cursor:pointer;">&#128465;</button>
+          </div>
+        </div>
+      </div>
+    `).join('');
+    // Store for editing
+    window._followupTemplates = templates;
+  } catch { el.innerHTML = '<div style="color:#e74c3c;font-size:13px;padding:8px;">שגיאה</div>'; }
+}
+
+function showAddTemplate() {
+  document.getElementById('editTemplateId').value = '';
+  document.getElementById('tplName').value = '';
+  document.getElementById('tplMessage').value = '';
+  document.getElementById('tplDayOffset').value = '3';
+  document.getElementById('tplSortOrder').value = '1';
+  document.getElementById('templateEditor').style.display = 'block';
+}
+
+function editTemplate(id) {
+  const t = (window._followupTemplates || []).find(x => x.id === id);
+  if (!t) return;
+  document.getElementById('editTemplateId').value = id;
+  document.getElementById('tplName').value = t.name;
+  document.getElementById('tplMessage').value = t.message;
+  document.getElementById('tplDayOffset').value = t.day_offset;
+  document.getElementById('tplSortOrder').value = t.sort_order;
+  document.getElementById('templateEditor').style.display = 'block';
+}
+
+function hideTemplateEditor() {
+  document.getElementById('templateEditor').style.display = 'none';
+}
+
+async function saveTemplate() {
+  const id = document.getElementById('editTemplateId').value;
+  const name = document.getElementById('tplName').value.trim();
+  const message = document.getElementById('tplMessage').value.trim();
+  const day_offset = parseInt(document.getElementById('tplDayOffset').value, 10);
+  const sort_order = parseInt(document.getElementById('tplSortOrder').value, 10);
+  if (!name || !message) { toast('חסר שם או הודעה'); return; }
+  try {
+    if (id) {
+      await api('/followup/templates/' + id, { method: 'PATCH', body: JSON.stringify({ name, message, day_offset, sort_order }) });
+      toast('תבנית עודכנה');
+    } else {
+      await api('/followup/templates', { method: 'POST', body: JSON.stringify({ name, message, day_offset, sort_order }) });
+      toast('תבנית נוצרה');
+    }
+    hideTemplateEditor();
+    loadFollowupTemplates();
+  } catch { toast('שגיאה בשמירה'); }
+}
+
+async function toggleTemplate(id, enabled) {
+  try {
+    await api('/followup/templates/' + id, { method: 'PATCH', body: JSON.stringify({ enabled }) });
+    toast(enabled ? 'תבנית הופעלה' : 'תבנית כובתה');
+    loadFollowupTemplates();
+  } catch { toast('שגיאה'); }
+}
+
+async function deleteTemplate(id) {
+  if (!confirm('למחוק תבנית?')) return;
+  try {
+    await api('/followup/templates/' + id, { method: 'DELETE' });
+    toast('תבנית נמחקה');
+    loadFollowupTemplates();
+  } catch { toast('שגיאה'); }
+}
+
+async function loadFollowupConfig() {
+  try {
+    const data = await api('/followup/config');
+    if (!data.success) return;
+    const cfg = data.config;
+    document.getElementById('cfgAutoEnabled').checked = cfg.auto_enabled;
+    document.getElementById('cfgSendHour').value = cfg.send_hour;
+    document.getElementById('cfgMaxFollowups').value = cfg.max_followups;
+    document.getElementById('cfgSkipReplied').checked = cfg.skip_replied;
+  } catch {}
+}
+
+async function saveFollowupConfig() {
+  try {
+    await api('/followup/config', {
+      method: 'PATCH',
+      body: JSON.stringify({
+        auto_enabled: document.getElementById('cfgAutoEnabled').checked,
+        send_hour: parseInt(document.getElementById('cfgSendHour').value, 10),
+        max_followups: parseInt(document.getElementById('cfgMaxFollowups').value, 10),
+        skip_replied: document.getElementById('cfgSkipReplied').checked,
+      })
+    });
+    toast('הגדרות פולואפ נשמרו');
+  } catch { toast('שגיאה בשמירה'); }
+}
+
+// Load pending count for badge on startup
+async function loadFollowupBadge() {
+  try {
+    const data = await api('/followup/pending');
+    if (data.success && data.count > 0) {
+      const badge = document.getElementById('followupBadge');
+      if (badge) {
+        badge.textContent = data.count > 99 ? '99+' : data.count;
+        badge.style.display = 'flex';
+      }
+    }
+  } catch {}
+}
+
 /* ===== INIT ===== */
 initSettings();
 if (!TOKEN) {
@@ -2164,6 +2509,8 @@ if (!TOKEN) {
   setTimeout(requestNotifPermission, 3000);
   // Load lead stats after contacts load
   setTimeout(loadLeadStats, 2000);
+  // Load follow-up badge
+  setTimeout(loadFollowupBadge, 3000);
 }
 </script>
 </body>

@@ -212,6 +212,23 @@ db.exec(`
 
   CREATE INDEX IF NOT EXISTS idx_status_history_phone ON status_history(phone);
 
+  CREATE TABLE IF NOT EXISTS followup_templates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    day_offset INTEGER NOT NULL DEFAULT 3,
+    message TEXT NOT NULL,
+    message_type TEXT NOT NULL DEFAULT 'text' CHECK(message_type IN ('text', 'voice', 'image')),
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    enabled INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS followup_config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
   CREATE TABLE IF NOT EXISTS chatbot_flows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -364,6 +381,43 @@ try {
 } catch {
   // facts table doesn't exist or already migrated — ok
 }
+
+// Migration: add follow-up columns to leads
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN next_followup TEXT`);
+} catch { /* column already exists */ }
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0`);
+} catch { /* column already exists */ }
+try {
+  db.exec(`CREATE INDEX IF NOT EXISTS idx_leads_next_followup ON leads(next_followup)`);
+} catch { /* index already exists */ }
+
+// Seed default follow-up templates if empty
+try {
+  const ftCount = db.prepare('SELECT COUNT(*) as c FROM followup_templates').get() as any;
+  if (ftCount.c === 0) {
+    const ins = db.prepare('INSERT INTO followup_templates (name, day_offset, message, message_type, sort_order) VALUES (?, ?, ?, ?, ?)');
+    ins.run('פולואפ ראשון', 3, 'היי {name}, שלחתי לך דוגמה לאתר שבניתי בדיוק בשבילך 🎨\nרגע לבדוק? אשמח לשמוע מה אתה חושב!', 'text', 1);
+    ins.run('פולואפ שני — הודעה קולית', 5, 'היי {name}, זו יעל מ-Alon.dev. שלחנו לך הצעה מיוחדת — אתר מקצועי ב-48 שעות. אשמח אם תיתן הזדמנות ותבדוק את הדוגמה ששלחנו. תכתוב לי אם יש שאלות!', 'voice', 2);
+    ins.run('פולואפ אחרון', 8, 'היי {name}, רק רציתי לוודא שראית את ההודעה שלי 🙂\nהמבצע תקף עוד יומיים — אתר מקצועי ב-₪1,800 במקום ₪3,500.\nמעוניין?', 'text', 3);
+    log.info('seeded 3 default follow-up templates');
+  }
+} catch { /* followup_templates might not exist yet on first run */ }
+
+// Seed default follow-up config
+try {
+  const cfgCount = db.prepare('SELECT COUNT(*) as c FROM followup_config').get() as any;
+  if (cfgCount.c === 0) {
+    const cfgIns = db.prepare('INSERT INTO followup_config (key, value) VALUES (?, ?)');
+    cfgIns.run('auto_enabled', 'true');
+    cfgIns.run('send_hour', '10');
+    cfgIns.run('max_followups', '3');
+    cfgIns.run('skip_statuses', 'closed,refused,not_relevant,done,interested,vip');
+    cfgIns.run('skip_replied', 'true');
+    log.info('seeded default follow-up config');
+  }
+} catch { /* config might not exist yet */ }
 
 // Seed workspaces if empty
 try {

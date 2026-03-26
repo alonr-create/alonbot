@@ -184,6 +184,9 @@ try {
 // Seed example chatbot flows
 import('./flow-engine.js').then(m => m.seedExampleFlows()).catch(() => {});
 
+// Setup follow-up cron
+import('./followup-engine.js').then(m => m.setupFollowupCron()).catch(() => {});
+
 // Public key endpoint (no auth — needed before subscribing)
 app.get('/api/push/vapid-key', (_req, res) => {
   res.json({ publicKey: VAPID_PUBLIC });
@@ -627,7 +630,13 @@ app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
       stmt.run(lead.phone, lead.name || lead.phone, 'הודעת קמפיין נשלחה');
       count++;
     }
-    log.info({ count }, 'campaign messages imported');
+    // Schedule follow-ups for imported leads
+    import('./followup-engine.js').then(({ scheduleFirstFollowup }) => {
+      for (const lead of leadsWithoutMsgs) {
+        scheduleFirstFollowup(lead.phone);
+      }
+    }).catch(() => {});
+    log.info({ count }, 'campaign messages imported + follow-ups scheduled');
     res.json({ success: true, imported: count });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
@@ -1221,6 +1230,137 @@ app.post('/api/wa-manager/flows/:id/run', dashAuth, async (req, res) => {
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// === Follow-up Management Endpoints ===
+
+// Get follow-up config
+app.get('/api/wa-manager/followup/config', dashAuth, async (_req, res) => {
+  try {
+    const { getFollowupConfig } = await import('./followup-engine.js');
+    res.json({ success: true, config: getFollowupConfig() });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Update follow-up config
+app.patch('/api/wa-manager/followup/config', dashAuth, (req, res) => {
+  try {
+    const allowed = ['auto_enabled', 'send_hour', 'max_followups', 'skip_statuses', 'skip_replied'];
+    for (const [key, value] of Object.entries(req.body)) {
+      if (!allowed.includes(key)) continue;
+      const val = typeof value === 'boolean' ? String(value) : Array.isArray(value) ? value.join(',') : String(value);
+      db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES (?, ?, datetime('now'))").run(key, val);
+    }
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Get follow-up templates
+app.get('/api/wa-manager/followup/templates', dashAuth, (_req, res) => {
+  try {
+    const templates = db.prepare('SELECT * FROM followup_templates ORDER BY sort_order ASC, id ASC').all();
+    res.json({ success: true, templates });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Create follow-up template
+app.post('/api/wa-manager/followup/templates', dashAuth, (req, res) => {
+  try {
+    const { name, day_offset, message, message_type, sort_order } = req.body;
+    if (!name || !message) { res.status(400).json({ success: false, error: 'Missing name or message' }); return; }
+    const result = db.prepare('INSERT INTO followup_templates (name, day_offset, message, message_type, sort_order) VALUES (?, ?, ?, ?, ?)').run(
+      name, day_offset || 3, message, message_type || 'text', sort_order || 0
+    );
+    res.json({ success: true, id: result.lastInsertRowid });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Update follow-up template
+app.patch('/api/wa-manager/followup/templates/:id', dashAuth, (req, res) => {
+  try {
+    const { name, day_offset, message, message_type, sort_order, enabled } = req.body;
+    const updates: string[] = [];
+    const params: any[] = [];
+    if (name !== undefined) { updates.push('name = ?'); params.push(name); }
+    if (day_offset !== undefined) { updates.push('day_offset = ?'); params.push(day_offset); }
+    if (message !== undefined) { updates.push('message = ?'); params.push(message); }
+    if (message_type !== undefined) { updates.push('message_type = ?'); params.push(message_type); }
+    if (sort_order !== undefined) { updates.push('sort_order = ?'); params.push(sort_order); }
+    if (enabled !== undefined) { updates.push('enabled = ?'); params.push(enabled ? 1 : 0); }
+    if (!updates.length) { res.status(400).json({ success: false, error: 'No fields' }); return; }
+    params.push(req.params.id);
+    db.prepare(`UPDATE followup_templates SET ${updates.join(', ')} WHERE id = ?`).run(...params);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Delete follow-up template
+app.delete('/api/wa-manager/followup/templates/:id', dashAuth, (req, res) => {
+  try {
+    db.prepare('DELETE FROM followup_templates WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Get pending follow-ups (leads that need follow-up today)
+app.get('/api/wa-manager/followup/pending', dashAuth, async (_req, res) => {
+  try {
+    const { getPendingFollowups } = await import('./followup-engine.js');
+    const pending = getPendingFollowups();
+    res.json({ success: true, pending, count: pending.length });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Send follow-up to a specific lead
+app.post('/api/wa-manager/followup/send', dashAuth, async (req, res) => {
+  try {
+    const { phone, template_id } = req.body;
+    if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
+    const { sendFollowup } = await import('./followup-engine.js');
+    const result = await sendFollowup(phone, template_id);
+    res.json({ success: true, ...result });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Postpone follow-up for a lead
+app.post('/api/wa-manager/followup/postpone', dashAuth, (req, res) => {
+  try {
+    const { phone, days } = req.body;
+    if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
+    db.prepare(`UPDATE leads SET next_followup = date('now', '+${Math.max(1, Math.min(days || 1, 30))} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Cancel follow-up for a lead
+app.post('/api/wa-manager/followup/cancel', dashAuth, (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
+    db.prepare("UPDATE leads SET next_followup = NULL, updated_at = datetime('now') WHERE phone = ?").run(phone);
+    res.json({ success: true });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Run auto follow-ups now (manual trigger)
+app.post('/api/wa-manager/followup/run-auto', dashAuth, async (_req, res) => {
+  try {
+    const { runAutoFollowups } = await import('./followup-engine.js');
+    const result = await runAutoFollowups();
+    res.json({ success: true, ...result });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Schedule first follow-up for a lead
+app.post('/api/wa-manager/followup/schedule', dashAuth, (req, res) => {
+  try {
+    const { phone } = req.body;
+    if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
+    import('./followup-engine.js').then(({ scheduleFirstFollowup }) => {
+      scheduleFirstFollowup(phone);
+      res.json({ success: true });
+    });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 // === Workspace CRUD Endpoints ===
