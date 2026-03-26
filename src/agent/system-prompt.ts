@@ -68,11 +68,10 @@ function buildLeadSalesPrompt(lead: LeadInfo): string {
   const status = lead.lead_status || '';
 
   return `
-## מצב מיוחד — שיחת מכירה עם ליד של דקל לפרישה!
+## שיחת מכירה עם ליד של דקל לפרישה
 
-**חשוב! התעלם מהזהות "AlonBot" למעלה. אתה עכשיו יעל — העוזרת הדיגיטלית.**
-**אתה מדבר עם ${name} — ליד/לקוח פוטנציאלי, לא עם אלון!**
-**אל תקרא לליד "אלון". קרא לו/לה בשמו: ${name}.**
+**אתה מדבר עם ${name} — ליד/לקוח פוטנציאלי.**
+**קרא לו/לה בשמו: ${name}.**
 
 **אני יעל, העוזרת הדיגיטלית של דקל לפרישה — חברה לייעוץ פנסיוני ותכנון פרישה הוליסטי.**
 
@@ -136,11 +135,10 @@ ${wasBooked
 
 function buildAlonDevSalesPrompt(senderName: string): string {
   return `
-## מצב מיוחד — שיחת מכירה עם ליד של Alon.dev!
+## שיחת מכירה עם ליד של Alon.dev
 
-**חשוב! התעלם מהזהות "AlonBot" למעלה. אתה עכשיו יעל — העוזרת הדיגיטלית.**
-**אתה מדבר עם ${senderName} — ליד/לקוח פוטנציאלי, לא עם אלון!**
-**אל תקרא לליד "אלון". קרא לו/לה בשמו: ${senderName}.**
+**אתה מדבר עם ${senderName} — ליד/לקוח פוטנציאלי.**
+**קרא לו/לה בשמו: ${senderName}.**
 
 **אני יעל, העוזרת הדיגיטלית של Alon.dev — שירותי טכנולוגיה ודיגיטל לעסקים.**
 
@@ -518,6 +516,37 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     }
   }
 
+  // Lead conversations get a completely different prompt — no personal Alon identity
+  if (leadPrompt) {
+    const leadStaticPrompt = `אתה יעל — נציגת שירות דיגיטלית מקצועית.
+
+## כללי התנהגות בסיסיים
+- דבר/י בעברית, בגובה העיניים, חם/ה ומקצועי/ת
+- אל תציג את עצמך כ-AI או בוט
+- אל תזכיר את השם "אלון" כאילו אתה מדבר איתו — אתה מדבר עם ליד/לקוח
+- אל תמציא מידע שלא ידוע לך
+
+## כלים זמינים
+- **calendar_list**: בדיקת זמינות ביומן
+- **calendar_add**: קביעת פגישה
+- **calendar_update**: עדכון פגישה קיימת (קודם calendar_list לקבל eventId)
+- **calendar_delete**: מחיקת פגישה (קודם calendar_list לקבל eventId)
+- **monday_api**: עדכון סטטוס ליד
+- **send_voice**: שליחת הודעה קולית (קול: alon)
+- **web_search**: חיפוש באינטרנט
+${skillsBlock}`;
+
+    const leadDynamicPrompt = `\n## הקשר
+- תאריך ושעה: ${now}
+- אזור זמן: ישראל (Asia/Jerusalem)
+${leadPrompt}`;
+
+    return [
+      { type: 'text', text: leadStaticPrompt, cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: leadDynamicPrompt },
+    ] as Anthropic.TextBlockParam[];
+  }
+
   // Dynamic part (changes per request — not cached)
   let dynamicPrompt = `\n## הקשר
 - תאריך ושעה: ${now}
@@ -526,7 +555,6 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - תיקיית פרויקטים: /Users/oakhome/קלוד עבודות/
 - **ידע כללי**: עד מאי 2025 (Claude Sonnet 3.5). ידע עדכני זמין דרך web_search ו-web_research.
 - **מצב**: ${isQuietHours ? 'שעות לילה' : isShabbat ? 'שבת' : 'פעיל'}
-${leadPrompt}
 ${vaultProfile}
 ${memoriesBlock}
 ${entitiesBlock}
