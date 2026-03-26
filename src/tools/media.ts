@@ -15,3 +15,27 @@ export function collectMedia(requestId?: string): Array<{ type: 'image' | 'voice
   pendingMediaMap.delete(id);
   return media;
 }
+
+// --- Interactive messages side-channel (buttons, lists, CTA) ---
+export interface PendingInteractive {
+  buttons?: Array<{ id: string; title: string }>;
+  listSections?: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
+  interactiveBody?: string;
+  interactiveHeader?: string;
+  interactiveFooter?: string;
+  listButtonText?: string;
+  ctaUrl?: { display_text: string; url: string };
+}
+
+const pendingInteractiveMap = new Map<string, PendingInteractive>();
+
+export function addPendingInteractive(item: PendingInteractive) {
+  pendingInteractiveMap.set(currentRequestId, item);
+}
+
+export function collectInteractive(requestId?: string): PendingInteractive | null {
+  const id = requestId || currentRequestId;
+  const item = pendingInteractiveMap.get(id) || null;
+  pendingInteractiveMap.delete(id);
+  return item;
+}

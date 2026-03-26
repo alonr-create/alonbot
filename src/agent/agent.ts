@@ -2,7 +2,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory, autoSaveCorrection, trackSentiment, tagConversationTopics, getContextBridge, extractCommitments, extractRelationships } from './memory.js';
-import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
+import { getToolDefinitions, executeTool, collectMedia, collectInteractive, setCurrentRequestId } from './tools.js';
 import { VOICE_PRESETS } from '../tools/handlers/send-voice.js';
 import { searchKnowledge } from './knowledge.js';
 import { db } from '../utils/db.js';
@@ -502,6 +502,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
 
   // Collect any media from tool calls (per-request isolation)
   const media = collectMedia(requestId);
+  const interactive = collectInteractive(requestId);
   const reply: UnifiedReply = { text: replyText };
 
   for (const m of media) {
@@ -512,6 +513,17 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       reply.documentName = m.filename;
       reply.documentMimetype = m.mimetype;
     }
+  }
+
+  // Attach interactive message (buttons/list/CTA) if queued
+  if (interactive) {
+    if (interactive.buttons) reply.buttons = interactive.buttons;
+    if (interactive.listSections) reply.listSections = interactive.listSections;
+    if (interactive.interactiveBody) reply.interactiveBody = interactive.interactiveBody;
+    if (interactive.interactiveHeader) reply.interactiveHeader = interactive.interactiveHeader;
+    if (interactive.interactiveFooter) reply.interactiveFooter = interactive.interactiveFooter;
+    if (interactive.listButtonText) reply.listButtonText = interactive.listButtonText;
+    if (interactive.ctaUrl) reply.ctaUrl = interactive.ctaUrl;
   }
 
   // Voice-to-voice: if user sent voice message, auto-generate TTS reply

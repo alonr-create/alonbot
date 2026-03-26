@@ -239,6 +239,16 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       text = `[מיקום: ${msg.location?.latitude}, ${msg.location?.longitude}]`;
     } else if (type === 'contacts') {
       text = '[איש קשר שותף]';
+    } else if (type === 'interactive') {
+      // User clicked a button or selected from a list
+      const interactive = msg.interactive;
+      if (interactive?.type === 'button_reply') {
+        text = interactive.button_reply?.title || interactive.button_reply?.id || '[כפתור]';
+      } else if (interactive?.type === 'list_reply') {
+        text = interactive.list_reply?.title || interactive.list_reply?.id || '[בחירה מרשימה]';
+      } else {
+        text = '[תגובה אינטראקטיבית]';
+      }
     } else if (type === 'reaction') {
       // Skip reactions
       return;
@@ -424,6 +434,78 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           }
           return; // Caption included with image
         }
+      }
+
+      // Interactive buttons (up to 3 quick-reply buttons)
+      if (reply.buttons && reply.buttons.length > 0) {
+        const interactive: any = {
+          type: 'button',
+          body: { text: reply.interactiveBody || reply.text || '' },
+          action: {
+            buttons: reply.buttons.slice(0, 3).map(b => ({
+              type: 'reply',
+              reply: { id: b.id, title: b.title.slice(0, 20) },
+            })),
+          },
+        };
+        if (reply.interactiveHeader) interactive.header = { type: 'text', text: reply.interactiveHeader };
+        if (reply.interactiveFooter) interactive.footer = { text: reply.interactiveFooter };
+        await sendGraphApi('messages', {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'interactive',
+          interactive,
+        });
+        return;
+      }
+
+      // Interactive list (up to 10 rows across sections)
+      if (reply.listSections && reply.listSections.length > 0) {
+        const interactive: any = {
+          type: 'list',
+          body: { text: reply.interactiveBody || reply.text || '' },
+          action: {
+            button: reply.listButtonText || 'בחר אופציה',
+            sections: reply.listSections.map(s => ({
+              title: s.title.slice(0, 24),
+              rows: s.rows.slice(0, 10).map(r => ({
+                id: r.id,
+                title: r.title.slice(0, 24),
+                description: r.description?.slice(0, 72),
+              })),
+            })),
+          },
+        };
+        if (reply.interactiveHeader) interactive.header = { type: 'text', text: reply.interactiveHeader };
+        if (reply.interactiveFooter) interactive.footer = { text: reply.interactiveFooter };
+        await sendGraphApi('messages', {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'interactive',
+          interactive,
+        });
+        return;
+      }
+
+      // CTA URL button
+      if (reply.ctaUrl) {
+        await sendGraphApi('messages', {
+          messaging_product: 'whatsapp',
+          to,
+          type: 'interactive',
+          interactive: {
+            type: 'cta_url',
+            body: { text: reply.interactiveBody || reply.text || '' },
+            action: {
+              name: 'cta_url',
+              parameters: {
+                display_text: reply.ctaUrl.display_text,
+                url: reply.ctaUrl.url,
+              },
+            },
+          },
+        });
+        return;
       }
 
       // Text message

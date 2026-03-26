@@ -34,6 +34,20 @@ export interface UnifiedReply {
   templateLanguage?: string;
   /** Template body parameters (positional: {{1}}, {{2}}, ...) */
   templateParams?: string[];
+  /** WhatsApp interactive buttons (up to 3 quick-reply buttons) */
+  buttons?: Array<{ id: string; title: string }>;
+  /** WhatsApp interactive list sections */
+  listSections?: Array<{ title: string; rows: Array<{ id: string; title: string; description?: string }> }>;
+  /** Header text for interactive messages */
+  interactiveHeader?: string;
+  /** Body text for interactive messages (overrides text) */
+  interactiveBody?: string;
+  /** Footer text for interactive messages */
+  interactiveFooter?: string;
+  /** Button text for list messages (e.g. "בחר אופציה") */
+  listButtonText?: string;
+  /** CTA URL button */
+  ctaUrl?: { display_text: string; url: string };
 }
 
 export interface ChannelAdapter {

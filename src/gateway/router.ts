@@ -237,9 +237,28 @@ export function registerAdapter(adapter: ChannelAdapter) {
           await adapter.sendReply(msg, { text: '', voice: reply.voice });
         }
       } else {
-        await adapter.sendReply(msg, reply);
+        // If reply has both text AND interactive (buttons/list), send text first, then interactive
+        const hasInteractive = reply.buttons || reply.listSections || reply.ctaUrl;
+        if (hasInteractive && reply.text) {
+          // Send text message first
+          await adapter.sendReply(msg, { text: reply.text });
+          // Then send interactive message (body from interactiveBody or fallback)
+          const interactiveReply: any = {
+            text: '',
+            buttons: reply.buttons,
+            listSections: reply.listSections,
+            interactiveBody: reply.interactiveBody,
+            interactiveHeader: reply.interactiveHeader,
+            interactiveFooter: reply.interactiveFooter,
+            listButtonText: reply.listButtonText,
+            ctaUrl: reply.ctaUrl,
+          };
+          await adapter.sendReply(msg, interactiveReply);
+        } else {
+          await adapter.sendReply(msg, reply);
+        }
       }
-      log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback }, 'reply sent');
+      log.info({ channel: msg.channel, chars: reply.text.length, streamed: !!streamCallback, interactive: !!(reply.buttons || reply.listSections || reply.ctaUrl) }, 'reply sent');
 
       // Log bot reply for ALL WhatsApp conversations (dashboard visibility)
       if (msg.channel === 'whatsapp') {

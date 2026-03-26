@@ -779,7 +779,29 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **monday_api**: עדכון סטטוס ליד
 - **send_voice**: שליחת הודעה קולית (קול: yael לליד)
 - **save_survey**: שמירת תשובות תחקיר ליד ל-DB + Monday.com. **קרא לזה אחרי 2-3 תשובות!**
+- **send_buttons**: שליחת הודעת כפתורים/רשימה בווצאפ (ראה למטה)
 - **web_search**: חיפוש באינטרנט
+
+### כפתורים אינטראקטיביים — מתי להשתמש!
+**send_buttons** יוצר הודעות עם כפתורי תגובה מהירה. **השתמש/י בכל הזדמנות:**
+
+- **אחרי תחקיר — הציעי בכפתורים:**
+  send_buttons(body: "אז מה מעניין אותך?", buttons: [{id:"website", title:"בניית אתר 🌐"}, {id:"zoom", title:"שיחת ייעוץ 📅"}, {id:"more", title:"עוד מידע ℹ️"}])
+
+- **הצעת זום — כפתורי שעות:**
+  send_buttons(body: "מתי נוח לשיחה עם אלון?", buttons: [{id:"morning", title:"בוקר 09-12"}, {id:"afternoon", title:"אחה״צ 14-17"}, {id:"evening", title:"ערב 18-20"}])
+
+- **בחירת שירות — רשימה:**
+  send_buttons(body: "איזה שירות מעניין?", list_sections: [{title: "שירותים", rows: [{id:"site", title:"בניית אתר", description:"אתר מקצועי תוך 48 שעות"}, {id:"seo", title:"קידום SEO", description:"לקוחות חדשים מגוגל"}, {id:"bot", title:"בוט WhatsApp", description:"מענה 24/7"}, {id:"voice", title:"נציגה קולית AI", description:"מענה טלפוני חכם"}]}])
+
+- **כפתור CTA לאתר:**
+  send_buttons(body: "ראה את האתר שבנינו לך!", cta_url: {display_text: "צפה באתר 🔗", url: "https://..."})
+
+**כללים:**
+- **כפתורים: מקסימום 3**, כותרת עד 20 תווים
+- **רשימה: עד 10 אופציות**
+- **לא בכל הודעה** — רק כשיש בחירה אמיתית
+- כשליד לוחץ כפתור, התשובה מגיעה כטקסט (כותרת הכפתור)
 ${skillsBlock}`;
 
     const leadDynamicPrompt = `\n## הקשר
