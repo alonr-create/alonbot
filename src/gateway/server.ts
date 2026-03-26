@@ -1,7 +1,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import http from 'http';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync as fsExists, mkdirSync, writeFileSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
 import webpush from 'web-push';
@@ -46,6 +46,35 @@ app.use('/assets', express.static(join(config.dataDir), {
     if (filePath.endsWith('.mp4')) res.setHeader('Content-Type', 'video/mp4');
   },
 }));
+
+// ── A/B/C Price Tier System ──
+// Deterministic assignment: hash phone → consistent tier per lead
+const PRICE_TIERS = {
+  A: { basic: { regular: 990, discount: 790 }, premium: { regular: 1790, discount: 1590 }, label: 'רגיל' },
+  B: { basic: { regular: 690, discount: 490 }, premium: { regular: 1290, discount: 990 }, label: 'אגרסיבי' },
+  C: { basic: { regular: 1290, discount: 990 }, premium: { regular: 2290, discount: 1990 }, label: 'פרימיום' },
+} as const;
+
+function getLeadTier(phone: string): 'A' | 'B' | 'C' {
+  // Check if already assigned
+  const lead = db.prepare('SELECT price_tier FROM leads WHERE phone = ?').get(phone) as any;
+  if (lead?.price_tier && ['A', 'B', 'C'].includes(lead.price_tier)) return lead.price_tier as 'A' | 'B' | 'C';
+
+  // Assign deterministically: sum of digits mod 3
+  const sum = phone.replace(/\D/g, '').split('').reduce((s, d) => s + parseInt(d), 0);
+  const tier = (['A', 'B', 'C'] as const)[sum % 3];
+
+  // Save to DB
+  try {
+    db.prepare('UPDATE leads SET price_tier = ? WHERE phone = ?').run(tier, phone);
+  } catch {} // best-effort
+
+  return tier;
+}
+
+function getTierPrices(tier: 'A' | 'B' | 'C') {
+  return PRICE_TIERS[tier];
+}
 
 // ── Lead Scoring Helper ──
 // 0=unknown, 1=cold, 2=warm, 3=hot, 4=fire
@@ -1915,7 +1944,6 @@ app.post('/api/sync/import', externalAuth, (req, res) => {
 
 // --- Claude Memory Sync ---
 // Upload memory files from Claude Code / Obsidian → AlonBot
-import { existsSync as fsExists, mkdirSync, writeFileSync, readFileSync, readdirSync } from 'fs';
 const MEMORY_DIR = join(config.dataDir, 'claude-memory');
 if (!fsExists(MEMORY_DIR)) mkdirSync(MEMORY_DIR, { recursive: true });
 
@@ -2056,21 +2084,27 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
 // Create a Grow payment page and return the URL
 app.post('/api/create-payment', async (req, res) => {
   try {
-    const { name, phone, email, plan, discount } = req.body || {};
+    const { name, phone, email, plan, discount, tier: reqTier } = req.body || {};
     if (!name || !phone || !plan) {
       res.status(400).json({ success: false, error: 'Missing name, phone, or plan' });
       return;
     }
 
-    const prices: Record<string, { regular: number; discount: number; label: string }> = {
-      basic: { regular: 990, discount: 790, label: 'אתר בסיסי — Alon.dev' },
-      premium: { regular: 1790, discount: 1590, label: 'אתר פרימיום — Alon.dev' },
+    // A/B/C price tier — from URL param or auto-assigned
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const tier = (reqTier && ['A', 'B', 'C'].includes(reqTier)) ? reqTier as 'A' | 'B' | 'C' : getLeadTier(normalizedPhone);
+    const tierPrices = getTierPrices(tier);
+    const planPrices = plan === 'premium' ? tierPrices.premium : tierPrices.basic;
+
+    const labels: Record<string, string> = {
+      basic: 'אתר בסיסי — Alon.dev',
+      premium: 'אתר פרימיום — Alon.dev',
     };
-    const p = prices[plan] || prices.basic;
-    const amount = discount ? p.discount : p.regular;
+    const amount = discount ? planPrices.discount : planPrices.regular;
+    const pLabel = labels[plan] || labels.basic;
+    log.info({ name, phone: normalizedPhone, plan, tier, amount, discount: !!discount }, 'checkout with price tier');
 
     // Track checkout visit for abandoned cart recovery
-    const normalizedCartPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
     try {
       db.prepare(`CREATE TABLE IF NOT EXISTS checkout_visits (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2078,9 +2112,9 @@ app.post('/api/create-payment', async (req, res) => {
         paid INTEGER DEFAULT 0, reminded INTEGER DEFAULT 0,
         created_at TEXT DEFAULT (datetime('now'))
       )`).run();
-      db.prepare('INSERT INTO checkout_visits (phone, name, plan, amount) VALUES (?, ?, ?, ?)').run(normalizedCartPhone, name, plan, amount);
-      bumpLeadScore(normalizedCartPhone, 'checkout');
-      log.info({ phone: normalizedCartPhone, plan, amount }, 'checkout visit tracked');
+      db.prepare('INSERT INTO checkout_visits (phone, name, plan, amount) VALUES (?, ?, ?, ?)').run(normalizedPhone, name, plan, amount);
+      bumpLeadScore(normalizedPhone, 'checkout');
+      log.info({ phone: normalizedPhone, plan, amount }, 'checkout visit tracked');
     } catch (e: any) { log.warn({ err: e.message }, 'checkout visit tracking failed'); }
 
     if (!config.growUserId || !config.growPageCode) {
@@ -2097,7 +2131,7 @@ app.post('/api/create-payment', async (req, res) => {
     form.append('pageCode', config.growPageCode);
     form.append('userId', config.growUserId);
     form.append('sum', amount.toString());
-    form.append('description', p.label);
+    form.append('description', pLabel);
     form.append('pageField[fullName]', name);
     form.append('pageField[phone]', phone.replace(/^\+/, ''));
     if (email) form.append('pageField[email]', email);
