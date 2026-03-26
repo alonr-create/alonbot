@@ -19,7 +19,7 @@ export const config = {
   allowedTelegram: (process.env.ALLOWED_TELEGRAM || '').split(',').filter(Boolean),
   localApiUrl: process.env.LOCAL_API_URL || '',
   localApiSecret: process.env.LOCAL_API_SECRET || crypto.randomBytes(32).toString('hex'),
-  dashboardSecret: process.env.DASHBOARD_SECRET || process.env.LOCAL_API_SECRET || crypto.randomBytes(32).toString('hex'),
+  dashboardSecret: process.env.DASHBOARD_SECRET || crypto.randomBytes(32).toString('hex'),
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
   fbAccessToken: process.env.FB_ACCESS_TOKEN || '',
   waCloudToken: process.env.WA_CLOUD_TOKEN || '',

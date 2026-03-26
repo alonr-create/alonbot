@@ -1,253 +1,184 @@
-# AlonBot Architecture
+# Architecture
 
-## Overall Pattern
+**Analysis Date:** 2026-03-26
 
-AlonBot follows a **multi-channel AI agent** architecture with a **gateway/adapter pattern** for message routing. The system operates as a long-running Node.js process that:
+## Pattern Overview
 
-1. Receives messages from multiple chat platforms (Telegram, WhatsApp, Web)
-2. Routes them through a unified message interface
-3. Processes them via an agentic AI loop (Claude API with tool use)
-4. Returns responses back through the originating channel
+**Overall:** Hub-and-spoke message routing with AI agent as central orchestrator
 
-The architecture also includes a **proactive layer** with cron-scheduled tasks, automated workflows, and background batch processing.
+**Key Characteristics:**
+- Unified message abstraction across heterogeneous channels (WhatsApp, Telegram, Web)
+- Tool-based agent architecture with plugin pattern for extensibility
+- Database-driven state for messages, memories, cron jobs, and conversation workflows
+- Dual-mode operation: local (Mac-native tools) + cloud (Render, tool proxying)
+- Vector-backed memory with semantic search
 
-## Deployment Modes
+## Layers
 
-AlonBot supports two runtime modes via `config.mode`:
+**Channel Adapters:**
+- Purpose: Normalize incoming/outgoing messages across WhatsApp (Cloud API + Baileys), Telegram, and web platforms
+- Location: `src/channels/`
+- Contains: Protocol-specific handlers (Telegram: grammy, WhatsApp: Meta SDK + Baileys), type definitions
+- Depends on: Nothing (external libraries only)
+- Used by: Router (`src/gateway/router.ts`)
 
-- **Cloud mode** (`MODE=cloud`): Full Telegram polling, cron jobs, Express server. Deployed on Render. Local-only tools are proxied to the Mac via a registered tunnel URL.
-- **Local mode** (`MODE=local`): Telegram send-only (no polling, avoids token conflict), WhatsApp via Baileys, exposes `/api/tool` for cloud proxy calls. Mac-native tools (shell, screenshot, file access) run directly.
+**Message Router (Gateway):**
+- Purpose: Route messages from channels to agent, handle deduplication, streaming UI, rate limiting
+- Location: `src/gateway/router.ts`
+- Contains: Adapter registry, message deduplication map, tool label mapping, rate limit tracking
+- Depends on: Channel adapters, agent, logger
+- Used by: Server, channels, agent
 
-## Layers and Responsibilities
+**AI Agent:**
+- Purpose: Handle message processing, call Claude API, execute tools, manage context windows
+- Location: `src/agent/agent.ts`
+- Contains: Rate limiting (10 msg/min per user), model fallback (Gemini), token budgeting, streaming
+- Depends on: Tools, memory, knowledge, system prompt, model router
+- Used by: Router (via `handleMessage`)
 
-### 1. Entry Point (`src/index.ts`)
+**Tool System:**
+- Purpose: Plugin registry for extensible actions (40+ handlers: web search, file ops, deploy, schedule, memory, etc.)
+- Location: `src/tools/`
+  - Registry: `src/tools/registry.ts` — auto-discovers handlers, validates Zod schemas, proxies to local Mac
+  - Handlers: `src/tools/handlers/` — 40 individual tool implementations
+  - Types: `src/tools/types.ts` — `ToolHandler` interface, `ToolContext`
+- Contains: Tool definitions (Anthropic schema), validation, execution, local-only tool proxying
+- Depends on: Config, database, logger, handlers (dynamic import)
+- Used by: Agent (during agentic loop)
 
-Orchestration layer. Responsible for:
-- Starting the Express server
-- Creating and registering channel adapters (Telegram, WhatsApp)
-- Registering all cron jobs (daily brief, overdue tasks, weekly summary, cost alerts, scheduled messages, workflow engine, batch polling, memory maintenance, DB backup)
-- Graceful shutdown handling
+**Memory System:**
+- Purpose: Persistent context for agent — conversation history, summaries, semantic memories, embeddings
+- Location: `src/agent/memory.ts`
+- Contains: Message store (per channel/user), vector embeddings (sqlite-vec), conversation summaries, importance ranking
+- Depends on: Database, embeddings service, logger
+- Used by: Agent (context building), tools (e.g., `remember`)
 
-### 2. Gateway Layer (`src/gateway/`)
+**Server (Express):**
+- Purpose: HTTP/WebSocket endpoints, dashboard/PWA, webhook receivers, API for dashboard actions
+- Location: `src/gateway/server.ts`
+- Contains: Lead CRM (A/B/C price tiers, lead scoring), dashboard, WA inbox manager, flow engine triggers, analytics
+- Depends on: Express, WebSocket, database, logger, tools
+- Used by: Index, channels (webhook registration)
 
-**`server.ts`** -- Express HTTP server providing:
-- `/health` -- health check endpoint
-- `/api/register-local` -- cloud mode: local Mac registers its tunnel URL
-- `/api/tool` -- local mode: exposes tool execution API for cloud proxy
-- `/api/dashboard/*` -- dashboard data endpoints (stats, memories, tasks, messages, costs, knowledge, workflows, tools)
-- `/api/chat` and `/api/chat/history` -- web chat interface
-- `/dashboard` and `/chat` -- server-rendered HTML dashboard and chat UIs
+**Cron & Workflows:**
+- Purpose: Scheduled message delivery, automated follow-ups, chatbot flows (n8n-style visual editor backend)
+- Location: `src/cron/scheduler.ts`, `src/gateway/followup-engine.ts`, `src/gateway/flow-engine.ts`
+- Contains: node-cron integration, script execution with blocklist, follow-up template management, flow step execution
+- Depends on: Database, logger, config
+- Used by: Index (scheduler init), server (flow triggers)
 
-**`router.ts`** -- Message routing hub:
-- Maintains a registry of channel adapters (`Map<string, ChannelAdapter>`)
-- `registerAdapter()` -- registers an adapter and wires its `onMessage` callback to the agent
-- Handles streaming response edits (throttled to 1.5s for Telegram rate limits)
-- Manages typing indicators
-- Fires keyword-triggered workflows on incoming messages
-- `sendToChannel()` -- sends a raw message through an adapter (for cron)
-- `sendAgentMessage()` -- sends a message through the full agent pipeline (for daily brief, etc.)
+**Database Layer:**
+- Purpose: Persistent state for messages, memories, cron jobs, tasks, leads, conversation summaries
+- Location: `src/utils/db.ts`
+- Contains: SQLite with WAL mode, sqlite-vec extension, schema definitions, prepared statements
+- Depends on: better-sqlite3, sqlite-vec
+- Used by: All layers
 
-### 3. Channel Layer (`src/channels/`)
+## Data Flow
 
-Adapters that normalize platform-specific APIs into `UnifiedMessage`/`UnifiedReply`.
+**Incoming Message → Agent Response:**
 
-**`types.ts`** -- Core interfaces:
-- `UnifiedMessage` -- channel-agnostic inbound message (text, image, document, voice, sender info)
-- `UnifiedReply` -- channel-agnostic outbound reply (text, optional image/voice buffers)
-- `ChannelAdapter` -- interface every adapter implements: `start()`, `stop()`, `sendReply()`, `onMessage()`, optional `sendTyping()`, `sendStreamStart()`, `editStreamMessage()`
+1. **Channel Input** → Adapter converts platform message to `UnifiedMessage` (text, image, document, sender ID, timestamp)
+2. **Router** → Deduplication check (5-min window) → Rate limit check → Workflow keyword match (optional trigger flows)
+3. **Agent** → Fetch conversation history (last 35 messages) + summaries → Build smart context (related memories, commits, tasks)
+4. **Agent** → Call Claude with system prompt + context + message
+5. **Streaming** → Each tool call, intermediate response → Router emits to UI
+6. **Tool Execution** → Registry executes handler (e.g., `web_search`, `shell`, `send_email`)
+7. **Memory Save** → Agent saves assistant response + any learned facts to memories table + embeddings
+8. **Channel Output** → Reply sent via adapter (text, image, voice, buttons/interactive)
 
-**`telegram.ts`** -- grammY-based Telegram adapter:
-- Handles text, photos, documents (PDF + text files), voice messages, audio files, stickers, inline button callbacks
-- Voice/audio STT via Groq Whisper API
-- Commands: `/menu`, `/start`, `/tasks`, `/help`, `/summary`, `/search`, `/backup`, `/export`, `/opus`, `/dashboard`
-- Inline keyboard menu system with categories
-- Auto-detects bare URLs and wraps as "summarize this page"
-- Streaming support via message editing
-- Group chat support (responds only when @mentioned or replied to)
+**State Management:**
 
-**`whatsapp.ts`** -- Baileys-based WhatsApp adapter:
-- Pairing code authentication (no QR scan needed)
-- Auto-reconnect with retry limit
-- Security: only processes messages from whitelisted numbers
-
-### 4. Agent Layer (`src/agent/`)
-
-The AI processing core.
-
-**`agent.ts`** -- Main message handler:
-- Rate limiting (10 messages/minute/user)
-- Builds conversation history from DB
-- Injects vision content (images, PDFs) into message blocks
-- Detects `[OPUS]` tag for on-demand model upgrade (Sonnet -> Opus)
-- Detects complex queries for extended thinking mode
-- Searches knowledge base and injects results as document blocks (with citation support)
-- Multi-turn caching via `cache_control` on conversation breakpoints
-- Token counting with auto-trim when approaching context limit (85%)
-- **Agentic tool loop**: up to 15 iterations of tool_use -> tool_result -> continue
-- Parallel tool execution within each iteration
-- Streaming support via `client.messages.stream()`
-- Gemini fallback on Claude rate limits (429), overload (529), or auth errors (400/401). Tries Gemini 2.5 Flash, then 2.0 Flash.
-- API cost tracking per request
-- Auto-summarization trigger when unsummarized messages exceed threshold (40)
-- Voice-to-voice: auto-generates TTS reply via ElevenLabs when user sends voice message
-- Appends model/cost footer to display text (not saved to history)
-
-**`tools.ts`** -- Tool definitions and execution:
-- 35+ tools organized by category: shell/files, web/search, content generation, memory/scheduling, business (Monday.com, email), tasks, projects/deployment, knowledge base, workflows, calendar
-- Security layers: file path whitelist, SSRF URL validation, email domain whitelist
-- Local-only tools (`screenshot`, `manage_project`, `send_file`) are proxied to Mac in cloud mode via HTTP
-- Media side-channel: per-request `Map` prevents cross-user image/voice leakage
-- `code_agent` tool: spawns Claude Code CLI as a subprocess for full development workflows
-- `auto_improve` tool: reads/edits AlonBot's own source code with auto-commit
-- `executeWorkflowActions()` for workflow engine
-
-**`system-prompt.ts`** -- Dynamic system prompt builder:
-- Static part (cached via `cache_control`): bot identity, business context, tool documentation, behavior rules, security instructions
-- Dynamic part (per-request): current datetime, quiet hours/Shabbat detection, relevant memories, conversation summaries, loaded skills
-- Returns `TextBlockParam[]` for optimal prompt caching
-
-**`memory.ts`** -- Memory system:
-- **Messages**: save/retrieve conversation history with configurable context limit (20 messages)
-- **Memories**: typed (fact/preference/event/pattern/relationship), categorized, with importance scores (1-10)
-- **Retrieval**: multi-strategy -- high-importance, recently-accessed, keyword search, vector semantic search (cosine distance < 1.2), category detection, general fallback
-- **Embeddings**: async embedding via Gemini, stored in sqlite-vec virtual table
-- **Conversation summaries**: stored after 40+ unsummarized messages, via Batch API (50% cheaper)
-- **Maintenance**: daily decay (reduce importance of untouched memories after 60 days), delete stale low-importance events, consolidate near-duplicates
-
-**`knowledge.ts`** -- RAG knowledge base:
-- Ingest URLs (HTML stripping) and PDFs (text extraction via Gemini)
-- Text chunking with overlap (800 chars, 100 char overlap)
-- Vector embeddings via Gemini embedding model
-- Semantic search with distance threshold filtering (< 1.3)
-- CRUD management of documents and chunks
-
-**`workflows.ts`** -- Automation engine:
-- Triggers: keyword (substring match in message), cron (time-based), event
-- Actions: send_message, add_task, send_email, remember, set_reminder
-- Keyword workflows fire asynchronously on incoming messages (don't block response)
-- Cron workflows checked every minute from `src/index.ts`
-
-**`batch.ts`** -- Anthropic Batch API integration:
-- Submits async batch jobs (50% cost savings)
-- Polls pending batches every 5 minutes
-- Currently used for conversation summarization
-- Processes results by job type with extensible handler pattern
-
-### 5. Cron Layer (`src/cron/scheduler.ts`)
-
-DB-driven cron job system:
-- Jobs stored in `cron_jobs` table
-- Supports both message-type and script-type jobs (JSON payload with `type: 'script'`)
-- Live registration: new cron jobs start immediately without restart
-- All jobs use Israel timezone (`Asia/Jerusalem`)
-
-### 6. Skills Layer (`src/skills/loader.ts`)
-
-Markdown-based skill definitions:
-- Reads `.md` files from `skills/` directory
-- Extracts name (from `# heading`) and description (from `> blockquote` or first paragraph)
-- Injected into system prompt as available capabilities
-
-### 7. Utils Layer (`src/utils/`)
-
-**`config.ts`** -- Environment variable loading via dotenv. Single config object with all API keys, allowed users, mode, paths.
-
-**`db.ts`** -- SQLite database initialization:
-- Uses better-sqlite3 (synchronous API) with WAL mode
-- Loads sqlite-vec extension for vector search
-- Creates all tables on startup (messages, memories, memory_vectors, conversation_summaries, cron_jobs, api_usage, tasks, scheduled_messages, tool_usage, knowledge_docs, knowledge_chunks, knowledge_vectors, batch_jobs, workflows)
-- Handles migration from legacy `facts` table to `memories`
-
-**`embeddings.ts`** -- Gemini embedding API wrapper:
-- Model: `gemini-embedding-001`
-- Dimension: 768
-- Returns `Float32Array` for sqlite-vec storage
-
-## Data Flow: Message In -> Response Out
-
-```
-User sends message (Telegram/WhatsApp/Web)
-       |
-       v
-Channel Adapter normalizes to UnifiedMessage
-       |
-       v
-Router.registerAdapter callback fires
-  |-- Keyword workflows triggered (async, non-blocking)
-  |-- Streaming setup (if adapter supports it)
-  |-- Typing indicator started
-       |
-       v
-agent.handleMessage(msg, onStream?)
-  |-- Rate limit check
-  |-- Save user message to DB
-  |-- Load conversation history from DB
-  |-- Attach image/PDF/document if present
-  |-- Detect [OPUS] tag -> upgrade model
-  |-- Build system prompt (static cached + dynamic)
-  |     |-- Load relevant memories (multi-strategy retrieval)
-  |     |-- Load recent summaries
-  |     |-- Load skills
-  |-- Search knowledge base -> inject as document blocks
-  |-- Count tokens, auto-trim if near limit
-  |-- Call Claude API (streaming or sync)
-  |     |
-  |     v
-  |   Claude responds with text and/or tool_use blocks
-  |     |
-  |     v  (loop up to 15 iterations)
-  |   Execute tools in parallel
-  |   Log tool usage to DB
-  |   Feed tool_results back to Claude
-  |   Claude responds again
-  |     |
-  |     v (stop_reason != 'tool_use')
-  |   Extract final text response
-  |-- On Claude error (429/529): fallback to Gemini
-  |-- Track API usage costs in DB
-  |-- Save assistant response to DB
-  |-- Append model/cost footer (display only)
-  |-- Trigger auto-summarize if threshold reached (batch)
-  |-- Collect media (images/voice) from tool calls
-  |-- Auto-TTS if user sent voice message
-       |
-       v
-Router sends reply via adapter
-  |-- If streaming: final edit of stream message
-  |-- Send media (image/voice) separately
-  |-- Chunk long text (4000 char limit per message)
-       |
-       v
-User receives response
-```
+- **Per-user state:** Conversation history in DB (all roles/content persisted via `saveMessage()`)
+- **Agent state:** Rate limit map (in-memory), model catalog (built at startup)
+- **System state:** Tool registry (loaded at startup), cron jobs (active task map), adapters (router map)
+- **Cross-request state:** Media queue (per `requestId`), pending interactive messages
 
 ## Key Abstractions
 
-### Interfaces
+**UnifiedMessage / UnifiedReply:**
+- Purpose: Channel-agnostic message envelope (handles text, image, document, voice, buttons)
+- Examples: `src/channels/types.ts` defines interface
+- Pattern: Adapter implements `ChannelAdapter`, converts to/from platform-specific format
 
-- `UnifiedMessage` -- normalized inbound message across all channels
-- `UnifiedReply` -- normalized outbound reply (text + optional image/voice)
-- `ChannelAdapter` -- contract for chat platform adapters
-- `Memory` -- typed memory record with importance, category, access tracking
-- `Workflow` / `WorkflowAction` -- automation trigger-action pairs
-- `Skill` -- markdown-based capability description
-- `StreamCallback` -- `(text: string, toolName?: string) => void` for streaming UI updates
+**ToolHandler:**
+- Purpose: Plugin interface for tools
+- Examples: 40 handlers in `src/tools/handlers/` (e.g., `web-search.ts`, `send-voice.ts`, `claude-code.ts`)
+- Pattern: Default export implements `{ name, definition (Anthropic.Tool), schema (Zod), execute, localOnly? }`
 
-### Security Model
+**Memory (Vector + Summaries):**
+- Purpose: Semantic + factual context retrieval
+- Examples: `src/agent/memory.ts` — `getHistory()`, `getSmartContext()`, `indexDocumentToMemory()`
+- Pattern: Embeddings via `sqlite-vec`, importance ranking, temporal decay
 
-- **User whitelist**: `ALLOWED_TELEGRAM` and `ALLOWED_WHATSAPP` env vars restrict who can interact
-- **File path whitelist**: only `/Users/oakhome/...`, `/tmp/alonbot-*`, `/app/workspace/`
-- **Blocked file patterns**: `.env`, `.ssh/`, `credentials`, shell configs
-- **SSRF prevention**: URL validation blocks localhost, private IPs, non-HTTP protocols
-- **Email whitelist**: only approved domains and addresses
-- **Prompt injection defense**: system prompt instructs to ignore instructions from tool outputs
-- **Local-only tools**: `screenshot`, `manage_project`, `send_file` only run on local Mac
-- **Rate limiting**: 10 messages/minute/user
-- **Message truncation**: 4000 char max input
+**Workspace Mapping:**
+- Purpose: Group leads/sources by business unit (Dekel retirement coaching vs. Alon.dev)
+- Examples: `src/gateway/followup-engine.ts:workspaceSources()`, `src/gateway/server.ts:getTierPrices()`
+- Pattern: `source` (string) → `workspace` (string) for routing follow-ups, lead campaigns
 
 ## Entry Points
 
-1. **Main process** (`src/index.ts`): starts Express server, Telegram polling (cloud), WhatsApp (local), all cron jobs
-2. **Express server** (`src/gateway/server.ts`): HTTP endpoints for health, dashboard, web chat, tool proxy
-3. **Cron jobs** (in `src/index.ts`): daily brief (08:00), overdue tasks (18:00), weekly summary (Sun 09:00), cost alert (21:00), scheduled messages (every minute), workflow engine (every minute), batch polling (every 5 min), memory maintenance (03:00), DB backup (02:00)
-4. **DB-driven cron** (`src/cron/scheduler.ts`): user-created reminders and scripts loaded from `cron_jobs` table
+**Main Server (index.ts):**
+- Location: `src/index.ts`
+- Triggers: App startup (npm start / tsx watch)
+- Responsibilities: Initialize DB + migrations, load tools, register adapters (Telegram + WhatsApp), start Express, schedule cron jobs, start smart daily brief
+
+**Telegram Webhook / Polling:**
+- Location: `src/channels/telegram.ts` + `src/gateway/server.ts:/telegram-webhook`
+- Triggers: Cloud mode = incoming webhook (Meta Cloud API retry-safe), Local mode = polling
+- Responsibilities: Parse message, call router, send reply
+
+**WhatsApp Cloud Webhook:**
+- Location: `src/channels/whatsapp-cloud.ts` + `src/gateway/server.ts:/whatsapp-cloud-webhook`
+- Triggers: Incoming message event from Meta
+- Responsibilities: Verify signature, extract message/button/list response, call router
+
+**Dashboard API Endpoints:**
+- Location: `src/gateway/server.ts` (70+ endpoints)
+- Triggers: Browser/PWA requests
+- Responsibilities: Lead management, conversation view, cron job editor, flow builder, analytics
+
+**Cron Job Execution:**
+- Location: `src/cron/scheduler.ts` + node-cron schedule
+- Triggers: Time-based (cron expression, timezone: Asia/Jerusalem)
+- Responsibilities: Fire scheduled message or execute script (with shell blocklist validation)
+
+## Error Handling
+
+**Strategy:** Graceful degradation with fallback models and detailed logging
+
+**Patterns:**
+- **Rate Limit:** Return user-facing message "יותר מדי הודעות" (agent.ts:71)
+- **Claude 429 (rate limit):** Retry with `withRetry()` wrapper, fallback to free models (Gemini, etc.)
+- **Tool Execution:** Catch + return error string to Claude (auto-recovery in next turn)
+- **Webhook Signature:** Validate, return 401 if invalid (server.ts)
+- **Local Tool Unavailable:** Return "Error: Mac is offline" (registry.ts:72)
+- **DB Access:** Best-effort updates (e.g., lead tier assignment, error swallowed if DB fails)
+- **Script Execution:** Shell command checked against blocklist (shell-blocklist.ts), blocked with explanation
+
+## Cross-Cutting Concerns
+
+**Logging:** Pino logger (per module, `createLogger('module-name')`) — outputs to stdout, no file rotation
+
+**Validation:** Zod schemas optional on tool inputs; Claude API schemas enforce shape
+
+**Authentication:**
+- **Dashboard/PWA:** `x-api-secret` header (env var `ALONBOT_SECRET`)
+- **Webhook:** Signature verification (Telegram: bot token implicit, WhatsApp: Meta X-Hub-Signature)
+- **Local tool proxy:** Bearer token in Authorization header (env var `LOCAL_API_SECRET`)
+
+**Security:**
+- **Shell execution:** Whitelist-based blocklist (src/utils/shell-blocklist.ts), blocks rm/mv/curl/code-injections
+- **Path access:** Restricted to config.dataDir, no ../../../ traversal allowed (sanitize.ts)
+- **Email:** Whitelist of allowed recipients (src/tools/handlers/send-email.ts)
+- **Secrets:** .env never exposed, API keys only passed via headers or config
+
+**Timezone:** All cron jobs + DND logic use Asia/Jerusalem (Israel time)
+
+**Mode (Local vs. Cloud):**
+- **Local:** WhatsApp Baileys (QR scan), tool execution on Mac (native), tunnel to Render for polling
+- **Cloud:** WhatsApp Cloud API + Telegram webhook, tool proxying to local Mac, polling-safe deduplication
+
+---
+
+*Architecture analysis: 2026-03-26*

@@ -9,7 +9,7 @@ import { setupGitAuth } from './utils/git-auth.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
 import { executeWorkflowActions } from './agent/tools.js';
 import { loadTools } from './tools/registry.js';
-import { db } from './utils/db.js';
+import { db, backupLeads } from './utils/db.js';
 import { runMigrations } from './utils/migrate.js';
 import cron from 'node-cron';
 import { createLogger } from './utils/logger.js';
@@ -31,7 +31,7 @@ function isDND(): boolean {
   return hour >= 23 || hour < 7;
 }
 
-log.info({ mode: config.mode, startedAt: new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' }) }, 'AlonBot starting');
+log.info({ mode: config.mode, startedAt: new Date().toISOString().slice(0, 19).replace('T', ' ') + ' UTC' }, 'AlonBot starting');
 
 let telegram: ReturnType<typeof createTelegramAdapter> | null = null;
 
@@ -157,8 +157,14 @@ cron.schedule('0 21 * * *', async () => {
 cron.schedule('* * * * *', async () => {
   if (config.mode !== 'cloud') return;
   try {
-    // Use Israel time (sv-SE locale gives YYYY-MM-DD HH:mm format)
-    const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).slice(0, 16);
+    // Israel time for scheduled message comparison (YYYY-MM-DD HH:MM format)
+    // We construct a Date in Israel timezone via en-US locale parse, then format as ISO-like string.
+    const israelNow = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem' }));
+    const now = israelNow.getFullYear()
+      + '-' + String(israelNow.getMonth() + 1).padStart(2, '0')
+      + '-' + String(israelNow.getDate()).padStart(2, '0')
+      + ' ' + String(israelNow.getHours()).padStart(2, '0')
+      + ':' + String(israelNow.getMinutes()).padStart(2, '0');
     const pending = db.prepare(
       "SELECT * FROM scheduled_messages WHERE sent = 0 AND send_at <= ?"
     ).all(now) as any[];
@@ -194,6 +200,11 @@ cron.schedule('0 2 * * *', async () => {
   } catch (e: any) {
     log.error({ err: e.message }, 'DB backup failed');
   }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Daily leads JSON backup (3am) — easy to recover individual records
+cron.schedule('0 3 * * *', () => {
+  backupLeads();
 }, { timezone: 'Asia/Jerusalem' });
 
 // Workflow Engine — check cron-triggered workflows every minute
@@ -353,7 +364,7 @@ cron.schedule('*/5 * * * *', async () => {
       try {
         const phoneData = JSON.parse(phoneCol?.value || '{}');
         phone = phoneData.phone || phoneCol?.text || '';
-      } catch { phone = phoneCol?.text || ''; }
+      } catch (e) { log.debug({ err: (e as Error).message }, 'phone JSON parse failed'); phone = phoneCol?.text || ''; }
 
       if (!phone) continue;
       // Normalize phone
@@ -387,7 +398,7 @@ cron.schedule('*/5 * * * *', async () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': mondayKey },
         body: JSON.stringify({ query: updateQuery }),
-      }).catch(() => {});
+      }).catch((e: any) => { log.warn({ err: e.message, itemId: item.id }, 'Monday status update failed'); });
     }
   } catch (e: any) {
     log.error({ err: e.message }, 'alon.dev leads check failed');
@@ -421,6 +432,6 @@ process.on('unhandledRejection', (err: any) => {
 process.on('SIGINT', async () => {
   log.info('shutting down');
   if (telegram && config.mode === 'cloud') await telegram.stop();
-  try { db.close(); } catch { /* graceful shutdown */ }
+  try { db.close(); } catch (e) { log.warn({ err: (e as Error).message }, 'DB close on shutdown failed'); }
   process.exit(0);
 });

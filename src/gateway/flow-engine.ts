@@ -1,4 +1,5 @@
 import { db } from '../utils/db.js';
+import { LEAD_STATUS } from '../utils/lead-status.js';
 import { createLogger } from '../utils/logger.js';
 import { config } from '../utils/config.js';
 
@@ -145,7 +146,7 @@ export function seedExampleFlows() {
     { type: 'send_message', params: { message: 'היי {name}! 👋 תודה שפנית אלינו.\nאני יעל, העוזרת הדיגיטלית של Alon.dev — אשמח לעזור לך.' }, delay_ms: 0 },
     { type: 'send_message', params: { message: 'ב-48 שעות אני בונה אתר מקצועי ומותאם אישית לעסק שלך.\n\nמה סוג העסק שלך? 🏪' }, delay_ms: 3000 },
     { type: 'add_tag', params: { tag: 'welcome_sent' }, delay_ms: 0 },
-    { type: 'update_status', params: { status: 'contacted' }, delay_ms: 0 },
+    { type: 'update_status', params: { status: LEAD_STATUS.CONTACTED }, delay_ms: 0 },
   ];
   db.prepare('INSERT INTO chatbot_flows (name, trigger_type, trigger_value, steps) VALUES (?, ?, ?, ?)').run(
     '👋 קבלת פנים לליד חדש', 'new_lead', '', JSON.stringify(welcomeSteps)

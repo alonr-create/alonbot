@@ -1,218 +1,292 @@
-# AlonBot Codebase Concerns
+# Codebase Concerns
 
-Analysis date: 2026-03-07
-Codebase: ~4,825 lines TypeScript across 19 source files
+**Analysis Date:** 2026-03-26
+
+## Tech Debt
+
+**Swallowed Exception Patterns:**
+- Issue: 30+ catch blocks use empty comments or silent logging without recovery
+- Files: `src/gateway/server.ts` (28 instances), `src/agent/agent.ts` (6 instances), `src/index.ts` (2 instances), `src/channels/whatsapp-cloud.ts`
+- Impact: Silent failures make debugging hard; API errors (e.g., Monday.com, WhatsApp) fail without user notification. Abandoned cart/review request failures are logged but don't alert the user.
+- Fix approach: Differentiate between "expected transient errors" (log + continue) and "unexpected failures" (log + notify user). Add error telemetry to understand which catch blocks fire most.
+
+**Dynamic SQL String Interpolation (Potential SQL Injection):**
+- Issue: SQL prepared statements mix parameters with inline template literals for dynamic column lists and IN clauses
+- Files:
+  - `src/gateway/server.ts` lines 1212, 1385, 1482 (UPDATE with dynamic column names)
+  - `src/gateway/server.ts` lines 909, 914, 940, 946, 949, 961 (IN clause with dynamic sources)
+  - `src/gateway/followup-engine.ts` lines 324, 428 (date offset calculation in SQL)
+- Impact: If column names or source values come from untrusted input, SQL injection is possible. Currently safe because column names are hardcoded, but pattern is fragile.
+- Fix approach: Build column update maps as objects validated at compile time. For IN clauses, validate sources against whitelist before constructing placeholder string.
+- Example risk: `db.prepare(`UPDATE leads SET next_followup = date('now', '+${days} days')`).run()` — if `days` is user input without validation, attacker can inject SQL.
+
+**Type Coercion with `any` Type:**
+- Issue: 12+ database queries cast results to `any[]` or `any` without validation
+- Files: `src/gateway/server.ts`, `src/agent/agent.ts`, `src/index.ts` (cron jobs)
+- Impact: Missing properties assumed to exist cause null reference errors at runtime. Examples:
+  - Line 95-97 (memory.ts): `SELECT ... user_replies, last_message` — if column is null, code may crash
+  - Line 369 (agent.ts): `db.prepare(...).run(block.name, toolSuccess, toolDuration)` — assumes `block.name`, `block.type` exist
+- Fix approach: Add TypeScript interfaces for all DB result types. Use `as const` assertions on table schemas.
+
+**Unbounded Cron Job Count:**
+- Issue: `src/cron/scheduler.ts` loads all cron jobs from DB and starts them without limit
+- Files: `src/cron/scheduler.ts`, `src/index.ts` (lines 80-81)
+- Impact: If a user adds 1000+ cron jobs, Node.js will hit memory limits or listener exhaustion (max 10 listeners warning).
+- Fix approach: Cap at 100 active crons per workspace. Archive old/disabled crons. Add cron job health check.
+
+**Timezone Handling Fragility:**
+- Issue: Multiple mismatched timezone conversion patterns:
+  - `new Date().toLocaleString('en-US', { timeZone: 'Asia/Jerusalem', ...})` creates date string, then re-parse to Date (lines 30, 229, 292-293)
+  - `sv-SE` locale for YYYY-MM-DD HH:mm format (line 161) is fragile — relies on undocumented behavior
+  - cron.js library uses local system time, not Israel time consistently
+- Files: `src/index.ts` (lines 30, 161, 229, 292-293), `src/gateway/router.ts`, `src/utils/db.ts`
+- Impact: DST transitions can cause scheduled messages to run at wrong time. Cross-timezone bugs (user in US, bot in Israel cloud).
+- Fix approach: Use a timezone library (date-fns-tz or Temporal API) throughout. Remove all `toLocaleString` conversions.
+
+**Vector Embedding Blocking:**
+- Issue: Memory embeddings (`embedUnembeddedMemories`) run in background at startup (line 105-107) but no timeout or skip if embeddings service is down
+- Files: `src/index.ts`, `src/agent/memory.ts`
+- Impact: If embedding API (via local endpoint) fails, it doesn't block startup but causes silent memory degradation. New memories won't be searchable.
+- Fix approach: Add 10-second timeout, skip if endpoint unreachable, warn user. Schedule retry every 5 minutes instead of fire-and-forget.
+
+**Rate Limiting in Memory:**
+- Issue: Rate limit map (`rateLimitMap`) stored in memory; resets on process restart
+- Files: `src/agent/agent.ts` (lines 43-64)
+- Impact: In cloud deployment with multiple instances, rate limiting is per-instance. User can bypass limit by sending to multiple instances.
+- Fix approach: Move rate limiting to Redis or DB. Include instance ID in rate limit key for cloud mode.
+
+## Known Bugs
+
+**Duplicate WAMID Processing Across Instances:**
+- Symptoms: Same WhatsApp message processed twice on cloud deployment
+- Files: `src/channels/whatsapp-cloud.ts` (lines 107-128)
+- Trigger: Webhook forwarding middleware + direct Meta webhook both receive same message
+- Current mitigation: 10-minute dedup window at adapter level
+- Workaround: Disable forwarding middleware if using direct Meta webhooks
+
+**Checkout Abandoned Cart Reminders Not Sent:**
+- Symptoms: Customer never receives "you forgot to checkout" message
+- Files: `src/index.ts` (lines 226-256)
+- Trigger: Cloud mode check at line 227 exits early if local mode; WhatsApp adapter not started in local mode
+- Workaround: Run in cloud mode (MODE=cloud) to enable abandoned cart cron
+
+**Memory Vector Search Fails Silently on Cold Start:**
+- Symptoms: Memory search returns no results when bot first starts
+- Files: `src/agent/memory.ts`, `src/utils/embeddings.ts`
+- Trigger: `embedUnembeddedMemories()` hasn't finished; vector tables are empty
+- Workaround: Wait 30 seconds after startup before querying memory
+- Fix: Add startup wait gate for memory search
+
+**Telegram Webhook 409 Conflicts on Rapid Deploys:**
+- Symptoms: "Conflict: terminated bot" error after redeployment
+- Files: `src/channels/telegram.ts`, `src/index.ts`
+- Trigger: Old Telegram connection still active when new instance starts; both try to register webhook
+- Workaround: Stagger deploys by 30+ seconds; use graceful shutdown
+- Fix: Implement webhook state machine to handle concurrent resets
+
+## Security Considerations
+
+**API Key Exposure in Error Messages:**
+- Risk: If external API calls fail, response bodies may contain tokens
+- Files: `src/channels/whatsapp-cloud.ts` (line 35), `src/gateway/server.ts` (multiple)
+- Current mitigation: Logs are kept in container; .env not committed
+- Recommendation: Add response sanitizer for API errors; never log full response body in JSON
+
+**Baileys Session File Not Encrypted:**
+- Risk: Session file at `/data/baileys_alonbot_session/` contains WhatsApp authentication credentials
+- Files: `src/channels/whatsapp.ts`, backup in `src/utils/db.ts` (lines 182-197)
+- Current mitigation: Local mode only; file not exposed via HTTP
+- Recommendation: Encrypt session file at rest. Rotate session weekly.
+
+**Local API Secret Generated Randomly if Missing:**
+- Risk: If `LOCAL_API_SECRET` not set, bot generates random secret (line 21 config.ts)
+- Files: `src/utils/config.ts`, `src/index.ts` (abandoned cart, review cron use `config.localApiSecret`)
+- Impact: Local tools (shell, camera) callable with any secret if process is restarted
+- Fix: Require `LOCAL_API_SECRET` to be set; fail startup if missing
+
+**Dashboard Token Reuse (DASHBOARD_SECRET = LOCAL_API_SECRET):**
+- Risk: Single token protects both API calls and dashboard access
+- Files: `src/utils/config.ts` (line 22), `src/gateway/server.ts` (wa-manager, wa-inbox routes)
+- Impact: Compromised API secret gives full dashboard access
+- Fix: Separate tokens with different permissions
+
+**No CSRF Protection on Form Endpoints:**
+- Risk: POST endpoints (save-lead, update-template, etc.) accept body without CSRF token
+- Files: `src/gateway/server.ts` (lines 1200+)
+- Current mitigation: Dashboard accessed locally or with secret token
+- Recommendation: Add token validation to all state-changing endpoints
+
+## Performance Bottlenecks
+
+**Memory Queries Unbounded by Default:**
+- Problem: `getSmartContext()` and memory search return up to 30-35 memories with no pagination
+- Files: `src/agent/memory.ts` (lines 57, 73, CONTEXT_LIMIT = 35)
+- Cause: Each context window search scans full memory table
+- Impact: With 10k+ memories, queries slow down. Token usage increases.
+- Improvement path: Add indexing by date + importance; paginate at 10 memories; implement memory decay/archiving
+
+**Cron Job Deduplication Full Scan:**
+- Problem: `matchesCronNow()` iterates workflows table every minute
+- Files: `src/index.ts` (lines 199-223)
+- Cause: No indexed lookups; validates every row's cron expression
+- Impact: 100+ workflows cause noticeable delay
+- Improvement: Index by trigger_type; cache validated expressions
+
+**Message History Load Per Request:**
+- Problem: `getHistory()` loads last N messages on every user message
+- Files: `src/agent/memory.ts` (line 107), `src/agent/agent.ts`
+- Cause: No message cache; repeated DB hits
+- Impact: User with 10k messages experiences 200ms latency on each request
+- Improvement: Cache last 30 messages per user; invalidate on new message
+
+**Vector Embedding API Network Call:**
+- Problem: Every upsert to memories table triggers HTTP call to embedding service
+- Files: `src/agent/memory.ts`, `src/utils/embeddings.ts`
+- Cause: Sync embedding on insert (non-batched)
+- Impact: Memory save takes 500-2000ms; blocks message flow
+- Improvement: Batch embeddings; run async; use local model if available
+
+**Monday.com API Polling Every 5 Minutes:**
+- Problem: Two separate crons query Monday leads (lines 332-395, followup-engine.ts)
+- Files: `src/index.ts`, `src/gateway/followup-engine.ts`
+- Cause: No dedup; both poll same board
+- Impact: 2 API calls per 5 minutes; Monday rate limits
+- Improvement: Single consolidated leads poller; cache board state
+
+## Fragile Areas
+
+**WhatsApp Cloud API Template System:**
+- Files: `src/gateway/followup-engine.ts` (lines 129-300), `src/gateway/server.ts` (template handlers)
+- Why fragile: Templates tied to hardcoded Meta template IDs (line 129). If template name changes in Meta, mapping breaks. No fallback to text messages.
+- Safe modification: Validate template ID exists in Meta before sending. Add SMS fallback. Store template mapping in DB, not hardcoded.
+- Test coverage: No tests for template send failure. No tests for text fallback.
+
+**Babel/Evolution API Dual Mode:**
+- Files: `src/channels/whatsapp.ts`, `src/channels/whatsapp-cloud.ts`, `src/index.ts` (lines 56-78)
+- Why fragile: 3 WhatsApp adapters (Baileys, Cloud API, Evolution API) can be active simultaneously. Message routing in `router.ts` picks first matching adapter; if two are registered, behavior is undefined.
+- Safe modification: Add explicit channel selection in config. Validate only one WhatsApp adapter is active at startup.
+- Test coverage: No integration tests for adapter conflicts
+
+**Lead Status Enum Not Validated:**
+- Files: `src/gateway/followup-engine.ts`, `src/gateway/server.ts` (lead_status column)
+- Why fragile: `lead_status` values (`new`, `contacted`, `booked`, `closed`, etc.) hardcoded in 15+ places. No enum. Typo in one place silently breaks filtering.
+- Safe modification: Create TS enum for lead statuses. Add DB constraint CHECK(lead_status IN (...)).
+- Test coverage: No tests for invalid status values
+
+**Timezone Conversion in Cron Trigger:**
+- Files: `src/index.ts` (line 292-315 matchesCronNow)
+- Why fragile: Custom cron parser doesn't match node-cron library exactly. Line 307 has step logic that may miss matches around DST transitions.
+- Safe modification: Use node-cron's validation + explicit Israel timezone. Add unit tests for DST edge cases.
+- Test coverage: No tests for DST, leap seconds, or rare cron patterns
+
+## Scaling Limits
+
+**SQLite Database Locks on High Concurrency:**
+- Current capacity: SQLite with WAL mode supports ~10-20 concurrent writers
+- Limit: If bot processes 50+ messages/minute from multiple channels, write lock contention appears
+- Scaling path: Migrate to PostgreSQL; add connection pooling (PgBouncer)
+
+**Memory Cache Size (Rate Limiting + Dedup Maps):**
+- Current capacity: Rate limit map holds 1000 users × 10 timestamps = 10KB; dedup maps hold 1000 messages = 50KB
+- Limit: With 5 instances on cloud, each holds separate cache. No cluster-wide coordination.
+- Scaling path: Move rate limiting and dedup to Redis. Size: 1GB Redis enough for 10M users at 10 timestamps each.
+
+**Tool Execution Queue (Single-threaded Node.js):**
+- Current capacity: TOOL_TIMEOUT_MS = 30 seconds per tool; blocking tools (shell, camera) block message queue
+- Limit: If 3+ users request simultaneous tools, others wait 30+ seconds
+- Scaling path: Offload long-running tools to separate worker pool. Use piscina or Bull job queue.
+
+**Vector Database (sqlite-vec):**
+- Current capacity: sqlite-vec fits ~1M embeddings in SQLite
+- Limit: Beyond 100k memories, search becomes slow (no GPU acceleration)
+- Scaling path: Switch to Pinecone or Weaviate; migrate memories to cloud vector DB
+
+**Telegram Polling (Local Mode Only):**
+- Current capacity: Single polling loop handles ~100 messages/second
+- Limit: If bot used by 1000+ users, polling becomes a bottleneck
+- Scaling path: Use cloud mode with webhooks (not polling)
+
+## Dependencies at Risk
+
+**sqlite-vec@0.1.7-alpha:**
+- Risk: Alpha version; API may change; no v1.0 release
+- Impact: Embedding queries may break on update
+- Migration plan: Monitor github.com/asg017/sqlite-vec for v1.0. Test upgrades in staging first. Consider backup: use external vector DB (Pinecone) + keep embeddings in sqlite-vec for local fallback.
+
+**@whiskeysockets/baileys@6.7.21:**
+- Risk: Maintains unofficial WhatsApp reverse-engineered protocol; breaks on WhatsApp client updates
+- Impact: Local WhatsApp mode may stop working without notice
+- Migration plan: Already have Cloud API as primary. Keep Baileys as fallback only. Monitor releases weekly.
+
+**grammy@1.35.0:**
+- Risk: Telegram bot framework; API stable but occasional breaking changes
+- Impact: Telegram adapter may need updates on Telegram API changes
+- Migration plan: Lock version in package-lock.json. Test Telegram updates in staging. Subscribe to grammy releases.
+
+**node-cron@4.0.7:**
+- Risk: Custom cron scheduler; not POSIX-compliant
+- Impact: Rare cron patterns (e.g., `*/15 * * * 1-5`) may not work as expected
+- Migration plan: Add unit tests for all cron expressions used. Consider switching to croner library.
+
+## Missing Critical Features
+
+**No Persistent Job Queue:**
+- Problem: Cron jobs run in-memory only. If bot crashes, running job is lost.
+- Blocks: Reliable scheduled sends, long-running workflows
+- Priority: High (affects business-critical follow-ups)
+
+**No Message Delivery Receipts:**
+- Problem: No tracking of whether sent WhatsApp/Telegram messages were delivered
+- Blocks: Guaranteed message delivery, retry on failed sends
+- Priority: High (customers may miss important messages)
+
+**No Backup/Recovery for Leads Database:**
+- Problem: Leads table has no point-in-time recovery
+- Blocks: Data recovery if leads table is corrupted
+- Priority: Medium (data loss risk)
+
+**No Multi-Workspace Role Isolation:**
+- Problem: All users with dashboard token see all workspaces
+- Blocks: Multi-tenant usage, per-workspace access control
+- Priority: Medium
+
+**No Conversation Threading:**
+- Problem: All messages from user stored flat; no thread grouping
+- Blocks: Better context management for long conversations
+- Priority: Low
+
+## Test Coverage Gaps
+
+**WhatsApp Message Types Not Covered:**
+- What's not tested: voice messages, images, documents, location, contacts
+- Files: `src/channels/whatsapp-cloud.ts` (processIncomingMessage), `src/channels/whatsapp.ts`
+- Risk: Unhandled message type causes null reference or incomplete processing
+- Priority: High (affects customer communication)
+
+**Cron Expression Validation:**
+- What's not tested: DST transitions, rare patterns, invalid expressions
+- Files: `src/index.ts` (matchesCronNow function)
+- Risk: Scheduled messages run at wrong time or fail silently
+- Priority: High
+
+**Tool Execution Failure Handling:**
+- What's not tested: Tool timeout, network errors, partial failures
+- Files: `src/agent/agent.ts` (tool execution block)
+- Risk: Tool failures cascade; user gets generic "failed" message
+- Priority: Medium
+
+**Memory Search with Empty Index:**
+- What's not tested: Searching when vector index is empty/corrupt
+- Files: `src/agent/memory.ts`
+- Risk: Search crashes if sqlite-vec returns invalid data
+- Priority: Medium
+
+**Dashboard API Input Validation:**
+- What's not tested: Malformed JSON, oversized payloads, invalid enum values
+- Files: `src/gateway/server.ts` (all POST endpoints)
+- Risk: Invalid input causes 500 errors or corrupts DB
+- Priority: Medium
 
 ---
 
-## 1. CRITICAL: Security Concerns
-
-### 1.1 Shell Command Injection (CRITICAL)
-- **File**: `src/agent/tools.ts` line 280
-- The `shell` tool passes user-controlled input directly to `execSync()` with no sanitization or command whitelist. The AI model decides what to run, but a prompt injection attack (e.g., via web page content fed through `browse_url` or `scrape_site`) could trick the model into running arbitrary commands.
-- The `cron_script` tool (line 892-903) stores arbitrary shell commands in the database and executes them on schedule via `execSync()` in `src/cron/scheduler.ts` line 50.
-- **Impact**: Full system compromise on the host machine.
-- **Mitigation**: Add a command allowlist or sandboxing layer; at minimum, block destructive commands (`rm -rf`, `curl | sh`, etc.).
-
-### 1.2 SQL Injection via Dynamic Query Construction (HIGH)
-- **File**: `src/agent/tools.ts` line 592-596
-- The `api_costs` tool uses string interpolation to build SQL WHERE clauses: `` `WHERE ${where}` ``. While the `where` value currently comes from a fixed `periods` map, the pattern is fragile -- if the map is extended or refactored, injection becomes possible.
-- **File**: `src/channels/telegram.ts` line 254
-- The `/search` command uses `LIKE ?` with `%${query}%` -- properly parameterized, but the search term is user-controlled and not length-limited, allowing pattern-based DoS on the DB.
-- **File**: `src/channels/telegram.ts` line 284
-- The `/backup` command uses `db.exec(\`VACUUM INTO '${backupPath}'\`)` with string interpolation. While `backupPath` is server-generated, the pattern is risky.
-
-### 1.3 Dashboard Token Exposure (HIGH)
-- **File**: `src/gateway/server.ts` lines 213, 304, 314, 441
-- The `localApiSecret` is passed as a URL query parameter (`?token=...`) in multiple places including the dashboard URL, chat URL, and Telegram WebApp buttons. Query parameters are logged in server access logs, browser history, and can leak via Referrer headers.
-- The same token (`alonbot-secret-2026`) is used for both the cloud-local API bridge and the dashboard auth -- compromise of one compromises both.
-- **File**: `src/gateway/server.ts` line 70-77
-- The `dashAuth` middleware accepts the token from either `?token=` query param or `x-dashboard-token` header, but there's no rate limiting on auth failures.
-
-### 1.4 GITHUB_TOKEN in Shell Commands (HIGH)
-- **File**: `src/agent/tools.ts` lines 818-819, 857-858, 877-878, 940, 975, 990
-- `GITHUB_TOKEN` is embedded directly in git remote URLs via string interpolation: `https://${token}@github.com/...`. These URLs appear in shell output, git config, and error messages. If any tool output is shown to the user (and it is, via Telegram), the token could leak.
-
-### 1.5 Auto-Improve Tool: Self-Modifying Code (HIGH)
-- **File**: `src/agent/tools.ts` lines 906-956
-- The `auto_improve` tool allows the AI to read and modify its own source code, then auto-commits and pushes to GitHub. Combined with prompt injection risks, an attacker could modify the bot's behavior permanently through a crafted web page.
-
-### 1.6 No Input Validation on Tool Parameters (MEDIUM)
-- Most tool handlers trust input directly from the AI model without validation. For example:
-  - `monday_api` passes raw GraphQL queries (line 501-514)
-  - `send_email` sends HTML body without sanitization (line 557-558)
-  - `schedule_message` accepts arbitrary `send_at` strings (line 662)
-  - `code_agent` spawns processes with `--permission-mode bypassPermissions` (line 1075)
-
-### 1.7 SSRF Prevention Gaps (MEDIUM)
-- **File**: `src/agent/tools.ts` lines 52-68
-- The `isUrlAllowed()` function blocks common private IP ranges but misses:
-  - DNS rebinding attacks (host resolves to public IP initially, then to private)
-  - Cloud metadata endpoints (e.g., `http://169.254.169.254/` is blocked, but `http://metadata.google.internal/` is not)
-  - Octal/hex IP encoding (only decimal is checked)
-  - URL with credentials: `http://user:pass@internal-host/`
-
----
-
-## 2. Technical Debt
-
-### 2.1 God File: `src/agent/tools.ts` (1,212 lines)
-- This file contains all 35+ tool definitions AND all tool implementations in a single `switch` statement. Each tool case is 15-60 lines of business logic.
-- **Impact**: Hard to maintain, test, or review. Adding a tool requires modifying this massive file.
-- **Recommendation**: Extract each tool into its own module under `src/tools/` with a common interface, and use a registry pattern.
-
-### 2.2 Inline HTML in `src/gateway/server.ts` (521 lines)
-- The dashboard HTML (~180 lines) and chat HTML (~110 lines) are embedded as template literals inside the server file (lines 224-521).
-- **Impact**: Impossible to iterate on UI without touching backend code. No syntax highlighting, no formatting tools.
-- **Recommendation**: Move to separate `.html` files served statically or via a simple template engine.
-
-### 2.3 Duplicated HTML Stripping Logic
-- HTML-to-text stripping is copy-pasted in 4 places with slight variations:
-  - `src/agent/tools.ts` line 380-386 (`browse_url`)
-  - `src/agent/tools.ts` lines 1025-1031 (`scrape_site`)
-  - `src/agent/knowledge.ts` lines 97-103 (`ingestUrl`)
-  - No shared utility function exists.
-- **Recommendation**: Extract to `src/utils/html.ts`.
-
-### 2.4 Duplicated Deploy Logic
-- **File**: `src/agent/tools.ts` lines 841-889
-- The Vercel and Railway deploy branches are nearly identical (check repo, create if missing, push). ~25 lines duplicated.
-
-### 2.5 Silent Error Swallowing
-- 25+ `catch {}` blocks (empty catch with no logging) across the codebase:
-  - `src/agent/agent.ts` line 125, 183, 267, 353
-  - `src/agent/tools.ts` line 45, 65, 257, 575, 634, 1044, 1046, 1121, 1140, 1163
-  - `src/gateway/router.ts` line 57, 127
-  - `src/index.ts` line 242
-- **Impact**: Failures are invisible. Debugging production issues is very difficult.
-
-### 2.6 No Test Suite
-- Zero test files exist. No testing framework is configured.
-- Critical logic (path validation, URL validation, email whitelist, rate limiting, cron matching) has no automated tests.
-
----
-
-## 3. Performance Concerns
-
-### 3.1 Synchronous `execSync` Blocking the Event Loop (HIGH)
-- **File**: `src/agent/tools.ts` lines 280, 573, 654, 819, 858, 878, 911, 940, 967, 990
-- All `shell`, `manage_project`, `screenshot`, `create_github_repo`, `deploy_app`, `build_website`, and `auto_improve` tools use synchronous `execSync()`. While the bot is running a shell command (up to 30s timeout), the entire Node.js event loop is blocked -- no other messages can be processed, no cron jobs fire, no health checks respond.
-- The `code_agent` tool correctly uses `spawn()` (async), but all others block.
-- **Impact**: A slow git push or shell command freezes the entire bot for all users.
-- **Recommendation**: Replace with `child_process.exec()` (callback) or `util.promisify(exec)`.
-
-### 3.2 Embedding Every Memory on Save (MEDIUM)
-- **File**: `src/agent/memory.ts` lines 142-148
-- `saveMemory()` fires off an async embedding request (Gemini API call) for every memory saved. If the bot saves many memories in a burst, this creates a flood of API calls with no throttling.
-- The `embedUnembeddedMemories()` startup function (line 156-163) processes all unembedded memories sequentially with no concurrency limit -- could be slow on large backlogs.
-
-### 3.3 Memory Retrieval Does 5+ DB Queries Per Message (MEDIUM)
-- **File**: `src/agent/memory.ts` lines 183-241
-- `getRelevantMemories()` runs: high-importance query, recently-accessed query, N keyword queries (one per word, up to 5), vector search, category search, and general fallback. Each message triggers 7-10+ synchronous SQLite queries plus one async embedding API call.
-- Additionally, it updates `last_accessed` for every retrieved memory (line 236-238), causing write I/O on every read.
-
-### 3.4 No Connection Pooling for External APIs
-- Every `send_email` call creates a new SMTP transport (`createTransport()`), sends, then closes it (line 553-564). For repeated sends, this is wasteful.
-- Every Gemini, ElevenLabs, and Groq API call creates a new `fetch()` connection with no keep-alive pooling.
-
-### 3.5 pendingMediaMap Memory Leak Risk (LOW)
-- **File**: `src/agent/tools.ts` lines 14-29
-- If a request generates media but `collectMedia()` is never called (e.g., an exception occurs between media generation and collection), the buffer stays in the Map forever. Large images (~1-5MB each) could accumulate.
-- **Recommendation**: Add a TTL-based cleanup or use WeakRef.
-
-### 3.6 Rate Limit Map Never Shrinks Below Entry Count (LOW)
-- **File**: `src/agent/agent.ts` lines 48-69
-- The cleanup interval (every 10 minutes) removes empty entries but the Map itself can grow unboundedly if many unique user IDs appear. For a personal bot this is negligible, but worth noting.
-
----
-
-## 4. Fragile Areas
-
-### 4.1 Cron Matcher Is a Custom Implementation (HIGH)
-- **File**: `src/index.ts` lines 186-213
-- `matchesCronNow()` is a hand-written cron parser that handles `*`, `/`, `,`, and `-` syntax. It parses the Israel timezone by round-tripping through `toLocaleString()` → `new Date()` which is fragile across environments and DST transitions.
-- The `node-cron` library is already in use for the static schedules -- the custom matcher is only for workflow cron triggers. This dual approach creates inconsistency risk.
-- **Recommendation**: Use `node-cron.validate()` + `node-cron.schedule()` uniformly, or use a cron-matching library.
-
-### 4.2 Tight Coupling Between Tools and Global State
-- `pendingMediaMap` and `currentRequestId` in `src/agent/tools.ts` are module-level mutable state shared across requests. The request ID is set via `setCurrentRequestId()` before processing and must be collected via `collectMedia()` after -- this is a fragile implicit contract.
-- If two requests overlap (concurrent users), the `currentRequestId` could be overwritten before media is collected, causing media to be delivered to the wrong user.
-
-### 4.3 WhatsApp Adapter: Text-Only (MEDIUM)
-- **File**: `src/channels/whatsapp.ts` lines 82-84
-- Only `conversation` and `extendedTextMessage` are handled. Images, voice, documents, and other media types are silently dropped.
-
-### 4.4 Telegram /backup SQL Injection Vector
-- **File**: `src/channels/telegram.ts` line 284
-- `db.exec(\`VACUUM INTO '${backupPath}'\`)` -- while `backupPath` is generated from `Date.now()`, the pattern of using string interpolation in SQL is dangerous if ever refactored.
-
-### 4.5 System Prompt Size Growth
-- **File**: `src/agent/system-prompt.ts`
-- The static system prompt is ~176 lines of text. On every message, it concatenates: static prompt + memories (up to 25) + summaries (up to 5) + skills + time context. This grows the input token count continuously, increasing costs.
-
----
-
-## 5. Missing Features
-
-### 5.1 No Error Recovery / Retry Logic
-- External API calls (Gemini, ElevenLabs, Groq, Monday.com, Google Calendar) have no retry logic. A transient 500 or network timeout results in immediate failure.
-- The Gemini fallback in `agent.ts` catches Claude 429/529 errors, but other tools fail silently.
-
-### 5.2 No Structured Logging
-- All logging uses `console.log()` / `console.error()` / `console.warn()` with ad-hoc prefixes like `[Telegram]`, `[Tool]`, `[Cron]`. There is no structured logging, no log levels, no log rotation, no correlation IDs.
-- Pino is installed as a dependency but not used.
-
-### 5.3 No Graceful Shutdown for All Components
-- **File**: `src/index.ts` lines 239-244
-- `SIGINT` handler stops Telegram and closes DB, but does not:
-  - Stop cron jobs (they continue firing)
-  - Wait for in-flight message processing to complete
-  - Stop the Express server
-  - Stop WhatsApp adapter
-
-### 5.4 No Health Check for Dependencies
-- The `/health` endpoint (line 18-19) returns static `ok` regardless of whether the database, Telegram, or any API key is actually working. It does not check Claude API reachability or DB integrity.
-
-### 5.5 No DB Migrations System
-- **File**: `src/utils/db.ts`
-- Schema changes are handled via `CREATE TABLE IF NOT EXISTS` and ad-hoc migration blocks (lines 167-191). There is no version tracking or migration framework. Adding a column to an existing table requires manual ALTER TABLE statements.
-
-### 5.6 No Monitoring or Alerting
-- No Prometheus metrics, no error tracking (Sentry), no uptime monitoring beyond the basic health endpoint.
-- API cost tracking exists in the DB but there's no automated alert if spending exceeds a threshold (the 21:00 cron check in `index.ts` line 99-115 only checks $0.50/day -- no weekly or monthly caps).
-
-### 5.7 No Data Retention Policy
-- Messages, memories, tool usage, and API usage records grow indefinitely. There is no cleanup job for old messages, no archiving strategy, and no DB size monitoring.
-- The only cleanup is memory maintenance (decay + consolidation) which runs daily but only affects the `memories` table.
-
----
-
-## 6. Prioritized Recommendations
-
-### P0 -- Critical (do immediately)
-1. **Rotate all API keys** -- the `.env` file was readable during this analysis. Even though it's `.gitignore`d, verify no keys were committed in git history.
-2. **Add shell command sandboxing** -- at minimum, block known-dangerous patterns; ideally run in a container or use a restricted shell.
-3. **Separate dashboard auth from API bridge auth** -- use distinct secrets for distinct purposes.
-4. **Stop embedding GITHUB_TOKEN in git URLs** -- use credential helpers or environment-based auth.
-
-### P1 -- High (this sprint)
-5. **Replace `execSync` with async `exec`** throughout `tools.ts` to unblock the event loop.
-6. **Split `tools.ts`** into individual tool modules (~35 files of 30-50 lines each).
-7. **Add input validation** for tool parameters (length limits, type checks, sanitization).
-8. **Add basic test coverage** for security-critical functions: `isPathAllowed`, `isUrlAllowed`, `isEmailAllowed`, `matchesCronNow`.
-9. **Fix media isolation** -- the `currentRequestId` pattern is not concurrency-safe. Pass request context explicitly.
-
-### P2 -- Medium (next cycle)
-10. **Extract inline HTML** from `server.ts` into separate files.
-11. **Add structured logging** with pino (already a dependency).
-12. **Add retry logic** for external API calls with exponential backoff.
-13. **Implement proper graceful shutdown** that drains in-flight requests.
-14. **Add a DB migration system** (even a simple version-number approach).
-15. **De-duplicate** HTML stripping and deploy logic.
-
-### P3 -- Nice-to-have (backlog)
-16. **Add data retention policy** -- auto-archive messages older than 90 days.
-17. **Add monitoring** -- Prometheus metrics or at least structured error counts.
-18. **Improve health check** -- verify DB connectivity and API key validity.
-19. **Expand WhatsApp adapter** -- handle images, voice, documents.
-20. **Add rate limiting** to dashboard API endpoints.
+*Concerns audit: 2026-03-26*

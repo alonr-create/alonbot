@@ -4,6 +4,13 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('memory');
 
+// Cold start gate: vector search is skipped until initial embedding pass completes
+let embeddingsReady = false;
+
+export function isEmbeddingsReady(): boolean {
+  return embeddingsReady;
+}
+
 const CONTEXT_LIMIT = 35; // increased from 20 — better context retention
 
 // --- Types ---
@@ -201,11 +208,17 @@ async function embedMemory(memoryId: number, content: string) {
 
 export async function embedUnembeddedMemories() {
   const memories = stmtUnembeddedMemories.all() as Memory[];
-  if (memories.length === 0) return;
+  if (memories.length === 0) {
+    embeddingsReady = true;
+    log.info('embeddings ready (no unembedded memories)');
+    return;
+  }
   log.info({ count: memories.length }, 'found unembedded memories, processing');
   for (const m of memories) {
     await embedMemory(m.id, m.content);
   }
+  embeddingsReady = true;
+  log.info('embeddings ready (all memories embedded)');
 }
 
 // Category detection keywords
@@ -253,19 +266,23 @@ export async function getRelevantMemories(userMessage: string): Promise<Memory[]
     addUnique(stmtSearchMemories.all(`%${word.replace(/%/g, '\\%').replace(/_/g, '\\_')}%`) as Memory[]);
   }
 
-  // 4. Vector semantic search (if message is meaningful)
+  // 4. Vector semantic search (if message is meaningful and embeddings are ready)
   if (userMessage.length >= 3) {
-    try {
-      const queryEmbedding = await getEmbedding(userMessage);
-      const vectorResults = stmtVectorSearch.all(
-        Buffer.from(queryEmbedding.buffer),
-        10
-      ) as (Memory & { memory_id: number; distance: number })[];
-      // Only include results with reasonable similarity (cosine distance < 1.2)
-      addUnique(vectorResults.filter(r => r.distance < 1.2));
-    } catch (err: any) {
-      log.error({ err: err.message }, 'vector search failed');
-      // Fall back to keyword-only — don't block on embedding errors
+    if (!embeddingsReady) {
+      log.info('embeddings not ready yet, skipping vector search');
+    } else {
+      try {
+        const queryEmbedding = await getEmbedding(userMessage);
+        const vectorResults = stmtVectorSearch.all(
+          Buffer.from(queryEmbedding.buffer),
+          10
+        ) as (Memory & { memory_id: number; distance: number })[];
+        // Only include results with reasonable similarity (cosine distance < 1.2)
+        addUnique(vectorResults.filter(r => r.distance < 1.2));
+      } catch (err: any) {
+        log.error({ err: err.message }, 'vector search failed');
+        // Fall back to keyword-only — don't block on embedding errors
+      }
     }
   }
 

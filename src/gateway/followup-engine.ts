@@ -1,10 +1,20 @@
 import { db } from '../utils/db.js';
+import { LEAD_STATUS } from '../utils/lead-status.js';
 import { config } from '../utils/config.js';
 import { createLogger } from '../utils/logger.js';
 import { readFileSync, existsSync } from 'fs';
 import { join } from 'path';
 
 const log = createLogger('followup-engine');
+
+/** Validate and sanitize a day offset for SQL date arithmetic */
+function safeDayOffset(value: unknown): number {
+  const num = typeof value === 'number' ? value : parseInt(String(value), 10);
+  if (isNaN(num) || num < 0 || num > 365) {
+    throw new Error(`Invalid day offset: ${value}`);
+  }
+  return num;
+}
 
 interface FollowupTemplate {
   id: number;
@@ -170,8 +180,8 @@ export function calculateLeadScore(phone: string): { score: number; factors: str
   if (lead.was_booked) { score += 40; factors.push('נקבעה פגישה'); }
 
   // Status is interested/vip (+20)
-  if (lead.lead_status === 'interested') { score += 20; factors.push('סטטוס: מעוניין'); }
-  if (lead.lead_status === 'vip') { score += 30; factors.push('סטטוס: VIP'); }
+  if (lead.lead_status === LEAD_STATUS.INTERESTED) { score += 20; factors.push('סטטוס: מעוניין'); }
+  if (lead.lead_status === LEAD_STATUS.VIP) { score += 30; factors.push('סטטוס: VIP'); }
 
   // Has tags indicating engagement (+10 each)
   const tags = db.prepare('SELECT tag FROM lead_tags WHERE phone = ?').all(phone) as any[];
@@ -231,7 +241,7 @@ export async function autoTagLead(phone: string): Promise<'not_interested' | 'in
 
     // 1. Tag + update local DB
     db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'not_interested');
-    db.prepare("UPDATE leads SET lead_status = 'not_relevant', next_followup = NULL, bot_paused = 1, updated_at = datetime('now') WHERE phone = ?").run(phone);
+    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', next_followup = NULL, bot_paused = 1, updated_at = datetime('now') WHERE phone = ?`).run(phone);
 
     // 2. Send apology message
     try {
@@ -267,7 +277,7 @@ export async function autoTagLead(phone: string): Promise<'not_interested' | 'in
   const positiveWords = ['מעוניין', 'מעוניינת', 'כן', 'אני רוצה', 'בוא נדבר', 'שלח', 'תתקשר', 'אשמח', 'בואי נדבר'];
   if (positiveWords.some(w => text.includes(w))) {
     db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'interested');
-    db.prepare("UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?").run(phone);
+    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.INTERESTED}', updated_at = datetime('now') WHERE phone = ?`).run(phone);
     log.info({ phone }, 'auto-tagged as interested');
     return 'interested';
   }
@@ -320,7 +330,7 @@ export async function sendFollowup(phone: string, templateId?: number) {
     db.prepare('UPDATE leads SET followup_count = followup_count + 1, next_followup = NULL, updated_at = datetime(\'now\') WHERE phone = ?').run(phone);
   } else {
     const daysUntilNext = nextTemplate.day_offset - template.day_offset;
-    const nextDate = daysUntilNext > 0 ? daysUntilNext : 2;
+    const nextDate = safeDayOffset(daysUntilNext > 0 ? daysUntilNext : 2);
     db.prepare(`UPDATE leads SET followup_count = followup_count + 1, next_followup = date('now', '+${nextDate} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
   }
 
@@ -372,9 +382,9 @@ export function generateMorningReport(): string {
 
   // Total leads stats
   const totalLeads = (db.prepare('SELECT COUNT(*) as c FROM leads').get() as any).c;
-  const newLeads = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'new' OR lead_status IS NULL").get() as any).c;
-  const contacted = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'contacted'").get() as any).c;
-  const interested = (db.prepare("SELECT COUNT(*) as c FROM leads WHERE lead_status = 'interested'").get() as any).c;
+  const newLeads = (db.prepare(`SELECT COUNT(*) as c FROM leads WHERE lead_status = '${LEAD_STATUS.NEW}' OR lead_status IS NULL`).get() as any).c;
+  const contacted = (db.prepare(`SELECT COUNT(*) as c FROM leads WHERE lead_status = '${LEAD_STATUS.CONTACTED}'`).get() as any).c;
+  const interested = (db.prepare(`SELECT COUNT(*) as c FROM leads WHERE lead_status = '${LEAD_STATUS.INTERESTED}'`).get() as any).c;
   const replied = (db.prepare("SELECT COUNT(DISTINCT sender_id) as c FROM messages WHERE role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')").get() as any).c;
 
   // Hot leads (score > 50)
@@ -420,12 +430,14 @@ export function scheduleFirstFollowup(phone: string) {
   const templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 ORDER BY sort_order ASC LIMIT 1').get() as FollowupTemplate | undefined;
   if (!templates) return;
 
-  db.prepare(`UPDATE leads SET next_followup = date('now', '+${templates.day_offset} days'), followup_count = 0, updated_at = datetime('now') WHERE phone = ? AND next_followup IS NULL`).run(phone);
+  const dayOff = safeDayOffset(templates.day_offset);
+  db.prepare(`UPDATE leads SET next_followup = date('now', '+${dayOff} days'), followup_count = 0, updated_at = datetime('now') WHERE phone = ? AND next_followup IS NULL`).run(phone);
 }
 
 // Postpone a lead's follow-up by N days
 export function postponeFollowup(phone: string, days: number = 1) {
-  db.prepare(`UPDATE leads SET next_followup = date('now', '+${Math.max(1, Math.min(days, 30))} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
+  const safeDays = safeDayOffset(Math.max(1, Math.min(days, 30)));
+  db.prepare(`UPDATE leads SET next_followup = date('now', '+${safeDays} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
 }
 
 // Cancel all follow-ups for a lead

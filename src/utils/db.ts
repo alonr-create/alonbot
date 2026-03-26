@@ -2,7 +2,7 @@ import Database, { type Database as DatabaseType } from 'better-sqlite3';
 import * as sqliteVec from 'sqlite-vec';
 import { config } from './config.js';
 import { createLogger } from './logger.js';
-import { mkdirSync } from 'fs';
+import { mkdirSync, writeFileSync, readdirSync, unlinkSync } from 'fs';
 
 const log = createLogger('db');
 
@@ -342,6 +342,28 @@ db.exec(`
   CREATE UNIQUE INDEX IF NOT EXISTS idx_conv_topics_unique ON conversation_topics(channel, sender_id, topic);
   CREATE INDEX IF NOT EXISTS idx_conv_topics_sender ON conversation_topics(channel, sender_id, last_mentioned DESC);
 
+  CREATE TABLE IF NOT EXISTS rate_limits (
+    user_id TEXT,
+    timestamp TEXT,
+    PRIMARY KEY(user_id, timestamp)
+  );
+
+  CREATE TABLE IF NOT EXISTS delivery_receipts (
+    wamid TEXT PRIMARY KEY,
+    phone TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'sent',
+    sent_at TEXT,
+    delivered_at TEXT,
+    read_at TEXT,
+    failed_at TEXT,
+    error_code TEXT,
+    error_title TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_delivery_phone ON delivery_receipts(phone);
+  CREATE INDEX IF NOT EXISTS idx_delivery_status ON delivery_receipts(status);
+
   CREATE TABLE IF NOT EXISTS workspaces (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -500,4 +522,26 @@ try { db.exec(`ALTER TABLE orders ADD COLUMN referral_code TEXT DEFAULT ''`); } 
 try { db.exec(`ALTER TABLE leads ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
 try { db.exec(`ALTER TABLE orders ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
 
-export { db };
+// Daily backup for leads table (exports to JSON)
+function backupLeads(): string | null {
+  try {
+    const leads = db.prepare('SELECT * FROM leads').all();
+    const backupDir = `${config.dataDir}/backups`;
+    mkdirSync(backupDir, { recursive: true });
+    const date = new Date().toISOString().slice(0, 10);
+    const path = `${backupDir}/leads-${date}.json`;
+    writeFileSync(path, JSON.stringify(leads, null, 2));
+    // Keep only last 30 backups
+    const files = readdirSync(backupDir).filter(f => f.startsWith('leads-')).sort();
+    while (files.length > 30) {
+      unlinkSync(`${backupDir}/${files.shift()}`);
+    }
+    log.info({ path, count: leads.length }, 'leads backup created');
+    return path;
+  } catch (err) {
+    log.error({ err }, 'leads backup failed');
+    return null;
+  }
+}
+
+export { db, backupLeads };

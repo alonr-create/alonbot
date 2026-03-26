@@ -2,6 +2,7 @@ import type Anthropic from '@anthropic-ai/sdk';
 import { getRelevantMemories, getRecentSummaries, getEntities, getRecentMood, getRecentTopics, getAllRelationships, getPendingCommitments, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { db } from '../utils/db.js';
+import { LEAD_STATUS, LeadStatus } from '../utils/lead-status.js';
 import { config } from '../utils/config.js';
 import { getWorkspaceForSource, getDefaultWorkspace, getWorkspacePrompt, type Workspace } from '../utils/workspaces.js';
 
@@ -49,7 +50,7 @@ interface LeadInfo {
   last_call_duration_sec: number | null;
   was_booked: number;
   call_mode: string | null;
-  lead_status: string | null;
+  lead_status: LeadStatus | null;
 }
 
 function getLeadInfo(senderId: string): LeadInfo | null {

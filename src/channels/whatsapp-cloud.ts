@@ -70,8 +70,26 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           }
         }
         if (value.statuses) {
-          for (const status of value.statuses) {
-            log.debug({ recipient: status.recipient_id, status: status.status }, 'status update');
+          for (const s of value.statuses) {
+            log.debug({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
+            try {
+              // db already imported at top of file
+              const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+              const phone = (s.recipient_id || '').replace(/^\+/, '');
+              const wamid = s.id || '';
+              if (wamid && phone) {
+                db.prepare(`INSERT INTO delivery_receipts (wamid, phone, status, created_at) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(wamid) DO UPDATE SET status = excluded.status`).run(wamid, phone, s.status, now);
+                if (s.status === 'sent') db.prepare('UPDATE delivery_receipts SET sent_at = ? WHERE wamid = ?').run(now, wamid);
+                if (s.status === 'delivered') db.prepare('UPDATE delivery_receipts SET delivered_at = ? WHERE wamid = ?').run(now, wamid);
+                if (s.status === 'read') db.prepare('UPDATE delivery_receipts SET read_at = ? WHERE wamid = ?').run(now, wamid);
+                if (s.status === 'failed') {
+                  const err = s.errors?.[0];
+                  db.prepare('UPDATE delivery_receipts SET failed_at = ?, error_code = ?, error_title = ? WHERE wamid = ?')
+                    .run(now, err?.code || '', err?.title || '', wamid);
+                }
+              }
+            } catch (e) { log.warn({ err: (e as Error).message }, 'delivery receipt save failed'); }
           }
         }
       }
@@ -153,7 +171,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     try {
       const lead = db.prepare('SELECT phone FROM leads WHERE phone = ?').get(senderId) as any;
       isLead = !!lead;
-    } catch { /* DB error */ }
+    } catch (e) { log.debug({ err: (e as Error).message, senderId }, 'lead check DB query failed'); }
 
     // Ensure lead exists for dashboard tracking (even allowed users)
     if (!isLead) {

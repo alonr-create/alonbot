@@ -10,6 +10,7 @@ import { executeTool } from '../agent/tools.js';
 import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { getAllWorkspaces, getWorkspace, createWorkspace, updateWorkspace, deleteWorkspace } from '../utils/workspaces.js';
+import { LEAD_STATUS, PIPELINE_STAGES, TERMINAL_STATUSES } from '../utils/lead-status.js';
 
 const log = createLogger('server');
 
@@ -67,7 +68,7 @@ function getLeadTier(phone: string): 'A' | 'B' | 'C' {
   // Save to DB
   try {
     db.prepare('UPDATE leads SET price_tier = ? WHERE phone = ?').run(tier, phone);
-  } catch {} // best-effort
+  } catch (e) { log.debug({ err: (e as Error).message, phone }, 'price tier DB save failed'); }
 
   return tier;
 }
@@ -83,7 +84,7 @@ function bumpLeadScore(phone: string, action: 'message' | 'checkout' | 'paid' | 
   const newScore = scoreMap[action] || 1;
   try {
     db.prepare(`UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), ?), updated_at = datetime('now') WHERE phone = ?`).run(newScore, phone);
-  } catch {} // best-effort
+  } catch (e) { log.debug({ err: (e as Error).message, phone, action }, 'lead score bump failed'); }
 }
 
 // ── Smart Timing Helper — Israel quiet hours ──
@@ -225,13 +226,13 @@ try {
     keys_auth TEXT NOT NULL,
     created_at TEXT DEFAULT (datetime('now'))
   )`);
-} catch { /* table may already exist */ }
+} catch (e) { log.debug({ err: (e as Error).message }, 'push_subscriptions table creation failed'); }
 
 // Seed example chatbot flows
-import('./flow-engine.js').then(m => m.seedExampleFlows()).catch(() => {});
+import('./flow-engine.js').then(m => m.seedExampleFlows()).catch((e) => { log.debug({ err: (e as Error).message }, 'seed example flows failed'); });
 
 // Setup follow-up cron
-import('./followup-engine.js').then(m => m.setupFollowupCron()).catch(() => {});
+import('./followup-engine.js').then(m => m.setupFollowupCron()).catch((e) => { log.debug({ err: (e as Error).message }, 'followup cron setup failed'); });
 
 // Public key endpoint (no auth — needed before subscribing)
 app.get('/api/push/vapid-key', (_req, res) => {
@@ -333,7 +334,7 @@ if (config.mode === 'cloud') {
       (config as any).localApiUrl = row.value;
       log.info({ url: row.value }, 'local URL restored from DB');
     }
-  } catch { /* settings table may not exist yet */ }
+  } catch (e) { log.debug({ err: (e as Error).message }, 'settings table may not exist yet'); }
 
   app.post('/api/register-local', (req, res) => {
     const authHeader = req.headers['authorization'];
@@ -401,7 +402,7 @@ function verifyAuthCookie(cookieVal: string, secret: string): boolean {
     const payload = `${secret}:${expires}`;
     const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
     return sig === expected;
-  } catch { return false; }
+  } catch (e) { log.debug({ err: (e as Error).message }, 'auth cookie verification failed'); return false; }
 }
 
 const authFailures = new Map<string, { count: number; firstAttempt: number }>();
@@ -445,6 +446,28 @@ function parseCookies(req: any): Record<string, string> {
   }
   return cookies;
 }
+
+// === CSRF Protection for state-changing endpoints ===
+function csrfCheck(req: any, res: any, next: any) {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.method === 'OPTIONS') return next();
+  // Allow API clients with explicit secret header (programmatic access)
+  if (req.headers['x-api-secret'] || req.headers['x-dashboard-token']) return next();
+  // Check Origin/Referer header for cross-origin attacks
+  const origin = req.headers['origin'] || '';
+  const referer = req.headers['referer'] || '';
+  const host = req.headers['host'] || '';
+  if (origin && !origin.includes(host) && !origin.includes('localhost') && !origin.includes('127.0.0.1')) {
+    res.status(403).json({ error: 'CSRF check failed — origin mismatch' });
+    return;
+  }
+  if (!origin && referer && !referer.includes(host) && !referer.includes('localhost') && !referer.includes('127.0.0.1')) {
+    res.status(403).json({ error: 'CSRF check failed — referer mismatch' });
+    return;
+  }
+  next();
+}
+app.use('/api/wa-manager', csrfCheck);
+app.use('/api/dashboard', csrfCheck);
 
 // === Dashboard API (protected by cookie-based sessions) ===
 function dashAuth(req: any, res: any, next: any) {
@@ -681,7 +704,7 @@ app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
       for (const lead of leadsWithoutMsgs) {
         scheduleFirstFollowup(lead.phone);
       }
-    }).catch(() => {});
+    }).catch((e: any) => { log.warn({ err: e.message }, 'followup schedule for campaign import failed'); });
     log.info({ count }, 'campaign messages imported + follow-ups scheduled');
     res.json({ success: true, imported: count });
   } catch (e: any) {
@@ -753,7 +776,7 @@ app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
         const adsRes = await fetch(`https://graph.facebook.com/v21.0/act_1314904720689466/insights?fields=spend,impressions,clicks,actions,cpc,ctr,cpp&date_preset=last_7d&access_token=${config.fbAccessToken}`);
         const adsJson = await adsRes.json();
         adsData = adsJson.data?.[0] || null;
-      } catch {}
+      } catch (e) { log.debug({ err: (e as Error).message }, 'FB ads overview fetch failed'); }
     }
 
     res.json({
@@ -804,7 +827,7 @@ app.get('/api/wa-manager/profile-pic/:phone', dashAuth, async (req, res) => {
           res.json({ success: true, url: evoData.profilePictureUrl });
           return;
         }
-      } catch {}
+      } catch (e) { log.debug({ err: (e as Error).message, phone }, 'profile pic fetch failed'); }
     }
 
     res.json({ success: true, url: null });
@@ -842,7 +865,8 @@ app.post('/api/wa-manager/profile-pics-batch', dashAuth, async (req, res) => {
         } else {
           results[rawPhone] = null;
         }
-      } catch {
+      } catch (e) {
+        log.debug({ err: (e as Error).message, rawPhone }, 'batch profile pic fetch failed');
         results[rawPhone] = null;
       }
     }
@@ -937,8 +961,8 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
     `).get(...(phoneList || [])) as any;
     const responseRate = totalInbound.count > 0 ? Math.round((totalOutbound.count / totalInbound.count) * 100) : 0;
     const pendingFollowups = workspace
-      ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('new','contacted') AND source IN (${srcPlaceholders})`).get(...sources) as any
-      : db.prepare("SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('new','contacted')").get() as any;
+      ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('${LEAD_STATUS.NEW}','${LEAD_STATUS.CONTACTED}') AND source IN (${srcPlaceholders})`).get(...sources) as any
+      : db.prepare(`SELECT COUNT(*) as count FROM leads WHERE lead_status IN ('${LEAD_STATUS.NEW}','${LEAD_STATUS.CONTACTED}')`).get() as any;
     const bookedCount = workspace
       ? db.prepare(`SELECT COUNT(*) as count FROM leads WHERE was_booked = 1 AND source IN (${srcPlaceholders})`).get(...sources) as any
       : db.prepare('SELECT COUNT(*) as count FROM leads WHERE was_booked = 1').get() as any;
@@ -977,7 +1001,7 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
         ) WHERE resp_sec IS NOT NULL AND resp_sec < 86400
       `).get(...(phoneList || [])) as any;
       if (avgResp?.avg_min) avgResponseMin = Math.round(avgResp.avg_min);
-    } catch { /* ok */ }
+    } catch (e) { log.debug({ err: (e as Error).message }, 'avg response time calc failed'); }
 
     // Bot activity stats (Feature 5)
     const botMessagesToday = db.prepare(`
@@ -1090,7 +1114,7 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
     );
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
-    } catch { /* logging failure should not break send */ }
+    } catch (e) { log.warn({ err: (e as Error).message }, 'message log DB write failed'); }
     log.info({ phone: chatPhone }, 'wa-manager: message sent');
     res.json({ success: true });
   } catch (e: any) {
@@ -1127,7 +1151,7 @@ app.post('/api/wa-manager/send-media', dashAuth, async (req, res) => {
     try {
       const label = isImage ? '[תמונה]' : `[קובץ: ${filename || 'file'}]`;
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, caption ? `${label} ${caption}` : label);
-    } catch { /* non-critical */ }
+    } catch (e) { log.debug({ err: (e as Error).message }, 'media send DB log failed'); }
     log.info({ phone: chatPhone, type: isImage ? 'image' : 'document' }, 'wa-manager: media sent');
     res.json({ success: true });
   } catch (e: any) {
@@ -1163,7 +1187,7 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
           if (lead?.name) personalMsg = personalMsg.replace(/\{name\}/g, lead.name);
           else personalMsg = personalMsg.replace(/\{name\}/g, '');
           personalMsg = personalMsg.replace(/\{phone\}/g, chatPhone);
-        } catch { /* continue with raw message */ }
+        } catch (e) { log.debug({ err: (e as Error).message }, 'broadcast personalize failed'); }
 
         await wa.sendReply(
           { id: 'wa-broadcast', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
@@ -1171,7 +1195,7 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
         );
         try {
           db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, personalMsg);
-        } catch { /* logging failure should not break send */ }
+        } catch (e) { log.warn({ err: (e as Error).message }, 'broadcast message log DB write failed'); }
         results.push({ phone: chatPhone, success: true });
         // Small delay between sends to avoid rate limiting
         await new Promise(r => setTimeout(r, 1500));
@@ -1197,7 +1221,7 @@ app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
       try {
         const current = db.prepare('SELECT lead_status FROM leads WHERE phone = ?').get(phone) as any;
         db.prepare('INSERT INTO status_history (phone, old_status, new_status) VALUES (?, ?, ?)').run(phone, current?.lead_status || null, lead_status);
-      } catch { /* ok */ }
+      } catch (e) { log.debug({ err: (e as Error).message }, 'status history recording failed'); }
       updates.push('lead_status = ?'); params.push(lead_status);
     }
     if (source !== undefined) { updates.push('source = ?'); params.push(source); }
@@ -1329,7 +1353,7 @@ app.get('/api/wa-manager/export-csv', dashAuth, (req, res) => {
     const rows = leads.map(l => {
       const fields = [
         l.phone, `"${(l.name || '').replace(/"/g, '""')}"`, l.source || '',
-        l.lead_status || 'new', l.was_booked ? 'כן' : 'לא',
+        l.lead_status || LEAD_STATUS.NEW, l.was_booked ? 'כן' : 'לא',
         `"${(l.tags || '').replace(/"/g, '""')}"`, l.message_count || 0,
         l.last_call_sentiment || '', l.created_at || '', l.updated_at || '',
         `"${(l.last_call_summary || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
@@ -1351,7 +1375,7 @@ app.get('/api/wa-manager/flows', dashAuth, (req, res) => {
       ? db.prepare('SELECT * FROM chatbot_flows WHERE workspace_id = ? OR workspace_id IS NULL ORDER BY created_at DESC').all(wsId)
       : db.prepare('SELECT * FROM chatbot_flows ORDER BY created_at DESC').all();
     for (const f of flows as any[]) {
-      try { f.steps = JSON.parse(f.steps); } catch { f.steps = []; }
+      try { f.steps = JSON.parse(f.steps); } catch (e) { log.debug({ err: (e as Error).message, flowId: f.id }, 'flow steps JSON parse failed'); f.steps = []; }
       const runs = db.prepare('SELECT COUNT(*) as c FROM flow_runs WHERE flow_id = ?').get(f.id) as any;
       f.run_count = runs?.c || 0;
     }
@@ -1412,7 +1436,7 @@ app.post('/api/wa-manager/flows/:id/run', dashAuth, async (req, res) => {
     // Execute in background
     let started = 0;
     for (const phone of targetPhones) {
-      executeFlow(flowId, phone).catch(() => {});
+      executeFlow(flowId, phone).catch((e: any) => { log.warn({ err: e.message, flowId, phone }, 'flow execution failed'); });
       started++;
     }
 
@@ -1590,7 +1614,7 @@ app.get('/api/wa-manager/followup/history/:phone', dashAuth, (_req, res) => {
 // Pipeline summary (kanban data)
 app.get('/api/wa-manager/followup/pipeline', dashAuth, (_req, res) => {
   try {
-    const stages = ['new', 'contacted', 'interested', 'waiting', 'vip', 'closed', 'not_relevant', 'refused'];
+    const stages = [...PIPELINE_STAGES];
     const pipeline: Record<string, any[]> = {};
     for (const stage of stages) {
       pipeline[stage] = db.prepare(`
@@ -1601,11 +1625,11 @@ app.get('/api/wa-manager/followup/pipeline', dashAuth, (_req, res) => {
     }
     // Also get leads with NULL status (treat as 'new')
     const noStatus = db.prepare(`
-      SELECT l.phone, l.name, l.source, 'new' as lead_status, l.followup_count, l.next_followup,
+      SELECT l.phone, l.name, l.source, '${LEAD_STATUS.NEW}' as lead_status, l.followup_count, l.next_followup,
         (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) as replies
       FROM leads l WHERE l.lead_status IS NULL ORDER BY l.updated_at DESC LIMIT 50
     `).all();
-    pipeline['new'] = [...(pipeline['new'] || []), ...noStatus];
+    pipeline[LEAD_STATUS.NEW] = [...(pipeline[LEAD_STATUS.NEW] || []), ...noStatus];
     // Count totals
     const totals: Record<string, number> = {};
     for (const [stage, leads] of Object.entries(pipeline)) {
@@ -1621,7 +1645,7 @@ app.post('/api/wa-manager/followup/reengage', dashAuth, async (req, res) => {
     const { days_inactive = 30 } = req.body || {};
     const staleLeads = db.prepare(`
       SELECT phone, name FROM leads
-      WHERE lead_status NOT IN ('closed','not_relevant','refused','done')
+      WHERE lead_status NOT IN ('${LEAD_STATUS.CLOSED}','${LEAD_STATUS.NOT_RELEVANT}','${LEAD_STATUS.REFUSED}','done')
         AND next_followup IS NULL
         AND updated_at < datetime('now', '-${Math.max(7, Math.min(days_inactive, 90))} days')
       ORDER BY updated_at DESC LIMIT 50
@@ -2102,7 +2126,7 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
     const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
-    } catch { /* logging failure should not break send */ }
+    } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }
     log.info({ phone, leadName, template: template || 'none' }, 'external WhatsApp sent');
     res.json({ success: true });
   } catch (e: any) {
@@ -2330,7 +2354,7 @@ app.post('/api/grow-webhook', (req, res) => {
         if (order?.phone) {
           db.prepare('UPDATE checkout_visits SET paid = 1 WHERE phone = ? AND paid = 0').run(order.phone);
         }
-      } catch {} // best-effort
+      } catch (e) { log.debug({ err: (e as Error).message }, 'checkout visit paid mark failed'); }
 
       // Find the order to get customer details
       const order = db.prepare(`SELECT * FROM orders WHERE grow_process_id = ? OR (status = 'payment_created' AND plan = ?)`)
@@ -2444,7 +2468,7 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
           INSERT INTO leads (phone, name, source) VALUES (?, ?, 'voice_agent')
           ON CONFLICT(phone) DO UPDATE SET name = COALESCE(excluded.name, leads.name), updated_at = datetime('now')
         `).run(chatPhone, leadName);
-      } catch { /* lead may already exist — ok */ }
+      } catch (e) { log.debug({ err: (e as Error).message, chatPhone }, 'voice lead register failed'); }
     }
 
     const voiceBuffer = Buffer.from(audio, 'base64');
@@ -2455,7 +2479,7 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     // Log outbound voice note for flow tracking
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, `[הודעה קולית — ${voiceBuffer.length} bytes]`);
-    } catch { /* logging failure should not break send */ }
+    } catch (e) { log.warn({ err: (e as Error).message }, 'voice outbound log DB write failed'); }
     log.info({ phone, leadName, bytes: voiceBuffer.length }, 'external WhatsApp voice sent');
     res.json({ success: true });
   } catch (e: any) {
@@ -2483,7 +2507,7 @@ app.get('/api/wa-outbound-log', externalAuth, (req, res) => {
       try {
         const lead = db.prepare('SELECT name FROM leads WHERE phone = ?').get(row.phone) as any;
         return { ...row, name: lead?.name || null };
-      } catch { return { ...row, name: null }; }
+      } catch (e) { log.debug({ err: (e as Error).message }, 'lead name lookup failed'); return { ...row, name: null }; }
     });
     res.json({ success: true, count: enriched.length, messages: enriched });
   } catch (e: any) {

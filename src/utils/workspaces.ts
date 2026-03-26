@@ -1,4 +1,5 @@
 import { db } from './db.js';
+import { LEAD_STATUS } from './lead-status.js';
 import { createLogger } from './logger.js';
 
 const log = createLogger('workspaces');
@@ -53,7 +54,7 @@ export function createWorkspace(ws: Partial<Workspace> & { id: string; name: str
     ws.welcome_msg || null, ws.system_prompt || null,
     ws.monday_board_id || null, ws.monday_columns || null,
     ws.calendar_id || null, ws.zoom_link || null, ws.website || null,
-    ws.default_lead_status || 'new'
+    ws.default_lead_status || LEAD_STATUS.NEW
   );
   log.info({ id: ws.id, name: ws.name }, 'workspace created');
 }

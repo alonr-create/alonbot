@@ -1,5 +1,6 @@
 import { config } from './config.js';
 import { db } from './db.js';
+import { LEAD_STATUS } from './lead-status.js';
 import { withRetry } from './retry.js';
 import { createLogger } from './logger.js';
 
@@ -104,7 +105,7 @@ export async function createMondayLead(
     // Persist to SQLite
     db.prepare(`
       INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
-      VALUES (?, ?, 'alon_dev', ?, 'new', datetime('now'), datetime('now'))
+      VALUES (?, ?, 'alon_dev', ?, '${LEAD_STATUS.NEW}', datetime('now'), datetime('now'))
       ON CONFLICT(phone) DO UPDATE SET
         monday_item_id = excluded.monday_item_id,
         updated_at = datetime('now')

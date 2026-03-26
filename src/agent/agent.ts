@@ -39,28 +39,29 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
   return { text: 'לא הצלחתי לעבד (כל המודלים נכשלו).', model: 'none' };
 }
 
-// Rate limiting: max 10 messages per minute per user
-const rateLimitMap = new Map<string, number[]>();
+// Rate limiting: max 10 messages per minute per user (DB-backed, survives restarts)
 const RATE_LIMIT = 10;
-const RATE_WINDOW_MS = 60_000;
+
+const stmtRateLimitCheck = db.prepare(
+  "SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND timestamp > datetime('now', '-60 seconds')"
+);
+const stmtRateLimitAdd = db.prepare(
+  "INSERT INTO rate_limits (user_id, timestamp) VALUES (?, datetime('now'))"
+);
+const stmtRateLimitClean = db.prepare(
+  "DELETE FROM rate_limits WHERE timestamp < datetime('now', '-5 minutes')"
+);
 
 function checkRateLimit(userId: string): boolean {
-  const now = Date.now();
-  const timestamps = (rateLimitMap.get(userId) || []).filter(t => now - t < RATE_WINDOW_MS);
-  if (timestamps.length >= RATE_LIMIT) return false;
-  timestamps.push(now);
-  rateLimitMap.set(userId, timestamps);
+  const row = stmtRateLimitCheck.get(userId) as { count: number };
+  if (row.count >= RATE_LIMIT) return false;
+  stmtRateLimitAdd.run(userId);
   return true;
 }
 
-// Cleanup stale rate limit entries every 10 minutes
+// Cleanup old rate limit entries every 10 minutes
 setInterval(() => {
-  const now = Date.now();
-  for (const [userId, timestamps] of rateLimitMap) {
-    const active = timestamps.filter(t => now - t < RATE_WINDOW_MS);
-    if (active.length === 0) rateLimitMap.delete(userId);
-    else rateLimitMap.set(userId, active);
-  }
+  try { stmtRateLimitClean.run(); } catch (e) { log.debug({ err: (e as Error).message }, 'document index to memory failed'); }
 }, 10 * 60_000);
 
 export type StreamCallback = (text: string, toolName?: string) => void;
@@ -86,22 +87,22 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   }
 
   // Extract entities from user message (non-blocking)
-  try { extractEntities(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
+  try { extractEntities(msg.text, `${msg.channel}:${msg.senderId}`); } catch (e) { log.debug({ err: (e as Error).message }, 'entity extraction failed'); }
 
   // Auto-detect corrections and save as feedback (non-blocking)
-  try { autoSaveCorrection(msg.text, msg.channel, msg.senderId); } catch { /* non-critical */ }
+  try { autoSaveCorrection(msg.text, msg.channel, msg.senderId); } catch (e) { log.debug({ err: (e as Error).message }, 'auto correction save failed'); }
 
   // Track sentiment (non-blocking)
-  try { trackSentiment(msg.channel, msg.senderId, msg.text); } catch { /* non-critical */ }
+  try { trackSentiment(msg.channel, msg.senderId, msg.text); } catch (e) { log.debug({ err: (e as Error).message }, 'sentiment tracking failed'); }
 
   // Tag conversation topics (non-blocking)
-  try { tagConversationTopics(msg.channel, msg.senderId, msg.text); } catch { /* non-critical */ }
+  try { tagConversationTopics(msg.channel, msg.senderId, msg.text); } catch (e) { log.debug({ err: (e as Error).message }, 'topic tagging failed'); }
 
   // Extract commitments/promises (non-blocking)
-  try { extractCommitments(msg.text, msg.channel, msg.senderId); } catch { /* non-critical */ }
+  try { extractCommitments(msg.text, msg.channel, msg.senderId); } catch (e) { log.debug({ err: (e as Error).message }, 'commitment extraction failed'); }
 
   // Extract relationships (non-blocking)
-  try { extractRelationships(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
+  try { extractRelationships(msg.text, `${msg.channel}:${msg.senderId}`); } catch (e) { log.debug({ err: (e as Error).message }, 'relationship extraction failed'); }
 
   // Build conversation with smart context (relevant old messages beyond the window)
   const history = getHistory(msg.channel, msg.senderId);
@@ -179,7 +180,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     try {
       const lead = db.prepare('SELECT 1 FROM leads WHERE phone = ?').get(msg.senderId);
       isLeadConversation = !!lead;
-    } catch { /* no leads table or other error — default to false */ }
+    } catch (e) { log.debug({ err: (e as Error).message }, 'leads table check failed'); }
   }
 
   const systemPrompt = await buildSystemPrompt(msg.text, msg.channel, msg.senderId);
@@ -476,7 +477,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       if (replyText.length > 50) {
         indexDocumentToMemory(replyText, `${msg.channel}:${msg.senderId}:${Date.now()}`, docType);
       }
-    } catch { /* non-critical */ }
+    } catch (e) { log.debug({ err: (e as Error).message }, 'document index to memory failed'); }
   }
 
   // Prepend opus indicator (display-only, not in history)
