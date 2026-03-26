@@ -109,10 +109,18 @@ export function registerAdapter(adapter: ChannelAdapter) {
     }
 
     // Push notification + WebSocket broadcast for all inbound WhatsApp messages
+    // Feature 4: Hot lead gets special push title
     if (msg.channel === 'whatsapp') {
+      let isHotLead = false;
+      try {
+        const { db: scoreDb } = await import('../utils/db.js');
+        const hotTag = scoreDb.prepare("SELECT 1 FROM lead_tags WHERE phone = ? AND tag = 'hot'").get(msg.senderId);
+        isHotLead = !!hotTag;
+      } catch { /* non-critical */ }
+
       import('./server.js').then(({ sendPushNotification, wsBroadcast }) => {
         const payload = {
-          title: msg.senderName || msg.senderId,
+          title: isHotLead ? `🔥 ${msg.senderName || msg.senderId}` : (msg.senderName || msg.senderId),
           body: (msg.text || '(מדיה)').slice(0, 200),
           phone: msg.senderId,
           tag: `wa-${msg.senderId}`,
@@ -185,6 +193,19 @@ export function registerAdapter(adapter: ChannelAdapter) {
         adapter.sendTyping!(msg).catch(() => {});
       }, 4000);
       adapter.sendTyping(msg).catch(() => {});
+    }
+
+    // Feature 3: Skip bot response if lead has bot_paused = 1 (manual mode)
+    if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
+      try {
+        const { db: pauseDb } = await import('../utils/db.js');
+        const paused = pauseDb.prepare('SELECT bot_paused FROM leads WHERE phone = ?').get(msg.senderId) as any;
+        if (paused?.bot_paused === 1) {
+          log.info({ phone: msg.senderId }, 'bot paused for this lead — skipping auto-response');
+          if (typingInterval) clearInterval(typingInterval);
+          return;
+        }
+      } catch { /* non-critical — proceed normally */ }
     }
 
     try {

@@ -1099,6 +1099,7 @@ html,body{
           <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>שורת סטטיסטיקות</b> — סה"כ לידים, חדשים, ענו, ממתינים לפולואפ</div>
           <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>לחיצה על שיחה</b> — פותח פרטי איש קשר + היסטוריית הודעות + ציון ליד</div>
           <div class="guide-item"><span style="color:#facc15;">&#9679;</span> <b>שליחת הודעה (בתוך שיחה)</b> — כותבים טקסט ושולחים לליד הספציפי</div>
+          <div class="guide-item"><span style="color:#4ade80;">&#9679;</span> <b>מצב ידני (בפרטי ליד)</b> — מכבה את הבוט לליד הזה. אתה עונה ידנית, הבוט לא מתערב</div>
         </div>
       </div>
 
@@ -1794,6 +1795,19 @@ async function openDetails(phone) {
       </div>` : '<div style="color:var(--text-muted);font-size:12px;padding:6px 0;">אין היסטוריית פולואפ</div>'}
     </div>
     <div class="details-section">
+      <div class="details-section-title">בוט</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:4px 0;">
+        <div>
+          <div style="font-size:13px;font-weight:600;">מצב ידני</div>
+          <div style="font-size:11px;color:var(--text-muted);">כשמופעל — הבוט לא עונה אוטומטית לליד הזה</div>
+        </div>
+        <label class="toggle-switch">
+          <input type="checkbox" id="botPauseToggle" ${lead.bot_paused ? 'checked' : ''} onchange="toggleBotPause('${esc(phone)}', this.checked)">
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+    </div>
+    <div class="details-section">
       <div class="details-section-title">הערות</div>
       <textarea class="notes-field" id="notesField" placeholder="הערות על איש הקשר...">${esc(lead.notes || '')}</textarea>
       <button class="notes-save" onclick="saveNotes('${esc(phone)}')">שמור הערות</button>
@@ -1806,6 +1820,13 @@ async function openDetails(phone) {
 
 function closeDetails() {
   document.getElementById('screen-details').className = 'screen slide-right';
+}
+
+async function toggleBotPause(phone, paused) {
+  try {
+    await api('/bot-pause', { method: 'POST', body: JSON.stringify({ phone, paused }) });
+    toast(paused ? 'מצב ידני — הבוט לא יענה' : 'בוט חזר לפעולה');
+  } catch { toast('שגיאה'); }
 }
 
 async function updateLeadStatus(phone) {
@@ -1921,17 +1942,22 @@ function toggleBroadcastForm() {
 async function sendBroadcast() {
   const msg = document.getElementById('broadcastMsg').value.trim();
   if (!msg) { toast('כתוב הודעה לשידור'); return; }
-  const count = contacts.length;
+  const filtered = contacts.filter(c => currentFilter === 'all' || c.lead_status === currentFilter);
+  const count = filtered.length;
   if (!count) { toast('אין אנשי קשר'); return; }
 
-  const confirmed = confirm(`שליחת הודעה ל-${count} אנשי קשר?\n\n"${msg.slice(0,80)}"`);
-  if (!confirmed) return;
+  // Step 1: Preview dialog
+  const preview = msg.length > 120 ? msg.slice(0, 120) + '...' : msg;
+  if (!confirm(`⚠️ שידור הודעה ל-${count} אנשי קשר!\n\nתצוגה מקדימה:\n"${preview}"\n\nלהמשיך?`)) return;
+
+  // Step 2: Final confirmation with count
+  if (!confirm(`אישור סופי: לשלוח עכשיו ל-${count} אנשי קשר?`)) return;
 
   toast('שולח שידור...');
   let sent = 0;
   let failed = 0;
 
-  for (const c of contacts) {
+  for (const c of filtered) {
     try {
       await api('/send', {
         method: 'POST',
@@ -2420,6 +2446,20 @@ async function loadAnalytics() {
     </div>`;
   }
 
+  // Bot Activity Stats (Feature 5)
+  if (stats?.success) {
+    html += `<div class="ana-card">
+      <div class="ana-card-title">&#129302; פעילות הבוט (יעל)</div>
+      <div class="ana-grid">
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.botMessagesToday || 0}</div><div class="ana-mini-label">הודעות היום</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.leadsRepliedToday || 0}</div><div class="ana-mini-label">לידים ענו היום</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.botMeetingsBooked || 0}</div><div class="ana-mini-label">פגישות (7 ימים)</div></div>
+        <div class="ana-mini-card"><div class="ana-mini-num">${stats.hotLeads || 0}</div><div class="ana-mini-label">&#128293; לידים חמים</div></div>
+      </div>
+      ${stats.botPausedCount > 0 ? `<div class="ana-row" style="margin-top:8px;"><span class="ana-label">מצב ידני</span><span class="ana-badge yellow">${stats.botPausedCount} לידים</span></div>` : ''}
+    </div>`;
+  }
+
   // Internal Stats
   if (stats?.success) {
     html += `<div class="ana-card">
@@ -2614,7 +2654,15 @@ async function cancelFollowup(phone) {
 }
 
 async function runAutoFollowups() {
-  if (!confirm('להריץ פולואפ אוטומטי לכל הממתינים עכשיו?')) return;
+  // Fetch pending count first
+  let pendingCount = 0;
+  try {
+    const data = await api('/followup/pending');
+    pendingCount = data.pending?.length || 0;
+  } catch {}
+  if (!pendingCount) { toast('אין לידים ממתינים'); return; }
+  if (!confirm(`⚠️ פולואפ אוטומטי ל-${pendingCount} לידים!\n\nכל הלידים ברשימה יקבלו הודעה.\nלהמשיך?`)) return;
+  if (!confirm(`אישור סופי: לשלוח פולואפ ל-${pendingCount} לידים עכשיו?`)) return;
   toast('מריץ פולואפים...');
   try {
     const res = await api('/followup/run-auto', { method: 'POST' });
@@ -2836,7 +2884,14 @@ async function showCampaignLauncher() {
   }
 }
 async function launchCampaignNow() {
-  if (!confirm('לשלוח פולואפ לכל הלידים הממתינים?')) return;
+  let pendingCount = 0;
+  try {
+    const data = await api('/followup/pending');
+    pendingCount = data.pending?.length || 0;
+  } catch {}
+  if (!pendingCount) { toast('אין לידים ממתינים'); return; }
+  if (!confirm(`⚠️ שיגור קמפיין ל-${pendingCount} לידים!\n\nכולם יקבלו פולואפ.\nלהמשיך?`)) return;
+  if (!confirm(`אישור סופי: לשגר עכשיו ל-${pendingCount} לידים?`)) return;
   toast('משגר קמפיין...');
   try {
     const res = await api('/followup/run-auto', { method: 'POST' });

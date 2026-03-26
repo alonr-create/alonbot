@@ -387,6 +387,11 @@ try {
   db.exec(`ALTER TABLE leads ADD COLUMN profile_pic_url TEXT`);
 } catch { /* column already exists */ }
 
+// Migration: add bot_paused flag to leads (manual mode)
+try {
+  db.exec(`ALTER TABLE leads ADD COLUMN bot_paused INTEGER NOT NULL DEFAULT 0`);
+} catch { /* column already exists */ }
+
 // Migration: add follow-up columns to leads
 try {
   db.exec(`ALTER TABLE leads ADD COLUMN next_followup TEXT`);

@@ -902,6 +902,28 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
       if (avgResp?.avg_min) avgResponseMin = Math.round(avgResp.avg_min);
     } catch { /* ok */ }
 
+    // Bot activity stats (Feature 5)
+    const botMessagesToday = db.prepare(`
+      SELECT COUNT(*) as count FROM messages
+      WHERE role = 'assistant' AND channel IN ('whatsapp','whatsapp-outbound')
+      AND date(created_at) = date('now')
+    `).get() as any;
+    const botMeetingsBooked = db.prepare(`
+      SELECT COUNT(*) as count FROM leads
+      WHERE was_booked = 1 AND date(updated_at) >= date('now', '-7 days')
+    `).get() as any;
+    const leadsRepliedToday = db.prepare(`
+      SELECT COUNT(DISTINCT sender_id) as count FROM messages
+      WHERE role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')
+      AND date(created_at) = date('now')
+    `).get() as any;
+    const hotLeads = db.prepare(`
+      SELECT COUNT(DISTINCT phone) as count FROM lead_tags WHERE tag = 'hot'
+    `).get() as any;
+    const botPausedCount = db.prepare(`
+      SELECT COUNT(*) as count FROM leads WHERE bot_paused = 1
+    `).get() as any;
+
     res.json({
       success: true,
       totalLeads: totalLeads.count,
@@ -915,10 +937,25 @@ app.get('/api/wa-manager/stats', dashAuth, (req, res) => {
       statusBreakdown,
       messagesPerDay,
       leadsPerDay,
+      botMessagesToday: botMessagesToday.count,
+      botMeetingsBooked: botMeetingsBooked.count,
+      leadsRepliedToday: leadsRepliedToday.count,
+      hotLeads: hotLeads.count,
+      botPausedCount: botPausedCount.count,
     });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
+});
+
+// Toggle bot pause for a specific lead (manual mode)
+app.post('/api/wa-manager/bot-pause', dashAuth, (req, res) => {
+  try {
+    const { phone, paused } = req.body;
+    if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
+    db.prepare('UPDATE leads SET bot_paused = ?, updated_at = datetime(\'now\') WHERE phone = ?').run(paused ? 1 : 0, phone);
+    res.json({ success: true, paused: !!paused });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
 
 app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
