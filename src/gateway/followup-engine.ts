@@ -99,8 +99,10 @@ export function getPendingFollowups(workspace?: string): any[] {
     WHERE l.next_followup IS NOT NULL
       AND l.next_followup <= date('now')
       AND l.followup_count < ?
+      AND l.bot_paused = 0
       ${skipStatusPlaceholders ? `AND (l.lead_status IS NULL OR l.lead_status NOT IN (${skipStatusPlaceholders}))` : ''}
       ${cfg.skip_replied ? `AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) = 0` : ''}
+      AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'assistant' AND channel = 'whatsapp-outbound' AND created_at > datetime('now', '-24 hours')) = 0
       ${srcFilter}
     ORDER BY l.next_followup ASC
   `;
@@ -136,20 +138,20 @@ function getLeadSiteUrl(lead: any): string {
 
   // First try exact match in slug mapping
   if (slugMapping[name]) {
-    return `https://lead-previews.vercel.app/${slugMapping[name]}`;
+    return `https://preview.alondev.site/${slugMapping[name]}`;
   }
 
   // Try case-insensitive / partial match
   const nameLower = name.toLowerCase();
   for (const [key, slug] of Object.entries(slugMapping)) {
     if (key.toLowerCase() === nameLower) {
-      return `https://lead-previews.vercel.app/${slug}`;
+      return `https://preview.alondev.site/${slug}`;
     }
   }
 
   // Fallback: generate slug from name (may not match actual page)
   const slug = name.toLowerCase().replace(/[^a-z0-9\s]/gi, '').replace(/\s+/g, '-').slice(0, 50) || lead.phone;
-  return `https://lead-previews.vercel.app/${slug}`;
+  return `https://preview.alondev.site/${slug}`;
 }
 
 // ── Lead Scoring ──

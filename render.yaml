@@ -2,9 +2,13 @@ services:
   - type: web
     name: alonbot
     runtime: docker
-    plan: free
+    plan: starter
     region: frankfurt
     healthCheckPath: /health
+    disk:
+      name: alonbot-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false
@@ -46,3 +50,5 @@ services:
         value: cloud
       - key: PORT
         value: 3700
+      - key: DATA_DIR
+        value: /data

@@ -91,7 +91,8 @@ export function registerAdapter(adapter: ChannelAdapter) {
     log.info({ channel: msg.channel, sender: msg.senderName, text: msg.text.slice(0, 80) }, 'incoming message');
 
     // Log ALL WhatsApp messages to DB for dashboard visibility
-    if (msg.channel === 'whatsapp') {
+    // Skip internal SYSTEM prompts (used by cron follow-ups)
+    if (msg.channel === 'whatsapp' && !msg.text.startsWith('[SYSTEM:')) {
       const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
       const content = (msg.text || '(מדיה)').substring(0, 2000);
       try {

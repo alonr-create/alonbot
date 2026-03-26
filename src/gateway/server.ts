@@ -147,6 +147,7 @@ app.get('/health', (_req, res) => {
     db: {
       status: dbStatus,
       tables: dbTables,
+      path: config.dataDir,
     },
     memory: {
       rss: Math.round(mem.rss / 1024 / 1024),

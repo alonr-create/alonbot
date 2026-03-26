@@ -80,8 +80,10 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     msg.text = msg.text.slice(0, 4000) + '\n[ההודעה קוצרה — מקסימום 4000 תווים]';
   }
 
-  // Save user message
-  saveMessage(msg.channel, msg.senderId, msg.senderName, 'user', msg.text);
+  // Save user message (skip internal SYSTEM prompts from cron follow-ups)
+  if (!msg.text.startsWith('[SYSTEM:')) {
+    saveMessage(msg.channel, msg.senderId, msg.senderName, 'user', msg.text);
+  }
 
   // Extract entities from user message (non-blocking)
   try { extractEntities(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
