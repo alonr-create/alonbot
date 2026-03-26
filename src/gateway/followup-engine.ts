@@ -195,8 +195,8 @@ export function calculateLeadScore(phone: string): { score: number; factors: str
   return { score: Math.min(score, 100), factors };
 }
 
-// Auto-tag leads based on behavior
-export function autoTagLead(phone: string) {
+// Auto-tag leads based on behavior — returns action taken
+export async function autoTagLead(phone: string): Promise<'not_interested' | 'interested' | null> {
   const { score } = calculateLeadScore(phone);
 
   // Hot lead: score > 50
@@ -206,22 +206,69 @@ export function autoTagLead(phone: string) {
 
   // Check for negative keywords in messages
   const lastUserMsg = db.prepare("SELECT content FROM messages WHERE sender_id = ? AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound') ORDER BY created_at DESC LIMIT 1").get(phone) as any;
-  if (lastUserMsg?.content) {
-    const text = lastUserMsg.content.toLowerCase();
-    const negativeWords = ['לא מעוניין', 'לא רלוונטי', 'הסר', 'תפסיק', 'spam', 'ספאם', 'לא צריך', 'עזוב'];
-    if (negativeWords.some(w => text.includes(w))) {
-      db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'not_interested');
-      db.prepare("UPDATE leads SET lead_status = 'not_relevant', next_followup = NULL, updated_at = datetime('now') WHERE phone = ?").run(phone);
-      log.info({ phone }, 'auto-tagged as not_interested, cancelled follow-ups');
+  if (!lastUserMsg?.content) return null;
+
+  const text = lastUserMsg.content.toLowerCase();
+
+  // Expanded negative keywords — Hebrew opt-out phrases
+  const negativeWords = [
+    'לא מעוניין', 'לא מעוניינת', 'לא רלוונטי', 'לא רלוונטית',
+    'הסר', 'הסירו', 'תפסיק', 'תפסיקו', 'הורד אותי', 'הורידו אותי',
+    'spam', 'ספאם', 'לא צריך', 'לא צריכה', 'עזוב', 'עזבו',
+    'אל תשלח', 'אל תשלחו', 'לא לשלוח', 'חסום', 'תחסום',
+    'מפריע', 'מפריעה', 'תמחק', 'תמחקו', 'מחק אותי',
+    'stop', 'unsubscribe', 'remove',
+  ];
+
+  if (negativeWords.some(w => text.includes(w))) {
+    // Check if already handled (avoid double apology)
+    const alreadyTagged = db.prepare("SELECT 1 FROM lead_tags WHERE phone = ? AND tag = 'not_interested'").get(phone);
+    if (alreadyTagged) return null;
+
+    // 1. Tag + update local DB
+    db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'not_interested');
+    db.prepare("UPDATE leads SET lead_status = 'not_relevant', next_followup = NULL, bot_paused = 1, updated_at = datetime('now') WHERE phone = ?").run(phone);
+
+    // 2. Send apology message
+    try {
+      await sendWhatsAppText(phone, 'מתנצלים על ההפרעה 🙏 הוסרת מרשימת התפוצה ולא תקבל/י מאיתנו הודעות נוספות. בהצלחה!');
+      log.info({ phone }, 'sent opt-out apology');
+    } catch (e: any) {
+      log.warn({ phone, err: e.message }, 'failed to send opt-out apology');
     }
 
-    const positiveWords = ['מעוניין', 'כן', 'אני רוצה', 'בוא נדבר', 'שלח', 'תתקשר'];
-    if (positiveWords.some(w => text.includes(w))) {
-      db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'interested');
-      db.prepare("UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?").run(phone);
-      log.info({ phone }, 'auto-tagged as interested');
+    // 3. Update Monday.com — move to "לא רלוונטי" group
+    try {
+      const lead = db.prepare('SELECT monday_item_id FROM leads WHERE phone = ?').get(phone) as any;
+      if (lead?.monday_item_id && config.mondayApiKey) {
+        const resp = await fetch('https://api.monday.com/v2', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+          body: JSON.stringify({
+            query: `mutation { move_item_to_group(item_id: ${lead.monday_item_id}, group_id: "group_mm1s4xpc") { id } }`,
+          }),
+        });
+        if (resp.ok) {
+          log.info({ phone, mondayItemId: lead.monday_item_id }, 'moved to "לא רלוונטי" in Monday.com');
+        }
+      }
+    } catch (e: any) {
+      log.warn({ phone, err: e.message }, 'Monday.com update failed for opt-out');
     }
+
+    log.info({ phone }, 'auto-tagged as not_interested — apology sent, removed from lists');
+    return 'not_interested';
   }
+
+  const positiveWords = ['מעוניין', 'מעוניינת', 'כן', 'אני רוצה', 'בוא נדבר', 'שלח', 'תתקשר', 'אשמח', 'בואי נדבר'];
+  if (positiveWords.some(w => text.includes(w))) {
+    db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'interested');
+    db.prepare("UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?").run(phone);
+    log.info({ phone }, 'auto-tagged as interested');
+    return 'interested';
+  }
+
+  return null;
 }
 
 // Send a single follow-up to a lead

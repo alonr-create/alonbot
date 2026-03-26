@@ -106,6 +106,15 @@ export function registerAdapter(adapter: ChannelAdapter) {
     // Notify Alon on Telegram when a lead/non-Alon sends a WhatsApp message
     if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId)) {
       notifyLeadMessage(msg).catch(() => {});
+      // Auto-detect opt-out ("לא מעוניין") — run BEFORE bot response
+      try {
+        const { autoTagLead } = await import('./followup-engine.js');
+        const action = await autoTagLead(msg.senderId);
+        if (action === 'not_interested') {
+          log.info({ phone: msg.senderId }, 'lead opted out — apology sent, skipping bot response');
+          return; // Don't let the bot respond — apology was already sent
+        }
+      } catch { /* non-critical — continue with normal flow */ }
     }
 
     // Push notification + WebSocket broadcast for all inbound WhatsApp messages
