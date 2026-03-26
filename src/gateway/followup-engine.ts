@@ -331,7 +331,11 @@ export function generateMorningReport(): string {
 }
 
 // Schedule next_followup for a lead (called after first contact)
+// Skip voice_agent leads — they already get a post-call message from the voice agent
 export function scheduleFirstFollowup(phone: string) {
+  const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+  if (lead?.source === 'voice_agent') return;
+
   const templates = db.prepare('SELECT * FROM followup_templates WHERE enabled = 1 ORDER BY sort_order ASC LIMIT 1').get() as FollowupTemplate | undefined;
   if (!templates) return;
 
