@@ -487,16 +487,22 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     const memDir = path3.join(config.dataDir, 'claude-memory');
     if (fs3.existsSync(memDir)) {
       const memFiles = fs3.readdirSync(memDir).filter((f: string) => f.endsWith('.md') && f !== 'MEMORY.md');
-      const keyFiles = ['user_profile.md', 'projects-index.md', 'long-term-memory.md', 'recent-memory.md', 'session_handoff.md'];
-      const toRead = keyFiles.filter(f => memFiles.includes(f));
+      // Priority files get more space (2000 chars), others get 800
+      const priorityFiles = ['user_profile.md', 'projects-index.md', 'long-term-memory.md', 'recent-memory.md', 'session_handoff.md', 'alonbot.md', 'evolution_api.md', 'voice-agent.md', 'fb_ads_accounts.md', 'alon_dev_campaign.md'];
+      const priority = priorityFiles.filter(f => memFiles.includes(f));
+      const rest = memFiles.filter(f => !priorityFiles.includes(f)).sort();
+      const toRead = [...priority, ...rest];
+
       if (toRead.length > 0) {
         claudeMemoryBlock = '\n## זיכרון Claude Code (סונכרן אוטומטית)\n';
         let totalChars = 0;
+        const MAX_TOTAL = 15000;
         for (const f of toRead) {
-          if (totalChars > 6000) break; // cap total size
+          if (totalChars > MAX_TOTAL) break;
           const content = fs3.readFileSync(path3.join(memDir, f), 'utf-8');
           const stripped = content.replace(/^---[\s\S]*?---\n/, '');
-          const snippet = stripped.slice(0, 2000);
+          const maxLen = priorityFiles.includes(f) ? 2000 : 800;
+          const snippet = stripped.slice(0, maxLen);
           claudeMemoryBlock += `\n### ${f.replace('.md', '')}\n${snippet}\n`;
           totalChars += snippet.length;
         }
