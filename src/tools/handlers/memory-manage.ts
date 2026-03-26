@@ -1,4 +1,4 @@
-import { getRelevantMemories, getEntities, searchEntities, forgetEntityByContent, getLastTimeTalkedAbout, getSentimentTrend, getRecentTopics, type Memory } from '../../agent/memory.js';
+import { getRelevantMemories, getEntities, searchEntities, forgetEntityByContent, getLastTimeTalkedAbout, getSentimentTrend, getRecentTopics, getPendingCommitments, resolveCommitment, getAllRelationships, getWeeklyDigest, type Memory } from '../../agent/memory.js';
 import { db } from '../../utils/db.js';
 import type { ToolHandler } from '../types.js';
 
@@ -181,6 +181,81 @@ const handlers: ToolHandler[] = [
         }
       }
 
+      return result;
+    },
+  },
+  {
+    name: 'pending_promises',
+    definition: {
+      name: 'pending_promises',
+      description: 'Show or resolve pending commitments/promises. Use when user asks "מה ההתחייבויות שלי?", "what did I promise?", or to mark something as done.',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          resolve_id: { type: 'number', description: 'Mark a specific commitment as done (by ID)' },
+          channel: { type: 'string', description: 'Channel (telegram/whatsapp)' },
+          sender_id: { type: 'string', description: 'Sender ID' },
+        },
+        required: [],
+      },
+    },
+    async execute(input) {
+      if (input.resolve_id) {
+        resolveCommitment(input.resolve_id);
+        return `סימנתי התחייבות #${input.resolve_id} כ-done.`;
+      }
+
+      const commitments = getPendingCommitments(input.channel || 'telegram', input.sender_id || '');
+      if (commitments.length === 0) {
+        return 'אין התחייבויות פתוחות. הכל נקי!';
+      }
+
+      let result = `📋 התחייבויות פתוחות (${commitments.length}):\n`;
+      for (const c of commitments) {
+        result += `[${c.id}] ${c.content}${c.due_hint ? ` — ${c.due_hint}` : ''} (${c.created_at})\n`;
+      }
+      result += '\nכדי לסמן כ-done: pending_promises(resolve_id=<id>)';
+      return result;
+    },
+  },
+  {
+    name: 'memory_digest',
+    definition: {
+      name: 'memory_digest',
+      description: 'Generate weekly memory digest — summary of new memories, hot topics, mood trend, and stats. Use when user asks "דוח זיכרון", "memory report", "what happened this week?"',
+      input_schema: {
+        type: 'object' as const,
+        properties: {},
+        required: [],
+      },
+    },
+    async execute() {
+      return getWeeklyDigest();
+    },
+  },
+  {
+    name: 'people_i_know',
+    definition: {
+      name: 'people_i_know',
+      description: 'Show relationship graph — people the user knows and their roles. Use when user asks "מי אני מכיר?", "who do I know?", "מי זה X?"',
+      input_schema: {
+        type: 'object' as const,
+        properties: {
+          search: { type: 'string', description: 'Optional: search for specific person or role' },
+        },
+        required: [],
+      },
+    },
+    async execute(input) {
+      const rels = getAllRelationships();
+      if (rels.length === 0) {
+        return 'עדיין לא למדתי על אנשים שאתה מכיר. ספר לי על מישהו!';
+      }
+
+      let result = `👥 אנשים שאני מכיר (${rels.length}):\n`;
+      for (const r of rels) {
+        result += `- **${r.person_name}**: ${r.role}${r.context ? ` (${r.context})` : ''}\n`;
+      }
       return result;
     },
   },

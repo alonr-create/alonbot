@@ -410,6 +410,10 @@ export async function runMemoryMaintenance(): Promise<{ decayed: number; consoli
   const boosted = autoBoostMemories();
   if (boosted > 0) log.info({ boosted }, 'auto-boosted frequently accessed memories');
 
+  // 5. Expire old commitments (14+ days)
+  const expired = expireOldCommitments();
+  if (expired > 0) log.info({ expired }, 'expired old commitments');
+
   return { decayed, consolidated, deleted };
 }
 
@@ -823,6 +827,356 @@ export function getLastTimeTalkedAbout(query: string, channel: string, senderId:
     result += `- ${label} (${item.date}): ${item.content.slice(0, 100)}\n`;
   }
   return result;
+}
+
+// --- Proactive Context Bridge ---
+// At start of conversation, check what was discussed last time
+
+const stmtLastMessageTime = db.prepare(
+  `SELECT created_at FROM messages WHERE channel = ? AND sender_id = ? AND role = 'user' ORDER BY id DESC LIMIT 1 OFFSET 1`
+);
+
+const stmtLastTopics = db.prepare(
+  `SELECT topic, mention_count FROM conversation_topics
+   WHERE channel = ? AND sender_id = ?
+   ORDER BY last_mentioned DESC LIMIT 3`
+);
+
+const stmtLastSummary = db.prepare(
+  `SELECT summary, to_date FROM conversation_summaries
+   WHERE channel = ? AND sender_id = ?
+   ORDER BY created_at DESC LIMIT 1`
+);
+
+const stmtPendingCommitments = db.prepare(
+  `SELECT content, due_hint, created_at FROM commitments
+   WHERE channel = ? AND sender_id = ? AND status = 'pending'
+   ORDER BY created_at DESC LIMIT 5`
+);
+
+export function getContextBridge(channel: string, senderId: string): string | null {
+  try {
+    // Check time since last message
+    const lastMsg = stmtLastMessageTime.get(channel, senderId) as { created_at: string } | undefined;
+    if (!lastMsg) return null;
+
+    const lastTime = new Date(lastMsg.created_at + 'Z');
+    const hoursSince = (Date.now() - lastTime.getTime()) / (1000 * 60 * 60);
+
+    // Only bridge if 4+ hours since last conversation
+    if (hoursSince < 4) return null;
+
+    const parts: string[] = [];
+
+    // Recent topics
+    const topics = stmtLastTopics.all(channel, senderId) as Array<{ topic: string; mention_count: number }>;
+    if (topics.length > 0) {
+      parts.push(`נושאים אחרונים: ${topics.map(t => t.topic).join(', ')}`);
+    }
+
+    // Last summary
+    const summary = stmtLastSummary.get(channel, senderId) as { summary: string; to_date: string } | undefined;
+    if (summary) {
+      parts.push(`סיכום אחרון (${summary.to_date}): ${summary.summary.slice(0, 200)}`);
+    }
+
+    // Pending commitments
+    const commitments = stmtPendingCommitments.all(channel, senderId) as Array<{ content: string; due_hint: string | null; created_at: string }>;
+    if (commitments.length > 0) {
+      parts.push(`התחייבויות פתוחות: ${commitments.map(c => c.content + (c.due_hint ? ` (${c.due_hint})` : '')).join('; ')}`);
+    }
+
+    if (parts.length === 0) return null;
+
+    const hoursLabel = hoursSince < 24 ? `${Math.round(hoursSince)} שעות` : `${Math.round(hoursSince / 24)} ימים`;
+    return `[הקשר מהשיחה האחרונה — לפני ${hoursLabel}]\n${parts.join('\n')}`;
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'context bridge failed');
+    return null;
+  }
+}
+
+// --- Promise/Commitment Tracker ---
+
+const COMMITMENT_PATTERNS: Array<{ regex: RegExp; dueExtract?: (match: RegExpMatchArray) => string | null }> = [
+  { regex: /(?:אני צריך|צריך|חייב|חייבת)\s+(?:ל)?(.{5,80})/i, dueExtract: undefined },
+  { regex: /(?:מחר\s+(?:אני\s+)?(?:צריך|חייב|אעשה|אטפל))\s+(.{3,80})/i, dueExtract: () => 'מחר' },
+  { regex: /(?:בשבוע הבא)\s+(.{3,80})/i, dueExtract: () => 'שבוע הבא' },
+  { regex: /(?:אל תשכח|תזכיר לי)\s+(?:ש|ל)?(.{5,80})/i, dueExtract: undefined },
+  { regex: /(?:אני אעשה|אטפל ב|אסיים את)\s+(.{3,80})/i, dueExtract: undefined },
+  { regex: /(?:עד )((?:יום\s+)?(?:ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת))\s+(.{3,60})/i, dueExtract: (m) => m[1] || null },
+];
+
+const stmtInsertCommitment = db.prepare(
+  `INSERT INTO commitments (channel, sender_id, content, due_hint) VALUES (?, ?, ?, ?)`
+);
+
+const stmtResolveCommitment = db.prepare(
+  `UPDATE commitments SET status = 'done', resolved_at = datetime('now') WHERE id = ?`
+);
+
+const stmtSearchCommitments = db.prepare(
+  `SELECT * FROM commitments WHERE channel = ? AND sender_id = ? AND status = 'pending' AND content LIKE ? LIMIT 5`
+);
+
+const stmtAllPendingCommitments = db.prepare(
+  `SELECT * FROM commitments WHERE channel = ? AND sender_id = ? AND status = 'pending' ORDER BY created_at DESC LIMIT 15`
+);
+
+const stmtExpireOldCommitments = db.prepare(
+  `UPDATE commitments SET status = 'expired' WHERE status = 'pending' AND created_at < datetime('now', '-14 days')`
+);
+
+export function extractCommitments(text: string, channel: string, senderId: string): Array<{ content: string; due: string | null }> {
+  const extracted: Array<{ content: string; due: string | null }> = [];
+
+  for (const pattern of COMMITMENT_PATTERNS) {
+    const match = text.match(pattern.regex);
+    if (match) {
+      const content = match[1]?.trim() || match[0]?.trim();
+      if (content && content.length >= 5 && content.length <= 100) {
+        const due = pattern.dueExtract ? pattern.dueExtract(match) : null;
+
+        // Check for duplicate
+        const existing = stmtSearchCommitments.all(channel, senderId, `%${content.slice(0, 20)}%`) as any[];
+        if (existing.length === 0) {
+          try {
+            stmtInsertCommitment.run(channel, senderId, content, due);
+            extracted.push({ content, due });
+            log.info({ content: content.slice(0, 50), due }, 'extracted commitment');
+          } catch (e: any) {
+            log.debug({ err: e.message }, 'commitment insert failed');
+          }
+        }
+      }
+    }
+  }
+
+  return extracted;
+}
+
+export function getPendingCommitments(channel: string, senderId: string): Array<{ id: number; content: string; due_hint: string | null; created_at: string }> {
+  return stmtAllPendingCommitments.all(channel, senderId) as any[];
+}
+
+export function resolveCommitment(id: number) {
+  stmtResolveCommitment.run(id);
+}
+
+export function expireOldCommitments(): number {
+  const result = stmtExpireOldCommitments.run();
+  return result.changes;
+}
+
+// --- Relationship Graph ---
+
+const RELATIONSHIP_PATTERNS: Array<{ regex: RegExp; extractPerson: number; extractRole: (match: RegExpMatchArray) => string }> = [
+  // "רמי הוא רואה החשבון שלי"
+  { regex: /([א-ת]{2,}(?:\s+[א-ת]{2,})?)\s+(?:הוא|היא)\s+(?:ה)?(.{2,30})\s+שלי/i, extractPerson: 1, extractRole: (m) => m[2] },
+  // "רואה החשבון שלי הוא רמי"
+  { regex: /(?:ה)?(.{2,30})\s+שלי\s+(?:הוא|היא|זה)\s+([א-ת]{2,}(?:\s+[א-ת]{2,})?)/i, extractPerson: 2, extractRole: (m) => m[1] },
+  // "הבן/הבת/האישה שלי X"
+  { regex: /(הבן|הבת|האישה|הבעל|האמא|האבא|האח|האחות|השותף|השותפה)\s+שלי\s+(?:(?:הוא|היא|שמ\w*)\s+)?([א-ת]{2,}(?:\s+[א-ת]{2,})?)/i, extractPerson: 2, extractRole: (m) => m[1].replace(/^ה/, '') },
+  // "X השותף/העובד שלי"
+  { regex: /([א-ת]{2,}(?:\s+[א-ת]{2,})?)\s+(השותף|העובד|העובדת|המנהל|המנהלת|הלקוח|המזכירה)\s+שלי/i, extractPerson: 1, extractRole: (m) => m[2].replace(/^ה/, '') },
+  // "אני עובד עם X"
+  { regex: /אני עובד(?:ת)?\s+עם\s+([א-ת]{2,}(?:\s+[א-ת]{2,})?)/i, extractPerson: 1, extractRole: () => 'עמית' },
+];
+
+const stmtUpsertRelationship = db.prepare(
+  `INSERT INTO relationships (person_name, role, context, confidence)
+   VALUES (?, ?, ?, ?)
+   ON CONFLICT(person_name, role) DO UPDATE SET
+     context = COALESCE(excluded.context, relationships.context),
+     confidence = MAX(relationships.confidence, excluded.confidence),
+     updated_at = datetime('now')`
+);
+
+const stmtGetRelationships = db.prepare(
+  `SELECT * FROM relationships ORDER BY confidence DESC, updated_at DESC LIMIT 30`
+);
+
+const stmtSearchRelationships = db.prepare(
+  `SELECT * FROM relationships WHERE person_name LIKE ? OR role LIKE ? ORDER BY confidence DESC LIMIT 10`
+);
+
+export function extractRelationships(text: string, source: string = 'conversation'): Array<{ person: string; role: string }> {
+  const extracted: Array<{ person: string; role: string }> = [];
+
+  for (const pattern of RELATIONSHIP_PATTERNS) {
+    const match = text.match(pattern.regex);
+    if (match) {
+      const person = match[pattern.extractPerson]?.trim();
+      const role = pattern.extractRole(match)?.trim();
+      if (person && role && person.length >= 2 && person.length <= 30 && role.length >= 2) {
+        try {
+          stmtUpsertRelationship.run(person, role, source, 0.7);
+          extracted.push({ person, role });
+          log.info({ person, role }, 'extracted relationship');
+        } catch (e: any) {
+          log.debug({ err: e.message }, 'relationship upsert failed');
+        }
+      }
+    }
+  }
+
+  return extracted;
+}
+
+export function getAllRelationships(): Array<{ id: number; person_name: string; role: string; context: string | null; confidence: number }> {
+  return stmtGetRelationships.all() as any[];
+}
+
+export function searchRelationship(query: string): Array<{ person_name: string; role: string; confidence: number }> {
+  return stmtSearchRelationships.all(`%${query}%`, `%${query}%`) as any[];
+}
+
+// --- Memory Conflict Detection ---
+
+export async function detectMemoryConflict(newContent: string): Promise<{ hasConflict: boolean; conflicting?: Memory; explanation?: string } | null> {
+  try {
+    // Search for semantically similar memories
+    const embedding = await getEmbedding(newContent);
+    const similar = stmtVectorSearch.all(Buffer.from(embedding.buffer), 5) as (Memory & { distance: number })[];
+
+    for (const existing of similar) {
+      // Only check close matches (but not identical — those are duplicates, not conflicts)
+      if (existing.distance > 0.15 && existing.distance < 0.6) {
+        // Check for contradiction signals
+        const newLower = newContent.toLowerCase();
+        const existingLower = existing.content.toLowerCase();
+
+        // Number contradiction: same context but different numbers
+        const newNumbers: string[] = newLower.match(/\d+/g) || [];
+        const existingNumbers: string[] = existingLower.match(/\d+/g) || [];
+        if (newNumbers.length > 0 && existingNumbers.length > 0) {
+          const hasConflict = newNumbers.some(n => !existingNumbers.includes(n)) &&
+                             existingNumbers.some(n => !newNumbers.includes(n));
+          if (hasConflict) {
+            return {
+              hasConflict: true,
+              conflicting: existing,
+              explanation: `מספרים שונים: חדש=${newNumbers.join(',')} vs ישן=${existingNumbers.join(',')}`
+            };
+          }
+        }
+
+        // Negation contradiction: "אוהב" vs "לא אוהב", "רוצה" vs "לא רוצה"
+        const negationPairs = [
+          ['אוהב', 'לא אוהב'], ['רוצה', 'לא רוצה'], ['צריך', 'לא צריך'],
+          ['אפשר', 'אי אפשר'], ['כן', 'לא'], ['טוב', 'לא טוב'], ['גר ב', 'עבר ל'],
+        ];
+        for (const [pos, neg] of negationPairs) {
+          if ((newLower.includes(neg) && existingLower.includes(pos) && !existingLower.includes(neg)) ||
+              (newLower.includes(pos) && !newLower.includes(neg) && existingLower.includes(neg))) {
+            return {
+              hasConflict: true,
+              conflicting: existing,
+              explanation: `סתירה: "${pos}" מול "${neg}"`
+            };
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'conflict detection failed');
+  }
+  return null;
+}
+
+// --- Weekly Memory Digest ---
+
+const stmtMemoriesThisWeek = db.prepare(
+  `SELECT COUNT(*) as count, type FROM memories
+   WHERE created_at >= datetime('now', '-7 days')
+   GROUP BY type`
+);
+
+const stmtTopTopicsThisWeek = db.prepare(
+  `SELECT topic, SUM(mention_count) as total FROM conversation_topics
+   WHERE last_mentioned >= datetime('now', '-7 days')
+   GROUP BY topic ORDER BY total DESC LIMIT 5`
+);
+
+const stmtSentimentThisWeek = db.prepare(
+  `SELECT
+     AVG(score) as avg_score,
+     COUNT(*) as total,
+     SUM(CASE WHEN sentiment = 'positive' THEN 1 ELSE 0 END) as positive,
+     SUM(CASE WHEN sentiment = 'negative' THEN 1 ELSE 0 END) as negative,
+     SUM(CASE WHEN sentiment = 'frustrated' THEN 1 ELSE 0 END) as frustrated
+   FROM sentiment_log
+   WHERE created_at >= datetime('now', '-7 days')`
+);
+
+const stmtTotalMemories = db.prepare(`SELECT COUNT(*) as count FROM memories`);
+const stmtTotalEntities = db.prepare(`SELECT COUNT(*) as count FROM entities`);
+const stmtTotalMessages = db.prepare(
+  `SELECT COUNT(*) as count FROM messages WHERE created_at >= datetime('now', '-7 days')`
+);
+
+export function getWeeklyDigest(): string {
+  const typeLabels: Record<string, string> = {
+    fact: 'עובדות', preference: 'העדפות', event: 'אירועים', pattern: 'דפוסים',
+    relationship: 'אנשים', feedback: 'תיקונים', rule: 'כללים', document: 'מסמכים',
+  };
+
+  let digest = '# דייג\'סט זיכרון שבועי\n\n';
+
+  // Total stats
+  const totalMem = (stmtTotalMemories.get() as any).count;
+  let totalEnt = 0;
+  try { totalEnt = (stmtTotalEntities.get() as any).count; } catch { /* ok */ }
+  const weekMessages = (stmtTotalMessages.get() as any).count;
+  digest += `## סה"כ\n- ${totalMem} זיכרונות | ${totalEnt} עובדות מובנות | ${weekMessages} הודעות השבוע\n\n`;
+
+  // New memories this week
+  const newMemories = stmtMemoriesThisWeek.all() as Array<{ count: number; type: string }>;
+  if (newMemories.length > 0) {
+    const totalNew = newMemories.reduce((sum, m) => sum + m.count, 0);
+    digest += `## זיכרונות חדשים השבוע: ${totalNew}\n`;
+    for (const m of newMemories) {
+      digest += `- ${typeLabels[m.type] || m.type}: +${m.count}\n`;
+    }
+    digest += '\n';
+  }
+
+  // Top topics
+  const topics = stmtTopTopicsThisWeek.all() as Array<{ topic: string; total: number }>;
+  if (topics.length > 0) {
+    digest += '## נושאים חמים\n';
+    for (const t of topics) {
+      digest += `- ${t.topic}: ${t.total} אזכורים\n`;
+    }
+    digest += '\n';
+  }
+
+  // Sentiment trend
+  const sentiment = stmtSentimentThisWeek.get() as any;
+  if (sentiment && sentiment.total > 0) {
+    const avg = sentiment.avg_score;
+    const moodLabel = avg > 0.3 ? 'חיובי' : avg < -0.3 ? 'שלילי' : 'ניטרלי';
+    digest += `## מצב רוח\n- ממוצע: ${moodLabel} (${avg.toFixed(2)})\n`;
+    digest += `- ${sentiment.positive} חיוביים | ${sentiment.negative} שליליים | ${sentiment.frustrated} מתוסכלים\n\n`;
+  }
+
+  // Pending commitments count
+  try {
+    const pendingCount = db.prepare(`SELECT COUNT(*) as count FROM commitments WHERE status = 'pending'`).get() as any;
+    if (pendingCount.count > 0) {
+      digest += `## התחייבויות פתוחות: ${pendingCount.count}\n`;
+    }
+  } catch { /* ok */ }
+
+  // Relationships count
+  try {
+    const relCount = db.prepare(`SELECT COUNT(*) as count FROM relationships`).get() as any;
+    if (relCount.count > 0) {
+      digest += `## אנשים מוכרים: ${relCount.count}\n`;
+    }
+  } catch { /* ok */ }
+
+  return digest;
 }
 
 // --- Backwards compatibility (used by old tool) ---

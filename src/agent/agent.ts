@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { config } from '../utils/config.js';
 import { buildSystemPrompt } from './system-prompt.js';
-import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory, autoSaveCorrection, trackSentiment, tagConversationTopics } from './memory.js';
+import { getHistory, getSmartContext, saveMessage, shouldSummarize, getUnsummarizedMessages, saveSummary, extractEntities, indexDocumentToMemory, autoSaveCorrection, trackSentiment, tagConversationTopics, getContextBridge, extractCommitments, extractRelationships } from './memory.js';
 import { getToolDefinitions, executeTool, collectMedia, setCurrentRequestId } from './tools.js';
 import { VOICE_PRESETS } from '../tools/handlers/send-voice.js';
 import { searchKnowledge } from './knowledge.js';
@@ -95,10 +95,23 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Tag conversation topics (non-blocking)
   try { tagConversationTopics(msg.channel, msg.senderId, msg.text); } catch { /* non-critical */ }
 
+  // Extract commitments/promises (non-blocking)
+  try { extractCommitments(msg.text, msg.channel, msg.senderId); } catch { /* non-critical */ }
+
+  // Extract relationships (non-blocking)
+  try { extractRelationships(msg.text, `${msg.channel}:${msg.senderId}`); } catch { /* non-critical */ }
+
   // Build conversation with smart context (relevant old messages beyond the window)
   const history = getHistory(msg.channel, msg.senderId);
   const smartCtx = getSmartContext(msg.channel, msg.senderId, msg.text);
   const messages: Anthropic.MessageParam[] = [];
+
+  // Inject context bridge (what was discussed last time) if returning after a break
+  const bridge = getContextBridge(msg.channel, msg.senderId);
+  if (bridge) {
+    messages.push({ role: 'user', content: bridge });
+    messages.push({ role: 'assistant', content: 'הבנתי, אני זוכר את ההקשר מהפעם הקודמת.' });
+  }
 
   // Inject smart context as early system-like messages (before recent history)
   if (smartCtx.length > 0) {

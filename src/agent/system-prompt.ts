@@ -1,5 +1,5 @@
 import type Anthropic from '@anthropic-ai/sdk';
-import { getRelevantMemories, getRecentSummaries, getEntities, getRecentMood, getRecentTopics, type Memory } from './memory.js';
+import { getRelevantMemories, getRecentSummaries, getEntities, getRecentMood, getRecentTopics, getAllRelationships, getPendingCommitments, type Memory } from './memory.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { db } from '../utils/db.js';
 import { config } from '../utils/config.js';
@@ -285,6 +285,33 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
     } catch { /* topics table may not exist yet */ }
   }
 
+  // Relationships
+  let relationshipsBlock = '';
+  try {
+    const rels = getAllRelationships();
+    if (rels.length > 0) {
+      relationshipsBlock = '\n## אנשים שאלון מכיר\n';
+      for (const r of rels) {
+        relationshipsBlock += `- **${r.person_name}**: ${r.role}\n`;
+      }
+    }
+  } catch { /* relationships table may not exist yet */ }
+
+  // Pending commitments
+  let commitmentsBlock = '';
+  if (channel && senderId) {
+    try {
+      const commitments = getPendingCommitments(channel, senderId);
+      if (commitments.length > 0) {
+        commitmentsBlock = '\n## התחייבויות פתוחות\n';
+        for (const c of commitments) {
+          commitmentsBlock += `- ${c.content}${c.due_hint ? ` (${c.due_hint})` : ''} — ${c.created_at}\n`;
+        }
+        commitmentsBlock += '\nאם אלון סיים משימה — סמן אותה כ-done עם pending_promises.\n';
+      }
+    } catch { /* commitments table may not exist yet */ }
+  }
+
   // Knowledge base context is now injected as document blocks in agent.ts (for citations)
 
   const skillsBlock = skills.length > 0
@@ -335,6 +362,9 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 - **forget**: מחיקת זיכרון ספציפי (לפי ID או חיפוש). השתמש כשאלון אומר "תשכח X" / "תמחק את הזיכרון על X"
 - **memory_timeline**: חיפוש מתי דיברנו על משהו. השתמש כשאלון שואל "מתי דיברנו על X?" / "מה היה עם X?" / "when did we discuss X?"
 - **mood_check**: בדיקת מצב רוח ומגמה. השתמש כשאלון שואל "מה מצב הרוח שלי?" / "מה ההרגשה?"
+- **pending_promises**: הצגת התחייבויות פתוחות או סימון כ-done. השתמש כשאלון שואל "מה ההתחייבויות שלי?" / "מה הבטחתי?" / "סימנתי X כ-done"
+- **memory_digest**: דייג'סט שבועי — סיכום זיכרונות חדשים, נושאים חמים, מגמת מצב רוח. השתמש כשאלון שואל "דוח זיכרון" / "מה היה השבוע?"
+- **people_i_know**: גרף קשרים — אנשים ותפקידיהם. השתמש כשאלון שואל "מי אני מכיר?" / "מי זה X?"
 - **schedule_message**: תזכורת חד-פעמית — שליחת הודעה בזמן מסוים (פורמט: "YYYY-MM-DD HH:mm" בזמן ישראל). **השתמש בזה כשאלון אומר "תזכיר לי עוד X דקות/שעות" או "תזכיר לי ב-..."**
 - **set_reminder**: תזכורת חוזרת עם cron (יומית, שבועית וכו׳). השתמש רק כשהתזכורת צריכה לחזור על עצמה.
 - **list_reminders**: הצגת כל התזכורות החוזרות
@@ -473,6 +503,8 @@ export async function buildSystemPrompt(userMessage?: string, channel?: string, 
 ${leadPrompt}
 ${memoriesBlock}
 ${entitiesBlock}
+${relationshipsBlock}
+${commitmentsBlock}
 ${summariesBlock}
 ${moodBlock}
 ${topicsBlock}
