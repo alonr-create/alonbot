@@ -643,6 +643,31 @@ app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
   }
 });
 
+// ── Log external message (from campaign scripts, etc.) ──
+// Accepts both dashboard auth AND x-api-secret for campaign script compatibility
+app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any) => {
+  if (req.headers['x-api-secret'] === config.localApiSecret) return next();
+  dashAuth(req, res, next);
+}, (req: any, res: any) => {
+  try {
+    const { phone, message, direction, sender_name } = req.body || {};
+    if (!phone || !message) {
+      res.status(400).json({ success: false, error: 'phone and message required' });
+      return;
+    }
+    const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const channel = direction === 'inbound' ? 'whatsapp-inbound' : 'whatsapp-outbound';
+    const role = direction === 'inbound' ? 'user' : 'assistant';
+    db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))`)
+      .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message);
+    log.info({ phone: normalizedPhone, direction }, 'external message logged');
+    res.json({ success: true });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // ── Meta Health: WhatsApp number quality + WABA status + Ads overview ──
 app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
   try {

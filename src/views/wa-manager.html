@@ -75,6 +75,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);min-h
 .conv-item:hover{background:var(--bg3);}
 .conv-item.active{background:var(--bg3);border-right:3px solid var(--accent);}
 .conv-avatar{width:40px;height:40px;border-radius:50%;background:var(--accent2);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;color:#fff;flex-shrink:0;}
+img.conv-avatar{object-fit:cover;background:var(--bg3);}
 .conv-info{flex:1;overflow:hidden;}
 .conv-name{font-weight:700;font-size:14px;display:flex;justify-content:space-between;align-items:center;}
 .conv-name .time{font-size:11px;color:var(--text3);font-weight:400;}
@@ -706,11 +707,33 @@ async function loadAll() {
       renderRecentActivity();
       updateBroadcastOptions();
       renderWorkspacesList();
+      lazyLoadProfilePics();
     }
   } catch (e) {
     console.error('Load failed:', e);
     updateConnStatus(false);
   }
+}
+
+let _picLoadPending = false;
+async function lazyLoadProfilePics() {
+  if (_picLoadPending) return;
+  const missing = allLeads.filter(l => !l.profile_pic_url).slice(0, 20).map(l => l.phone);
+  if (!missing.length) return;
+  _picLoadPending = true;
+  try {
+    const res = await fetch(API('profile-pics-batch'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ phones: missing }) });
+    const data = await res.json();
+    if (data.success && data.results) {
+      for (const l of allLeads) {
+        if (data.results[l.phone]) {
+          l.profile_pic_url = data.results[l.phone];
+        }
+      }
+      renderConvList();
+    }
+  } catch {}
+  _picLoadPending = false;
 }
 
 function updateConnStatus(ok) {
@@ -943,9 +966,12 @@ function renderConvList() {
     const preview = (l.last_message || 'אין הודעות').slice(0, 60);
     const isActive = l.phone === currentPhone;
     const isUnread = l.last_message_role === 'user';
+    const avatarHtml = l.profile_pic_url
+      ? `<img src="${esc(l.profile_pic_url)}" class="conv-avatar" style="object-fit:cover;" onerror="this.outerHTML='<div class=\\'conv-avatar\\'>${esc(initials)}</div>'">`
+      : `<div class="conv-avatar">${esc(initials)}</div>`;
     html += `
       <div class="conv-item ${isActive ? 'active' : ''}" onclick="openConversation('${l.phone}')">
-        <div class="conv-avatar">${esc(initials)}</div>
+        ${avatarHtml}
         <div class="conv-info">
           <div class="conv-name">${esc(l.name || l.phone)} <span class="time">${time}</span></div>
           <div class="conv-preview">${esc(preview)}</div>
@@ -1617,9 +1643,12 @@ renderConvList = function() {
       const preview = (l.last_message || 'אין הודעות').slice(0, 60);
       const isActive = l.phone === currentPhone;
       const isUnread = l.last_message_role === 'user';
+      const avatarHtml2 = l.profile_pic_url
+        ? `<img src="${esc(l.profile_pic_url)}" class="conv-avatar" style="object-fit:cover;" onerror="this.outerHTML='<div class=\\'conv-avatar\\'>${esc(initials)}</div>'">`
+        : `<div class="conv-avatar">${esc(initials)}</div>`;
       html += `
         <div class="conv-item ${isActive ? 'active' : ''}" onclick="openConversation('${l.phone}')">
-          <div class="conv-avatar">${esc(initials)}</div>
+          ${avatarHtml2}
           <div class="conv-info">
             <div class="conv-name">${esc(l.name || l.phone)} <span class="time">${time}</span></div>
             <div class="conv-preview">${esc(preview)}</div>
