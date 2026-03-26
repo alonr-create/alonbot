@@ -729,7 +729,6 @@ html,body{
         <div class="filters">
           <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
           <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
-          <button class="filter-pill" data-filter="vip" onclick="setFilter('vip',this)">VIP</button>
           <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
           <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
           <button class="filter-pill" data-filter="followup" onclick="setFilter('followup',this)">&#128257;</button>
@@ -1227,7 +1226,6 @@ function applyFilter() {
   filteredContacts = contacts.filter(c => {
     if (currentSource !== 'all' && c.source !== currentSource) return false;
     if (currentFilter === 'new' && c.lead_status !== 'new') return false;
-    if (currentFilter === 'vip' && c.lead_status !== 'vip') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
     if (currentFilter === 'replied' && !(c.user_reply_count > 0)) return false;
     if (currentFilter === 'followup' && !c.next_followup) return false;
@@ -1252,17 +1250,18 @@ function setSource(src) {
 }
 
 const SOURCE_LABELS = {
-  'alon_dev': 'Alon.dev',
-  'voice_agent': 'Voice Agent',
-  'whatsapp': 'WhatsApp',
+  'alon_dev': 'Cold Calling',
+  'voice_agent': 'דקל לפרישה',
   'alon_dev_whatsapp': 'WA Campaign',
   'campaign': 'Campaign',
 };
+const HIDDEN_SOURCES = ['whatsapp'];
 
 function buildSourcePills() {
   const sources = {};
   contacts.forEach(c => {
     const s = c.source || 'other';
+    if (HIDDEN_SOURCES.includes(s)) return;
     sources[s] = (sources[s] || 0) + 1;
   });
   const el = document.getElementById('sourceSelect');
