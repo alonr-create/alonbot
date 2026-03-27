@@ -1101,20 +1101,33 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
     return;
   }
   try {
-    const { getAdapter } = await import('./router.js');
-    const wa = getAdapter('whatsapp');
-    if (!wa) {
-      res.json({ success: false, error: 'WhatsApp not connected' });
-      return;
-    }
     let chatPhone = phone.replace(/[\s\-\(\)]/g, '');
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
-    const chatId = `${chatPhone}@s.whatsapp.net`;
-    await wa.sendReply(
-      { id: 'wa-mgr', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
-      { text: message }
-    );
+
+    // Try adapter first, fall back to direct Cloud API
+    const { getAdapter } = await import('./router.js');
+    const wa = getAdapter('whatsapp');
+    if (wa) {
+      const chatId = `${chatPhone}@s.whatsapp.net`;
+      await wa.sendReply(
+        { id: 'wa-mgr', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+        { text: message }
+      );
+    } else if (config.waCloudToken && config.waCloudPhoneId) {
+      // Direct Cloud API fallback
+      const r = await fetch(`https://graph.facebook.com/v21.0/${config.waCloudPhoneId}/messages`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${config.waCloudToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messaging_product: 'whatsapp', to: chatPhone, type: 'text', text: { body: message } }),
+      });
+      const data = await r.json() as any;
+      if (data.error) throw new Error(data.error.message || 'Cloud API error');
+    } else {
+      res.json({ success: false, error: 'WhatsApp not connected' });
+      return;
+    }
+
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
