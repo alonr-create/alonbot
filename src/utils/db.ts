@@ -24,7 +24,7 @@ db.exec(`
     sender_name TEXT,
     role TEXT NOT NULL CHECK(role IN ('user', 'assistant')),
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS cron_jobs (
@@ -35,7 +35,7 @@ db.exec(`
     target_id TEXT NOT NULL,
     message TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS memories (
@@ -45,7 +45,7 @@ db.exec(`
     content TEXT NOT NULL,
     importance INTEGER NOT NULL DEFAULT 5,
     source TEXT DEFAULT 'user_told',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     last_accessed TEXT,
     access_count INTEGER NOT NULL DEFAULT 0
   );
@@ -59,7 +59,7 @@ db.exec(`
     message_count INTEGER,
     from_date TEXT,
     to_date TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS api_usage (
@@ -68,7 +68,7 @@ db.exec(`
     input_tokens INTEGER NOT NULL DEFAULT 0,
     output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_usd REAL NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS tasks (
@@ -77,7 +77,7 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'cancelled')),
     priority INTEGER NOT NULL DEFAULT 5,
     due_date TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     completed_at TEXT
   );
 
@@ -89,7 +89,7 @@ db.exec(`
     channel TEXT NOT NULL DEFAULT 'telegram',
     target_id TEXT NOT NULL,
     sent INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_scheduled_pending ON scheduled_messages(sent, send_at);
@@ -99,7 +99,7 @@ db.exec(`
     tool_name TEXT NOT NULL,
     success INTEGER NOT NULL DEFAULT 1,
     duration_ms INTEGER,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_tool_usage_date ON tool_usage(created_at);
@@ -117,7 +117,7 @@ db.exec(`
     source_type TEXT NOT NULL CHECK(source_type IN ('url', 'pdf', 'text', 'file')),
     source_ref TEXT,
     chunk_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS knowledge_chunks (
@@ -125,7 +125,7 @@ db.exec(`
     doc_id INTEGER NOT NULL REFERENCES knowledge_docs(id) ON DELETE CASCADE,
     chunk_index INTEGER NOT NULL,
     content TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_knowledge_chunks_doc ON knowledge_chunks(doc_id, chunk_index);
@@ -137,7 +137,7 @@ db.exec(`
     payload TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'processing', 'completed', 'failed')),
     result TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     completed_at TEXT
   );
 
@@ -150,7 +150,7 @@ db.exec(`
     trigger_value TEXT NOT NULL,
     actions TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS leads (
@@ -165,8 +165,8 @@ db.exec(`
     was_booked INTEGER NOT NULL DEFAULT 0,
     call_mode TEXT,
     lead_status TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
@@ -179,7 +179,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     phone TEXT NOT NULL,
     tag TEXT NOT NULL,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     UNIQUE(phone, tag)
   );
 
@@ -191,7 +191,7 @@ db.exec(`
     phone TEXT NOT NULL,
     content TEXT NOT NULL,
     author TEXT NOT NULL DEFAULT 'admin',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_lead_notes_phone ON lead_notes(phone);
@@ -202,7 +202,7 @@ db.exec(`
     content TEXT NOT NULL,
     workspace_id TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS status_history (
@@ -210,7 +210,7 @@ db.exec(`
     phone TEXT NOT NULL,
     old_status TEXT,
     new_status TEXT NOT NULL,
-    changed_at TEXT NOT NULL DEFAULT (datetime('now'))
+    changed_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_status_history_phone ON status_history(phone);
@@ -223,13 +223,13 @@ db.exec(`
     message_type TEXT NOT NULL DEFAULT 'text' CHECK(message_type IN ('text', 'voice', 'image')),
     sort_order INTEGER NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS followup_config (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS meetings (
@@ -243,8 +243,8 @@ db.exec(`
     status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'completed', 'no_show', 'cancelled', 'rescheduled')),
     no_show_handled INTEGER NOT NULL DEFAULT 0,
     reschedule_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_meetings_phone ON meetings(phone);
@@ -258,7 +258,7 @@ db.exec(`
     steps TEXT NOT NULL DEFAULT '[]',
     workspace_id TEXT,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS flow_runs (
@@ -267,8 +267,8 @@ db.exec(`
     phone TEXT NOT NULL,
     current_step INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'completed', 'paused')),
-    started_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    started_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_flow_runs_phone ON flow_runs(phone, status);
@@ -282,7 +282,7 @@ db.exec(`
     duration_sec INTEGER NOT NULL DEFAULT 0,
     scroll_pct INTEGER NOT NULL DEFAULT 0,
     user_agent TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_page_visits_site ON page_visits(site, created_at);
@@ -291,7 +291,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE TABLE IF NOT EXISTS commitments (
@@ -301,7 +301,7 @@ db.exec(`
     content TEXT NOT NULL,
     due_hint TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'expired')),
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     resolved_at TEXT
   );
 
@@ -313,8 +313,8 @@ db.exec(`
     role TEXT NOT NULL,
     context TEXT,
     confidence REAL NOT NULL DEFAULT 0.8,
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     UNIQUE(person_name, role)
   );
 
@@ -327,8 +327,8 @@ db.exec(`
     object TEXT NOT NULL,
     confidence REAL NOT NULL DEFAULT 0.8,
     source TEXT DEFAULT 'extracted',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     UNIQUE(subject, predicate, object)
   );
 
@@ -342,7 +342,7 @@ db.exec(`
     sentiment TEXT NOT NULL CHECK(sentiment IN ('positive', 'neutral', 'negative', 'frustrated')),
     score REAL NOT NULL DEFAULT 0,
     trigger_text TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_sentiment_log_sender ON sentiment_log(channel, sender_id, created_at);
@@ -352,8 +352,8 @@ db.exec(`
     channel TEXT NOT NULL,
     sender_id TEXT NOT NULL,
     topic TEXT NOT NULL,
-    first_mentioned TEXT NOT NULL DEFAULT (datetime('now')),
-    last_mentioned TEXT NOT NULL DEFAULT (datetime('now')),
+    first_mentioned TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
+    last_mentioned TEXT NOT NULL DEFAULT (datetime('now', '+3 hours')),
     mention_count INTEGER NOT NULL DEFAULT 1
   );
 
@@ -376,7 +376,7 @@ db.exec(`
     failed_at TEXT,
     error_code TEXT,
     error_title TEXT,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 
   CREATE INDEX IF NOT EXISTS idx_delivery_phone ON delivery_receipts(phone);
@@ -396,7 +396,7 @@ db.exec(`
     website TEXT,
     default_lead_status TEXT DEFAULT 'new',
     active INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
   );
 `);
 

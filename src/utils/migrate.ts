@@ -17,7 +17,7 @@ export async function runMigrations(db: DatabaseType): Promise<number> {
     CREATE TABLE IF NOT EXISTS schema_version (
       version INTEGER PRIMARY KEY,
       description TEXT NOT NULL,
-      applied_at TEXT NOT NULL DEFAULT (datetime('now'))
+      applied_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
     )
   `);
 

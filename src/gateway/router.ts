@@ -7,6 +7,10 @@ import { config } from '../utils/config.js';
 
 const log = createLogger('router');
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 const adapters = new Map<string, ChannelAdapter>();
 
 // Debounce: batch rapid WhatsApp messages from same lead before AI processing
@@ -99,7 +103,7 @@ export function registerAdapter(adapter: ChannelAdapter) {
     // Log ALL WhatsApp messages to DB for dashboard visibility
     // Skip internal SYSTEM prompts (used by cron follow-ups)
     if (msg.channel === 'whatsapp' && !msg.text.startsWith('[SYSTEM:')) {
-      const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+      const now = nowIsrael().replace('T', ' ');
       const content = (msg.text || '(מדיה)').substring(0, 2000);
       try {
         const { db: logDb } = await import('../utils/db.js');
@@ -154,7 +158,7 @@ export function registerAdapter(adapter: ChannelAdapter) {
           name: msg.senderName || msg.senderId,
           text: (msg.text || '(מדיה)').slice(0, 200),
           role: 'user',
-          timestamp: new Date().toISOString(),
+          timestamp: nowIsrael(),
         });
       }).catch(() => {});
     }
@@ -311,7 +315,7 @@ export function registerAdapter(adapter: ChannelAdapter) {
 
       // Log bot reply for ALL WhatsApp conversations (dashboard visibility)
       if (msg.channel === 'whatsapp') {
-        const replyNow = new Date().toISOString().replace('T', ' ').slice(0, 19);
+        const replyNow = nowIsrael().replace('T', ' ');
         let replyContent = reply.text.substring(0, 2000);
         // Tag interactive messages so dashboard can render buttons/lists
         if (reply.buttons) {

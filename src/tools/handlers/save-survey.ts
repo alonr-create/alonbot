@@ -10,7 +10,7 @@ db.exec(`
     lead_name TEXT,
     question TEXT NOT NULL,
     answer TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now', '+3 hours'))
   )
 `);
 
