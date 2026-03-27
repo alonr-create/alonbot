@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="360Shmikley">
-<meta name="theme-color" content="#0088cc">
+<meta name="theme-color" content="#ffffff">
 <script>
 // Dynamic manifest with token for PWA home screen
 const _t = new URLSearchParams(window.location.search).get('token');
@@ -29,25 +29,46 @@ if (_t) {
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
 :root{
+  --bg:#ffffff;
+  --bg-secondary:#f0f2f5;
+  --bg-header:#ffffff;
+  --bg-input:#f0f2f5;
+  --accent:#25D366;
+  --accent-dark:#128C7E;
+  --accent-light:#dcf8c6;
+  --bubble-out:#d9fdd3;
+  --bubble-in:#ffffff;
+  --text:#1a1a1a;
+  --text-secondary:#667781;
+  --text-muted:#8696a0;
+  --border:#e9edef;
+  --badge:#25D366;
+  --tab-inactive:#8696a0;
+  --chat-bg:#efeae2;
+  --chat-bg-dark:#e5ddd5;
+  --safe-top:env(safe-area-inset-top, 0px);
+  --safe-bottom:env(safe-area-inset-bottom, 0px);
+  --safe-left:env(safe-area-inset-left, 0px);
+  --safe-right:env(safe-area-inset-right, 0px);
+}
+[data-theme="dark"]{
   --bg:#111b21;
   --bg-secondary:#1f2c34;
   --bg-header:#1a2730;
   --bg-input:#2a3942;
-  --blue:#0088cc;
-  --blue-light:#0099e6;
-  --blue-dark:#006da3;
-  --bubble-out:#1a3a4a;
+  --accent:#25D366;
+  --accent-dark:#128C7E;
+  --accent-light:#1a3a2a;
+  --bubble-out:#005c4b;
   --bubble-in:#1f2c34;
   --text:#e9edef;
   --text-secondary:#8696a0;
   --text-muted:#667781;
   --border:#2a3942;
-  --badge:#0088cc;
+  --badge:#25D366;
   --tab-inactive:#8696a0;
-  --safe-top:env(safe-area-inset-top, 0px);
-  --safe-bottom:env(safe-area-inset-bottom, 0px);
-  --safe-left:env(safe-area-inset-left, 0px);
-  --safe-right:env(safe-area-inset-right, 0px);
+  --chat-bg:#0b141a;
+  --chat-bg-dark:#0b141a;
 }
 html,body{
   height:100%;height:100dvh;
@@ -99,30 +120,31 @@ html,body{
 }
 .list-header-row{
   display:flex;align-items:center;justify-content:space-between;
-  margin-bottom:6px;
+  margin-bottom:8px;
 }
 .list-title{
-  font-size:22px;font-weight:700;color:var(--text);letter-spacing:-0.3px;
+  font-size:26px;font-weight:800;color:var(--text);letter-spacing:-0.5px;
 }
-.list-header-actions{display:flex;gap:16px;}
+.list-header-actions{display:flex;gap:12px;}
 .header-btn{
-  width:34px;height:34px;border-radius:50%;
-  background:var(--bg-input);border:none;
-  color:var(--blue);font-size:16px;
+  width:36px;height:36px;border-radius:50%;
+  background:transparent;border:none;
+  color:var(--accent-dark);font-size:18px;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   transition:background .15s;
 }
-.header-btn:active{background:var(--border);}
+.header-btn:active{background:var(--bg-input);}
+[data-theme="dark"] .header-btn{color:var(--accent);}
 
 /* Search */
 .search-wrap{
   position:relative;margin-bottom:4px;
 }
 .search-wrap input{
-  width:100%;padding:7px 12px 7px 32px;
-  border-radius:8px;border:none;
+  width:100%;padding:8px 14px 8px 32px;
+  border-radius:10px;border:none;
   background:var(--bg-input);color:var(--text);
-  font-size:13px;font-family:inherit;outline:none;
+  font-size:14px;font-family:inherit;outline:none;
 }
 .search-wrap input::placeholder{color:var(--text-muted);}
 .search-icon{
@@ -130,30 +152,32 @@ html,body{
   color:var(--text-muted);font-size:14px;pointer-events:none;
 }
 
-/* Filter pills */
-.filters-row{display:flex;gap:4px;align-items:center;padding-bottom:2px;}
-.filters{display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;min-width:0;}
+/* Filter pills — WhatsApp style */
+.filters-row{display:flex;gap:6px;align-items:center;padding:4px 0 2px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.filters-row::-webkit-scrollbar{display:none;}
+.filters{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;flex:1;min-width:0;}
 .filters::-webkit-scrollbar{display:none;}
 .filter-pill{
-  padding:4px 10px;border-radius:14px;
-  font-size:11px;font-weight:500;
+  padding:6px 14px;border-radius:18px;
+  font-size:13px;font-weight:500;
   border:none;cursor:pointer;white-space:nowrap;
   background:var(--bg-input);color:var(--text-secondary);
   transition:all .15s;flex-shrink:0;
 }
-.filter-pill.active{background:var(--blue);color:#fff;}
+.filter-pill.active{background:var(--accent-light);color:var(--accent-dark);font-weight:600;}
+[data-theme="dark"] .filter-pill.active{background:var(--accent-light);color:var(--accent);}
 .filter-pill:active{opacity:.7;}
 .source-select{
-  padding:4px 6px;border-radius:8px;
-  font-size:11px;font-weight:500;
-  border:1px solid var(--border);cursor:pointer;
+  padding:5px 8px;border-radius:18px;
+  font-size:12px;font-weight:500;
+  border:none;cursor:pointer;
   background:var(--bg-input);color:var(--text-secondary);
   font-family:inherit;outline:none;flex-shrink:0;
   -webkit-appearance:none;appearance:none;
   background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%238696a0'/%3E%3C/svg%3E");
-  background-repeat:no-repeat;background-position:left 6px center;padding-left:18px;
+  background-repeat:no-repeat;background-position:left 8px center;padding-left:20px;
 }
-.source-select:focus{border-color:var(--blue);}
+.source-select:focus{border-color:var(--accent);}
 
 /* Contact list */
 .contact-list{
@@ -169,7 +193,7 @@ html,body{
   transition:background .1s;position:relative;
 }
 .contact-row:active{background:var(--bg-secondary);}
-.contact-row+.contact-row{border-top:1px solid rgba(134,150,160,.1);}
+.contact-row+.contact-row{border-top:1px solid var(--border);}
 
 .avatar{
   width:52px;height:52px;border-radius:50%;flex-shrink:0;
@@ -179,27 +203,27 @@ html,body{
 }
 .contact-info{flex:1;min-width:0;}
 .contact-top{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:3px;}
-.contact-name{font-size:16px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.contact-name{font-size:16px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .contact-time{font-size:12px;color:var(--text-muted);flex-shrink:0;margin-right:8px;}
-.contact-time.unread{color:var(--blue);}
+.contact-time.unread{color:var(--accent);font-weight:600;}
 .contact-bottom{display:flex;align-items:center;justify-content:space-between;}
 .contact-preview{
   font-size:14px;color:var(--text-muted);
   overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   flex:1;min-width:0;
 }
-.contact-preview .checks{color:var(--blue);margin-left:4px;font-size:12px;}
+.contact-preview .checks{color:var(--accent);margin-left:4px;font-size:12px;}
 .unread-badge{
-  background:var(--blue);color:#fff;font-size:11px;font-weight:700;
+  background:var(--accent);color:#fff;font-size:11px;font-weight:700;
   min-width:20px;height:20px;border-radius:10px;
   display:flex;align-items:center;justify-content:center;
-  padding:0 6px;flex-shrink:0;margin-right:4px;
+  padding:0 6px;flex-shrink:0;
 }
 .contact-status-dot{
   width:8px;height:8px;border-radius:50%;flex-shrink:0;
 }
 .contact-status-dot.new{background:#f59e0b;}
-.contact-status-dot.vip{background:var(--blue);}
+.contact-status-dot.vip{background:var(--accent);}
 .contact-status-dot.waiting{background:#ea4335;}
 
 /* Pull to refresh */
@@ -213,14 +237,22 @@ html,body{
 .chat-header{
   padding-top:calc(var(--safe-top) + 8px);
   padding-right:12px;padding-left:12px;padding-bottom:8px;
-  background:var(--bg-header);
+  background:var(--accent-dark);
   display:flex;align-items:center;gap:10px;
-  border-bottom:1px solid var(--border);
-  min-height:56px;
+  min-height:56px;color:#fff;
 }
+.chat-header .back-btn{color:#fff;}
+.chat-header .chat-header-name{color:#fff;}
+.chat-header .chat-header-status{color:rgba(255,255,255,.7);}
+.chat-header .chat-action-btn{color:rgba(255,255,255,.85);}
+[data-theme="dark"] .chat-header{background:var(--bg-header);border-bottom:1px solid var(--border);}
+[data-theme="dark"] .chat-header .back-btn{color:var(--accent);}
+[data-theme="dark"] .chat-header .chat-header-name{color:var(--text);}
+[data-theme="dark"] .chat-header .chat-header-status{color:var(--text-muted);}
+[data-theme="dark"] .chat-header .chat-action-btn{color:var(--text-secondary);}
 .back-btn{
   width:36px;height:36px;border:none;background:none;
-  color:var(--blue);font-size:22px;cursor:pointer;
+  color:var(--accent);font-size:22px;cursor:pointer;
   display:flex;align-items:center;justify-content:center;
   flex-shrink:0;
 }
@@ -247,11 +279,14 @@ html,body{
   flex:1;overflow-y:auto;overflow-x:hidden;
   -webkit-overflow-scrolling:touch;
   padding:8px 12px;
+  background-color:var(--chat-bg);
+  background-image:url("data:image/svg+xml,%3Csvg width='200' height='200' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3Cpattern id='p' width='40' height='40' patternUnits='userSpaceOnUse'%3E%3Cpath d='M20 0v40M0 20h40' stroke='%2300000008' stroke-width='.5'/%3E%3C/pattern%3E%3C/defs%3E%3Crect fill='%23efeae2' width='200' height='200'/%3E%3Crect fill='url(%23p)' width='200' height='200'/%3E%3C/svg%3E");
+  display:flex;flex-direction:column;
+}
+[data-theme="dark"] .messages-area{
   background-color:#0b141a;
   background-image:url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-  background-size:contain;
-  background-repeat:repeat;
-  display:flex;flex-direction:column;
+  background-size:contain;background-repeat:repeat;
 }
 .messages-area::-webkit-scrollbar{display:none;}
 
@@ -259,9 +294,11 @@ html,body{
   text-align:center;margin:12px 0 8px;
 }
 .msg-date-sep span{
-  background:var(--bg-input);color:var(--text-muted);
-  font-size:12px;padding:4px 12px;border-radius:8px;
+  background:rgba(255,255,255,.85);color:var(--text-muted);
+  font-size:12px;padding:5px 14px;border-radius:8px;
+  box-shadow:0 1px 2px rgba(0,0,0,.06);
 }
+[data-theme="dark"] .msg-date-sep span{background:var(--bg-input);box-shadow:none;}
 
 .message{
   max-width:80%;padding:7px 10px 4px;
@@ -278,12 +315,14 @@ html,body{
   align-self:flex-start;
   border-bottom-right-radius:4px;
   margin-left:auto;
+  box-shadow:0 1px 1px rgba(0,0,0,.06);
 }
 .message.incoming{
   background:var(--bubble-in);
   align-self:flex-end;
   border-bottom-left-radius:4px;
   margin-right:auto;
+  box-shadow:0 1px 1px rgba(0,0,0,.06);
 }
 .msg-text{color:var(--text);}
 .msg-media{max-width:100%;border-radius:8px;margin-bottom:4px;}
@@ -295,14 +334,13 @@ html,body{
   margin-top:2px;
 }
 .msg-time{font-size:11px;color:var(--text-muted);}
-.msg-check{font-size:12px;color:var(--blue);}
+.msg-check{font-size:12px;color:var(--accent);}
 
 /* Input bar */
 .input-bar{
   display:flex;align-items:flex-end;gap:8px;
   padding:8px 12px calc(var(--safe-bottom) + 8px);
-  background:var(--bg-header);
-  border-top:1px solid var(--border);
+  background:var(--bg-secondary);
 }
 .input-attach{
   width:40px;height:40px;border:none;background:none;
@@ -311,23 +349,25 @@ html,body{
 }
 .input-attach:active{opacity:.5;}
 .input-field{
-  flex:1;min-height:40px;max-height:120px;
-  padding:10px 14px;border-radius:20px;
-  background:var(--bg-input);border:none;
+  flex:1;min-height:42px;max-height:120px;
+  padding:10px 14px;border-radius:22px;
+  background:var(--bg);border:none;
   color:var(--text);font-size:15px;font-family:inherit;
   resize:none;outline:none;line-height:1.35;
   overflow-y:auto;
 }
+[data-theme="dark"] .input-field{background:var(--bg-input);}
 .input-field::placeholder{color:var(--text-muted);}
 .input-field::-webkit-scrollbar{display:none;}
 .send-btn{
-  width:40px;height:40px;border-radius:50%;border:none;
-  background:var(--blue);color:#fff;font-size:18px;
+  width:42px;height:42px;border-radius:50%;border:none;
+  background:var(--accent);color:#fff;font-size:18px;
   cursor:pointer;display:flex;align-items:center;justify-content:center;
   flex-shrink:0;transition:background .15s,transform .1s;
 }
-.send-btn:active{transform:scale(.92);background:var(--blue-dark);}
-.send-btn:disabled{background:var(--bg-input);color:var(--text-muted);cursor:default;}
+.send-btn:active{transform:scale(.92);background:var(--accent-dark);}
+.send-btn:disabled{background:#c5c5c5;color:#fff;cursor:default;}
+[data-theme="dark"] .send-btn:disabled{background:var(--bg-input);color:var(--text-muted);}
 
 /* ===== CONTACT DETAILS SCREEN ===== */
 .details-header{
@@ -355,10 +395,10 @@ html,body{
 .details-phone{font-size:15px;color:var(--text-muted);direction:ltr;}
 
 .details-section{
-  padding:16px 20px;border-top:8px solid var(--bg-secondary);
+  padding:16px 20px;border-top:6px solid var(--bg-secondary);
 }
 .details-section-title{
-  font-size:13px;font-weight:600;color:var(--blue);
+  font-size:13px;font-weight:600;color:var(--accent);
   margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;
 }
 .details-row{
@@ -376,19 +416,19 @@ html,body{
   border:1px solid var(--border);font-family:inherit;font-size:14px;
   outline:none;cursor:pointer;
 }
-.status-select:focus{border-color:var(--blue);}
+.status-select:focus{border-color:var(--accent);}
 
 /* Tags */
 .tags-wrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;}
 .tag-chip{
   display:flex;align-items:center;gap:4px;
   padding:5px 10px;border-radius:16px;
-  background:rgba(0,136,204,.15);color:var(--blue);
+  background:rgba(0,136,204,.15);color:var(--accent);
   font-size:13px;font-weight:500;
 }
 .tag-remove{
   width:16px;height:16px;border-radius:50%;border:none;
-  background:rgba(0,136,204,.3);color:var(--blue);
+  background:rgba(0,136,204,.3);color:var(--accent);
   font-size:11px;cursor:pointer;display:flex;
   align-items:center;justify-content:center;line-height:1;
 }
@@ -400,10 +440,10 @@ html,body{
   border:1px solid var(--border);font-size:13px;
   font-family:inherit;outline:none;
 }
-.tag-input:focus{border-color:var(--blue);}
+.tag-input:focus{border-color:var(--accent);}
 .tag-add-btn{
   padding:6px 12px;border-radius:8px;border:none;
-  background:var(--blue);color:#fff;font-size:13px;
+  background:var(--accent);color:#fff;font-size:13px;
   font-weight:500;cursor:pointer;
 }
 .tag-add-btn:active{opacity:.7;}
@@ -416,10 +456,10 @@ html,body{
   font-family:inherit;resize:vertical;outline:none;
   margin-top:8px;
 }
-.notes-field:focus{border-color:var(--blue);}
+.notes-field:focus{border-color:var(--accent);}
 .notes-save{
   margin-top:8px;padding:8px 16px;border-radius:8px;border:none;
-  background:var(--blue);color:#fff;font-size:14px;
+  background:var(--accent);color:#fff;font-size:14px;
   font-weight:500;cursor:pointer;width:100%;
 }
 .notes-save:active{opacity:.7;}
@@ -435,7 +475,7 @@ html,body{
 }
 .quick-action-icon{
   width:48px;height:48px;border-radius:50%;
-  background:rgba(0,136,204,.12);color:var(--blue);
+  background:rgba(0,136,204,.12);color:var(--accent);
   display:flex;align-items:center;justify-content:center;
   font-size:20px;
 }
@@ -444,7 +484,7 @@ html,body{
 /* ===== BOTTOM TAB BAR ===== */
 .tab-bar{
   display:flex;align-items:center;justify-content:space-around;
-  background:var(--bg-header);
+  background:var(--bg);
   border-top:1px solid var(--border);
   padding:6px 0 calc(var(--safe-bottom) + 4px);
   flex-shrink:0;z-index:50;
@@ -456,13 +496,13 @@ html,body{
   -webkit-tap-highlight-color:transparent;
   position:relative;min-width:56px;
 }
-.tab-item.active{color:var(--blue);}
+.tab-item.active{color:var(--accent);}
 .tab-item:active{opacity:.6;}
 .tab-icon{font-size:24px;height:28px;display:flex;align-items:center;justify-content:center;}
 .tab-label{font-size:10px;font-weight:500;}
 .tab-badge{
   position:absolute;top:0;right:8px;
-  background:var(--blue);color:#fff;
+  background:var(--accent);color:#fff;
   font-size:10px;font-weight:700;
   min-width:16px;height:16px;border-radius:8px;
   display:flex;align-items:center;justify-content:center;
@@ -482,7 +522,7 @@ html,body{
 /* ===== LOADING ===== */
 .spinner{
   width:28px;height:28px;border:3px solid var(--border);
-  border-top-color:var(--blue);border-radius:50%;
+  border-top-color:var(--accent);border-radius:50%;
   animation:spin .6s linear infinite;margin:20px auto;
 }
 @keyframes spin{to{transform:rotate(360deg);}}
@@ -498,11 +538,11 @@ html,body{
 .toast{
   position:fixed;bottom:calc(80px + var(--safe-bottom));
   left:50%;transform:translateX(-50%) translateY(20px);
-  background:var(--bg-input);color:var(--text);
+  background:#323739;color:#fff;
   padding:10px 20px;border-radius:10px;
   font-size:14px;z-index:999;
   opacity:0;transition:all .3s;pointer-events:none;
-  box-shadow:0 4px 12px rgba(0,0,0,.3);
+  box-shadow:0 4px 12px rgba(0,0,0,.2);
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
@@ -512,6 +552,7 @@ html,body{
   background:var(--bubble-in);
   border-radius:10px;border-bottom-left-radius:4px;
   padding:10px 14px;margin-bottom:3px;margin-right:auto;
+  box-shadow:0 1px 1px rgba(0,0,0,.06);
 }
 .typing-indicator.visible{display:flex;align-items:center;gap:4px;}
 .typing-dot{
@@ -548,7 +589,7 @@ html,body{
 .tools-content{flex:1;overflow-y:auto;padding:16px;}
 .tools-content::-webkit-scrollbar{display:none;}
 .tool-section-title{
-  font-size:13px;font-weight:600;color:var(--blue);
+  font-size:13px;font-weight:600;color:var(--accent);
   margin:16px 0 8px;text-transform:uppercase;letter-spacing:.5px;
 }
 .tool-btn{
@@ -576,10 +617,10 @@ html,body{
   border:1px solid var(--border);font-family:inherit;
   font-size:14px;resize:vertical;outline:none;
 }
-.broadcast-textarea:focus{border-color:var(--blue);}
+.broadcast-textarea:focus{border-color:var(--accent);}
 .broadcast-send{
   margin-top:8px;padding:10px;border-radius:8px;border:none;
-  background:var(--blue);color:#fff;font-size:14px;
+  background:var(--accent);color:#fff;font-size:14px;
   font-weight:500;cursor:pointer;width:100%;
 }
 .broadcast-send:active{opacity:.8;}
@@ -597,7 +638,7 @@ html,body{
 .tag-stat-row:last-child{border-bottom:none;}
 .tag-stat-name{font-size:14px;color:var(--text);}
 .tag-stat-count{
-  font-size:12px;color:#fff;background:var(--blue);
+  font-size:12px;color:#fff;background:var(--accent);
   padding:2px 8px;border-radius:10px;font-weight:600;
 }
 
@@ -610,13 +651,13 @@ html,body{
 }
 .settings-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:14px 16px;border-bottom:1px solid rgba(42,57,66,.6);
+  padding:14px 16px;border-bottom:1px solid var(--border);
 }
 .settings-row:last-child{border-bottom:none;}
 .settings-label{font-size:15px;color:var(--text);}
 .settings-label small{display:block;font-size:12px;color:var(--text-muted);margin-top:2px;}
 .settings-section-title{
-  font-size:13px;font-weight:600;color:var(--blue);
+  font-size:13px;font-weight:600;color:var(--accent);
   padding:10px 16px 4px;text-transform:uppercase;letter-spacing:.5px;
 }
 .toggle-switch{
@@ -631,7 +672,7 @@ html,body{
   content:'';position:absolute;width:22px;height:22px;border-radius:50%;
   background:#fff;bottom:3px;left:3px;transition:transform .2s;
 }
-.toggle-switch input:checked + .toggle-slider{background:var(--blue);}
+.toggle-switch input:checked + .toggle-slider{background:var(--accent);}
 .toggle-switch input:checked + .toggle-slider:before{transform:translateX(20px);}
 .settings-select{
   padding:6px 10px;border-radius:8px;
@@ -639,9 +680,9 @@ html,body{
   border:1px solid var(--border);font-family:inherit;font-size:14px;
   outline:none;cursor:pointer;
 }
-.settings-select:focus{border-color:var(--blue);}
+.settings-select:focus{border-color:var(--accent);}
 .settings-link{
-  font-size:14px;color:var(--blue);text-decoration:none;
+  font-size:14px;color:var(--accent);text-decoration:none;
   display:block;padding:14px 16px;
 }
 .settings-link:active{opacity:.6;}
@@ -664,12 +705,12 @@ html,body{
   padding:16px;margin-bottom:12px;
 }
 .ana-card-title{
-  font-size:13px;font-weight:600;color:var(--blue);
+  font-size:13px;font-weight:600;color:var(--accent);
   text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;
 }
 .ana-row{
   display:flex;align-items:center;justify-content:space-between;
-  padding:8px 0;border-bottom:1px solid rgba(42,57,66,.4);
+  padding:8px 0;border-bottom:1px solid var(--border);
 }
 .ana-row:last-child{border-bottom:none;}
 .ana-label{font-size:14px;color:var(--text-muted);}
@@ -687,13 +728,13 @@ html,body{
   background:rgba(0,136,204,.08);border-radius:10px;
   padding:12px;text-align:center;
 }
-.ana-mini-num{font-size:22px;font-weight:700;color:var(--blue);}
+.ana-mini-num{font-size:22px;font-weight:700;color:var(--accent);}
 .ana-mini-label{font-size:11px;color:var(--text-muted);margin-top:2px;}
 
 /* ===== LEAD STATS BAR ===== */
 .stats-bar{
-  display:flex;gap:0;padding:4px 12px;
-  background:var(--bg-secondary);border-radius:8px;margin:2px 12px 4px;
+  display:flex;gap:0;padding:6px 12px;
+  background:var(--bg-input);border-radius:10px;margin:4px 16px 6px;
 }
 .stats-bar:empty{display:none;}
 .stat-card{
@@ -702,7 +743,7 @@ html,body{
 }
 .stat-card+.stat-card{border-right:1px solid var(--border);}
 .stat-num{
-  font-size:15px;font-weight:700;color:var(--blue);
+  font-size:15px;font-weight:700;color:var(--accent);
 }
 .stat-label{
   font-size:10px;color:var(--text-muted);margin-top:1px;
@@ -735,9 +776,10 @@ html,body{
       <div class="filters-row">
         <div class="filters">
           <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
-          <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדש</button>
-          <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתין</button>
+          <button class="filter-pill" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו</button>
+          <button class="filter-pill" data-filter="new" onclick="setFilter('new',this)">חדשים</button>
           <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
+          <button class="filter-pill" data-filter="waiting" onclick="setFilter('waiting',this)">ממתינים</button>
           <button class="filter-pill" data-filter="followup" onclick="setFilter('followup',this)">&#128257;</button>
         </div>
         <select class="source-select" id="sourceSelect" onchange="setSource(this.value)">
@@ -854,7 +896,7 @@ html,body{
         <div style="font-size:13px;color:var(--text);margin-bottom:8px;">שליחת פולואפ אוטומטי לכל הלידים הממתינים:</div>
         <div id="campaignPreview" style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">טוען...</div>
         <div style="display:flex;gap:8px;">
-          <button onclick="launchCampaignNow()" style="flex:1;padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128640; שגר!</button>
+          <button onclick="launchCampaignNow()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128640; שגר!</button>
           <button onclick="document.getElementById('campaignLauncher').style.display='none'" style="padding:10px 16px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">ביטול</button>
         </div>
       </div>
@@ -881,7 +923,7 @@ html,body{
       <!-- Pending follow-ups today -->
       <div class="tool-section-title" style="display:flex;justify-content:space-between;align-items:center;">
         <span>ממתינים להיום</span>
-        <span id="pendingCount" style="font-size:12px;color:var(--blue);"></span>
+        <span id="pendingCount" style="font-size:12px;color:var(--accent);"></span>
       </div>
       <div id="pendingFollowups" style="margin-bottom:16px;">
         <div style="color:var(--text-muted);font-size:13px;padding:8px;">טוען...</div>
@@ -918,7 +960,7 @@ html,body{
           </div>
         </div>
         <div style="display:flex;gap:8px;">
-          <button onclick="saveTemplate()" style="flex:1;padding:10px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128190; שמור</button>
+          <button onclick="saveTemplate()" style="flex:1;padding:10px;background:var(--accent);border:none;border-radius:8px;color:white;font-size:14px;cursor:pointer;">&#128190; שמור</button>
           <button onclick="hideTemplateEditor()" style="padding:10px 16px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:14px;cursor:pointer;">ביטול</button>
         </div>
       </div>
@@ -1012,6 +1054,19 @@ html,body{
       </div>
     </div>
     <div class="settings-content">
+      <div class="settings-section">
+        <div class="settings-section-title">מראה</div>
+        <div class="settings-row">
+          <div class="settings-label">
+            מצב כהה
+            <small>עיצוב כהה כמו בווטסאפ</small>
+          </div>
+          <label class="toggle-switch">
+            <input type="checkbox" id="settingDarkMode" onchange="toggleTheme(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
       <div class="settings-section">
         <div class="settings-section-title">התראות</div>
         <div class="settings-row">
@@ -1169,9 +1224,9 @@ html,body{
       </div>
 
       <!-- Tips -->
-      <div style="background:linear-gradient(135deg,#1a1a2e,#16213e);border-radius:12px;padding:14px;margin-top:14px;">
+      <div style="background:var(--bg-secondary);border-radius:12px;padding:14px;margin-top:14px;">
         <div style="font-size:14px;font-weight:600;margin-bottom:8px;">&#128161; טיפים</div>
-        <div style="font-size:12px;line-height:1.8;color:#ccc;">
+        <div style="font-size:12px;line-height:1.8;color:var(--text-secondary);">
           &#8226; לידים שענו מסומנים אוטומטית כ"מעוניינים"<br>
           &#8226; לידים שכתבו "לא מעוניין" / "הסר" מסומנים אוטומטית ולא יקבלו יותר פולואפ<br>
           &#8226; ציון ליד (Score) מחושב לפי: ענה? נקבעה פגישה? סנטימנט חיובי? פעילות אחרונה<br>
@@ -1215,6 +1270,28 @@ html,body{
 <div class="toast" id="toast"></div>
 
 <script>
+/* ===== THEME ===== */
+function initTheme() {
+  const saved = localStorage.getItem('wa_theme');
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.querySelector('meta[name="theme-color"]').content = '#111b21';
+  }
+}
+initTheme();
+
+function toggleTheme(dark) {
+  if (dark) {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    document.querySelector('meta[name="theme-color"]').content = '#111b21';
+    localStorage.setItem('wa_theme', 'dark');
+  } else {
+    document.documentElement.removeAttribute('data-theme');
+    document.querySelector('meta[name="theme-color"]').content = '#ffffff';
+    localStorage.setItem('wa_theme', 'light');
+  }
+}
+
 /* ===== CONFIG ===== */
 // Save token to localStorage so PWA works after home screen install
 const _urlToken = new URLSearchParams(window.location.search).get('token');
@@ -1356,6 +1433,7 @@ function applyFilter() {
   const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   filteredContacts = contacts.filter(c => {
     if (currentSource !== 'all' && c.source !== currentSource) return false;
+    if (currentFilter === 'unread' && !(c.unread_count > 0)) return false;
     if (currentFilter === 'new' && c.lead_status !== 'new') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
     if (currentFilter === 'replied' && !(c.user_reply_count > 0)) return false;
@@ -1430,7 +1508,7 @@ function renderContactList() {
           <div class="contact-bottom">
             <span class="contact-preview">${isOut && !hasUnread ? '<span class="checks">✓✓</span> ' : ''}${preview}</span>
             ${hasUnread ? `<span class="unread-badge">${c.unread_count}</span>` : ''}
-            ${c.next_followup ? '<span style="font-size:10px;color:var(--blue);">&#128257;</span>' : ''}
+            ${c.next_followup ? '<span style="font-size:10px;color:var(--accent);">&#128257;</span>' : ''}
             ${statusClass ? `<span class="contact-status-dot ${statusClass}"></span>` : ''}
           </div>
         </div>
@@ -1824,7 +1902,7 @@ async function openDetails(phone) {
         <span class="details-label">פולואפ הבא</span>
         <span class="details-value">${nextFup ? esc(nextFup) : 'לא מתוכנן'}</span>
       </div>
-      ${!nextFup ? `<button onclick="scheduleFollowupFromDetails('${esc(phone)}')" style="width:100%;padding:8px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;margin-top:6px;">&#128197; תזמן פולואפ</button>` : ''}
+      ${!nextFup ? `<button onclick="scheduleFollowupFromDetails('${esc(phone)}')" style="width:100%;padding:8px;background:var(--accent);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;margin-top:6px;">&#128197; תזמן פולואפ</button>` : ''}
       ${followupHistory.length ? `
       <div style="margin-top:10px;">
         <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;">היסטוריה:</div>
@@ -2143,6 +2221,7 @@ function initSettings() {
   const soundEl = document.getElementById('settingSound');
   const pollEl = document.getElementById('settingPollInterval');
   const inboxLink = document.getElementById('inboxLink');
+  const darkEl = document.getElementById('settingDarkMode');
 
   if (soundEl) {
     const saved = localStorage.getItem('soundEnabled');
@@ -2154,6 +2233,9 @@ function initSettings() {
   }
   if (inboxLink && TOKEN) {
     inboxLink.href = '/wa-inbox?token=' + TOKEN;
+  }
+  if (darkEl) {
+    darkEl.checked = localStorage.getItem('wa_theme') === 'dark';
   }
 }
 
@@ -2672,7 +2754,7 @@ async function loadPendingFollowups() {
           <div style="font-size:11px;color:var(--text-muted);">${p.user_replies > 0 ? '&#128172; ענה' : '&#128164; לא ענה'}</div>
         </div>
         <div style="display:flex;gap:6px;flex-wrap:wrap;">
-          <button onclick="sendFollowupNow('${esc(p.phone)}')" style="flex:1;padding:8px;background:var(--blue);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;">&#9654; שלח עכשיו</button>
+          <button onclick="sendFollowupNow('${esc(p.phone)}')" style="flex:1;padding:8px;background:var(--accent);border:none;border-radius:8px;color:white;font-size:13px;cursor:pointer;">&#9654; שלח עכשיו</button>
           <button onclick="postponeFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128197; דחה</button>
           <button onclick="cancelFollowup('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:#e74c3c;font-size:13px;cursor:pointer;">&#10005;</button>
           <button onclick="openChat('${esc(p.phone)}')" style="padding:8px 12px;background:var(--bg-input);border:none;border-radius:8px;color:var(--text);font-size:13px;cursor:pointer;">&#128172;</button>
