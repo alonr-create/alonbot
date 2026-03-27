@@ -12,18 +12,35 @@ const NO_SHOW_BUFFER_MIN = 10;   // minutes after meeting end to wait before mar
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
 
 // ── Reschedule Messages ──
+// Immediate + follow-up sequence at days 3, 6, 7, 12, 16, 17
 const RESCHEDULE_MESSAGES = [
   {
     delay_min: 0, // immediately on no-show detection
-    message: 'היי {name}! ראינו שלא הספקת להגיע לפגישה שקבענו 🙂 קורה לכולם! רוצה לקבוע מחדש? תבחר/י זמן ואני אסדר הכל.',
+    message: 'היי {name}! ראינו שלא הספקת להגיע לפגישה שקבענו 🙂 קורה לכולם! רוצה לקבוע מחדש? שלח/י מתי נוח ונסגור.',
   },
   {
-    delay_min: 180, // 3 hours later
-    message: 'שלום {name}, רציתי לבדוק — נוח לך לקבוע את הפגישה שלנו ליום אחר? אני זמין השבוע, שלח/י מתי נוח ונסגור 📅',
+    delay_min: 3 * 24 * 60, // day 3
+    message: 'שלום {name}, רציתי לבדוק — נוח לך לקבוע את הפגישה שלנו ליום אחר? אני זמין השבוע 📅 שלח/י מתי נוח ונסגור!',
   },
   {
-    delay_min: 24 * 60, // next day
-    message: 'היי {name}, רק רציתי לוודא שלא פספסת — הפגישה שלנו עדיין רלוונטית? 15 דקות בזום, בלי התחייבות. שלח/י "כן" ונתאם 🎯',
+    delay_min: 6 * 24 * 60, // day 6
+    message: 'היי {name}, רק רציתי לוודא שלא פספסת — הפגישה שלנו עדיין רלוונטית? 15 דקות, בלי התחייבות. שלח/י "כן" ונתאם 🎯',
+  },
+  {
+    delay_min: 7 * 24 * 60, // day 7
+    message: 'היי {name}, שבוע עבר מאז ששוחחנו 😊 עדיין מעוניין/ת? אני פה לכל שאלה. שלח/י הודעה ונקבע זמן חדש.',
+  },
+  {
+    delay_min: 12 * 24 * 60, // day 12
+    message: 'שלום {name}, חזרתי לבדוק 🙂 אם עדיין רלוונטי — 15 דקות שיחה יכולות לחסוך לך המון זמן וכסף. מתי נוח?',
+  },
+  {
+    delay_min: 16 * 24 * 60, // day 16
+    message: 'היי {name}! הזדמנות אחרונה 🚀 אני פותח כמה מקומות לשיחת ייעוץ חינמית השבוע. רוצה לתפוס מקום?',
+  },
+  {
+    delay_min: 17 * 24 * 60, // day 17 — final
+    message: 'שלום {name}, רק רציתי להגיד — אם בעתיד תרצה/י לדבר, אני תמיד פה 😊 בהצלחה!',
   },
 ];
 
@@ -74,7 +91,7 @@ export function markMeetingCompleted(phone: string) {
 async function checkNoShows() {
   // Find meetings that ended more than NO_SHOW_BUFFER_MIN minutes ago and are still 'scheduled'
   const overdueMeetings = db.prepare(`
-    SELECT m.*, l.monday_item_id, l.source
+    SELECT m.*, l.monday_item_id, l.source, l.lead_status
     FROM meetings m
     LEFT JOIN leads l ON l.phone = m.phone
     WHERE m.status = 'scheduled'
@@ -84,30 +101,95 @@ async function checkNoShows() {
 
   if (!overdueMeetings.length) return;
 
-  log.info({ count: overdueMeetings.length }, 'checking overdue meetings for no-shows');
+  log.info({ count: overdueMeetings.length }, 'checking overdue meetings');
 
   for (const meeting of overdueMeetings) {
     try {
-      // Check if lead had any WhatsApp activity during/after meeting time
-      const meetingStart = meeting.meeting_time;
-      const recentActivity = db.prepare(`
-        SELECT COUNT(*) as c FROM messages
-        WHERE sender_id = ? AND role = 'user'
-          AND channel IN ('whatsapp', 'whatsapp-inbound')
-          AND created_at > ?
-      `).get(meeting.phone, meetingStart) as any;
+      // Mark as handled so we don't ask again
+      db.prepare(`UPDATE meetings SET no_show_handled = 1, updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
 
-      if (recentActivity.c > 0) {
-        // Lead was active — might have attended or at least communicated
-        log.info({ phone: meeting.phone }, 'lead had activity — skipping no-show');
-        db.prepare(`UPDATE meetings SET status = 'completed', updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
-        continue;
-      }
-
-      // ── NO-SHOW DETECTED ──
-      await handleNoShow(meeting);
+      // Ask Alon via Telegram with inline buttons
+      await askAlonAboutMeeting(meeting);
     } catch (e: any) {
-      log.error({ phone: meeting.phone, err: e.message }, 'no-show check failed');
+      log.error({ phone: meeting.phone, err: e.message }, 'meeting check failed');
+    }
+  }
+}
+
+// ── Ask Alon via Telegram ──
+async function askAlonAboutMeeting(meeting: any) {
+  const botToken = config.telegramBotToken;
+  if (!botToken) return;
+
+  const telegramChatId = '546585625'; // Alon's Telegram chat ID
+  const name = meeting.lead_name || meeting.phone;
+  const timeStr = new Date(meeting.meeting_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
+
+  try {
+    await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: telegramChatId,
+        text: `📅 הפגישה עם *${name}* (${timeStr}) נגמרה — הגיע?`,
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [[
+            { text: '✅ הגיע', callback_data: `meeting_show:${meeting.id}` },
+            { text: '❌ לא הגיע', callback_data: `meeting_noshow:${meeting.id}` },
+          ]],
+        },
+      }),
+    });
+    log.info({ phone: meeting.phone, meetingId: meeting.id }, 'asked Alon about meeting attendance');
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'failed to send meeting attendance question');
+  }
+}
+
+// ── Handle Telegram Callback (button press) ──
+export async function handleMeetingCallback(callbackData: string, callbackQueryId: string) {
+  const botToken = config.telegramBotToken;
+
+  const [action, meetingIdStr] = callbackData.split(':');
+  const meetingId = parseInt(meetingIdStr, 10);
+  if (isNaN(meetingId)) return;
+
+  const meeting = db.prepare(`
+    SELECT m.*, l.monday_item_id, l.source, l.lead_status
+    FROM meetings m
+    LEFT JOIN leads l ON l.phone = m.phone
+    WHERE m.id = ?
+  `).get(meetingId) as any;
+
+  if (!meeting) return;
+
+  if (action === 'meeting_show') {
+    // Lead showed up — mark completed
+    db.prepare(`UPDATE meetings SET status = 'completed', updated_at = datetime('now') WHERE id = ?`).run(meetingId);
+    db.prepare(`UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?`).run(meeting.phone);
+
+    // Answer callback
+    if (botToken) {
+      await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQueryId, text: '✅ מצוין! סומן כהגיע' }),
+      });
+    }
+    log.info({ phone: meeting.phone }, 'meeting marked as completed (attended)');
+
+  } else if (action === 'meeting_noshow') {
+    // Lead didn't show — trigger no-show flow
+    await handleNoShow(meeting);
+
+    // Answer callback
+    if (botToken) {
+      await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQueryId, text: '❌ סדרת פולואפ לקביעה מחדש הופעלה' }),
+      });
     }
   }
 }

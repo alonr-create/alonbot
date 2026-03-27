@@ -424,6 +424,22 @@ export function createTelegramAdapter(): ChannelAdapter {
   // Handle inline button callbacks
   bot.on('callback_query:data', async (ctx) => {
     const data = ctx.callbackQuery.data;
+
+    // Meeting attendance callback (no-show engine)
+    if (data.startsWith('meeting_show:') || data.startsWith('meeting_noshow:')) {
+      try {
+        const { handleMeetingCallback } = await import('../gateway/no-show-engine.js');
+        await handleMeetingCallback(data, ctx.callbackQuery.id);
+        // Edit the original message to show result
+        const action = data.startsWith('meeting_show:') ? '✅ סומן כהגיע' : '❌ לא הופיע — סדרת פולואפ הופעלה';
+        await ctx.editMessageText(ctx.callbackQuery.message?.text + '\n\n' + action);
+      } catch (e: any) {
+        log.error({ err: e.message }, 'meeting callback failed');
+        await ctx.answerCallbackQuery({ text: 'שגיאה — נסה שוב' });
+      }
+      return;
+    }
+
     await ctx.answerCallbackQuery();
 
     // Category selection — show items in that category
