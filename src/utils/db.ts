@@ -540,6 +540,19 @@ try { db.exec(`ALTER TABLE orders ADD COLUMN referral_code TEXT DEFAULT ''`); } 
 try { db.exec(`ALTER TABLE leads ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
 try { db.exec(`ALTER TABLE orders ADD COLUMN price_tier TEXT DEFAULT ''`); } catch { /* exists */ }
 
+// Migration: meetings — track when Telegram question was asked (for auto-timeout)
+try { db.exec(`ALTER TABLE meetings ADD COLUMN asked_at TEXT`); } catch { /* exists */ }
+
+// One-time fix: reset stuck meetings (asked via Telegram but never answered, no asked_at)
+// These will be re-detected by checkNoShows and get asked_at set properly
+const stuckMeetings = db.prepare(`
+  UPDATE meetings SET no_show_handled = 0
+  WHERE status = 'scheduled' AND no_show_handled = 1 AND asked_at IS NULL
+`).run();
+if (stuckMeetings.changes > 0) {
+  console.log(`[db] reset ${stuckMeetings.changes} stuck meeting(s) — will re-ask via Telegram`);
+}
+
 // Daily backup for leads table (exports to JSON)
 function backupLeads(): string | null {
   try {

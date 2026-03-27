@@ -10,6 +10,8 @@ const ALON_DEV_BOARD_ID = 5092777389;
 // ── No-Show Detection Settings ──
 const NO_SHOW_BUFFER_MIN = 10;   // minutes after meeting end to wait before marking no-show
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
+const AUTO_NOSHOW_TIMEOUT_MIN = 120; // 2 hours — if Alon doesn't respond, auto-trigger no-show
+const REMINDER_AFTER_MIN = 60; // send reminder after 1 hour if no button press
 
 // ── Reschedule Messages ──
 // Immediate + follow-up sequence at days 3, 6, 7, 12, 16, 17
@@ -105,8 +107,8 @@ async function checkNoShows() {
 
   for (const meeting of overdueMeetings) {
     try {
-      // Mark as handled so we don't ask again
-      db.prepare(`UPDATE meetings SET no_show_handled = 1, updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
+      // Mark as handled and record when we asked — for auto-timeout
+      db.prepare(`UPDATE meetings SET no_show_handled = 1, asked_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
 
       // Ask Alon via Telegram with inline buttons
       await askAlonAboutMeeting(meeting);
@@ -114,10 +116,72 @@ async function checkNoShows() {
       log.error({ phone: meeting.phone, err: e.message }, 'meeting check failed');
     }
   }
+
+  // ── Auto-timeout: meetings where Alon never pressed a button ──
+  // After REMINDER_AFTER_MIN, send a reminder
+  const needsReminder = db.prepare(`
+    SELECT m.*, l.monday_item_id, l.source, l.lead_status
+    FROM meetings m
+    LEFT JOIN leads l ON l.phone = m.phone
+    WHERE m.status = 'scheduled'
+      AND m.no_show_handled = 1
+      AND m.asked_at IS NOT NULL
+      AND datetime(m.asked_at, '+${REMINDER_AFTER_MIN} minutes') < datetime('now')
+      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') > datetime('now')
+  `).all() as any[];
+
+  for (const meeting of needsReminder) {
+    // Check if we already sent a reminder (avoid spam)
+    const alreadyReminded = db.prepare(
+      `SELECT 1 FROM scheduled_messages WHERE label = ? AND sent = 1`
+    ).get(`reminder-ask-${meeting.id}`);
+    if (alreadyReminded) continue;
+
+    // Mark reminder as sent
+    db.prepare(
+      `INSERT OR IGNORE INTO scheduled_messages (label, message, send_at, channel, target_id, sent) VALUES (?, '', datetime('now'), 'internal', ?, 1)`
+    ).run(`reminder-ask-${meeting.id}`, meeting.phone);
+
+    await askAlonAboutMeeting(meeting, true); // isReminder = true
+    log.info({ meetingId: meeting.id, phone: meeting.phone }, 'sent reminder — Alon hasn\'t responded');
+  }
+
+  // After AUTO_NOSHOW_TIMEOUT_MIN, auto-trigger no-show flow
+  const timedOut = db.prepare(`
+    SELECT m.*, l.monday_item_id, l.source, l.lead_status
+    FROM meetings m
+    LEFT JOIN leads l ON l.phone = m.phone
+    WHERE m.status = 'scheduled'
+      AND m.no_show_handled = 1
+      AND m.asked_at IS NOT NULL
+      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') < datetime('now')
+  `).all() as any[];
+
+  for (const meeting of timedOut) {
+    log.warn({ meetingId: meeting.id, phone: meeting.phone }, 'auto-triggering no-show — Alon never responded after 2h');
+    await handleNoShow(meeting);
+
+    // Notify Alon that it was auto-handled
+    try {
+      const botToken = config.telegramBotToken;
+      if (botToken) {
+        const name = meeting.lead_name || meeting.phone;
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            chat_id: '546585625',
+            text: `⏰ *אוטומטי* — לא לחצת תוך שעתיים, אז סימנתי את *${name}* כלא הופיע והפעלתי סדרת פולואפ.`,
+            parse_mode: 'Markdown',
+          }),
+        });
+      }
+    } catch { /* not critical */ }
+  }
 }
 
 // ── Ask Alon via Telegram ──
-async function askAlonAboutMeeting(meeting: any) {
+async function askAlonAboutMeeting(meeting: any, isReminder = false) {
   const botToken = config.telegramBotToken;
   if (!botToken) return;
 
@@ -125,13 +189,17 @@ async function askAlonAboutMeeting(meeting: any) {
   const name = meeting.lead_name || meeting.phone;
   const timeStr = new Date(meeting.meeting_time).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Jerusalem' });
 
+  const text = isReminder
+    ? `🔔 *תזכורת* — עדיין לא עניתי על הפגישה עם *${name}* (${timeStr}).\nאם לא תלחץ תוך שעה, אסמן אוטומטית כלא הופיע ואפעיל פולואפ.`
+    : `📅 הפגישה עם *${name}* (${timeStr}) נגמרה — הגיע?`;
+
   try {
     await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: telegramChatId,
-        text: `📅 הפגישה עם *${name}* (${timeStr}) נגמרה — הגיע?`,
+        text,
         parse_mode: 'Markdown',
         reply_markup: {
           inline_keyboard: [[
@@ -141,7 +209,7 @@ async function askAlonAboutMeeting(meeting: any) {
         },
       }),
     });
-    log.info({ phone: meeting.phone, meetingId: meeting.id }, 'asked Alon about meeting attendance');
+    log.info({ phone: meeting.phone, meetingId: meeting.id, isReminder }, 'asked Alon about meeting attendance');
   } catch (e: any) {
     log.warn({ err: e.message }, 'failed to send meeting attendance question');
   }
@@ -151,8 +219,28 @@ async function askAlonAboutMeeting(meeting: any) {
 export async function handleMeetingCallback(callbackData: string, callbackQueryId: string) {
   const botToken = config.telegramBotToken;
 
-  const [action, meetingIdStr] = callbackData.split(':');
-  const meetingId = parseInt(meetingIdStr, 10);
+  const [action, idStr] = callbackData.split(':');
+
+  // ── Exhausted reschedule callbacks ──
+  if (action === 'noshow_call' || action === 'noshow_close') {
+    const phone = idStr;
+    if (action === 'noshow_close') {
+      db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', updated_at = datetime('now') WHERE phone = ?`).run(phone);
+      log.info({ phone }, 'no-show lead marked as not relevant');
+    }
+    if (botToken) {
+      const text = action === 'noshow_call' ? '📞 תתקשר ידנית!' : '🗑️ סומן כלא רלוונטי';
+      await fetch(`https://api.telegram.org/bot${botToken}/answerCallbackQuery`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ callback_query_id: callbackQueryId, text }),
+      });
+    }
+    return;
+  }
+
+  // ── Meeting attendance callbacks ──
+  const meetingId = parseInt(idStr, 10);
   if (isNaN(meetingId)) return;
 
   const meeting = db.prepare(`
@@ -168,6 +256,9 @@ export async function handleMeetingCallback(callbackData: string, callbackQueryI
     // Lead showed up — mark completed
     db.prepare(`UPDATE meetings SET status = 'completed', updated_at = datetime('now') WHERE id = ?`).run(meetingId);
     db.prepare(`UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?`).run(meeting.phone);
+
+    // Cancel any pending reschedule messages (in case auto-timeout already started the flow)
+    cancelRescheduleMessages(meeting.phone);
 
     // Answer callback
     if (botToken) {
@@ -350,6 +441,34 @@ async function processScheduledMessages() {
 
       db.prepare('UPDATE scheduled_messages SET sent = 1 WHERE id = ?').run(msg.id);
       log.info({ label: msg.label, target: msg.target_id }, 'scheduled message sent');
+
+      // Check if this was the LAST reschedule message — alert Alon
+      if (msg.label?.startsWith('reschedule-') && msg.label.endsWith('-7')) {
+        const lead = db.prepare('SELECT name FROM leads WHERE phone = ?').get(msg.target_id) as any;
+        const leadName = lead?.name || msg.target_id;
+        log.warn({ phone: msg.target_id }, 'all reschedule attempts exhausted — no response');
+
+        try {
+          const botToken = config.telegramBotToken;
+          if (botToken) {
+            await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                chat_id: '546585625',
+                text: `🚨 *מיצינו את כל הניסיונות* עם *${leadName}* (${msg.target_id})\n\n7 הודעות reschedule נשלחו בלי תגובה.\nהליד נשאר בסטטוס no\\_show.\n\nמה לעשות?`,
+                parse_mode: 'Markdown',
+                reply_markup: {
+                  inline_keyboard: [[
+                    { text: '📞 להתקשר ידנית', callback_data: `noshow_call:${msg.target_id}` },
+                    { text: '🗑️ לא רלוונטי', callback_data: `noshow_close:${msg.target_id}` },
+                  ]],
+                },
+              }),
+            });
+          }
+        } catch { /* not critical */ }
+      }
     } catch (e: any) {
       log.error({ id: msg.id, err: e.message }, 'scheduled message send failed');
     }
