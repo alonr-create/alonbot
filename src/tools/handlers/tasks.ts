@@ -47,7 +47,8 @@ const handlers: ToolHandler[] = [
       },
     },
     async execute(input, ctx) {
-      const result = ctx.db.prepare("UPDATE tasks SET status = 'done', completed_at = datetime('now') WHERE id = ? AND status = 'pending'").run(input.id);
+      const now = new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+      const result = ctx.db.prepare("UPDATE tasks SET status = 'done', completed_at = ? WHERE id = ? AND status = 'pending'").run(now, input.id);
       return result.changes > 0 ? `Task #${input.id} completed!` : `Task #${input.id} not found or already done.`;
     },
   },

@@ -6,6 +6,10 @@ import { createLogger } from './logger.js';
 
 const log = createLogger('monday-leads');
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 const ALON_DEV_BOARD_ID = 5092777389;
 
 /**
@@ -44,13 +48,14 @@ export async function createMondayLead(
     const existingItem = searchData.data?.boards?.[0]?.items_page?.items?.[0];
     if (existingItem?.id) {
       // Found in Monday but not in local DB — link it
+      const now = nowIsrael();
       db.prepare(`
         INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
-        VALUES (?, ?, 'campaign', ?, 'active', datetime('now'), datetime('now'))
+        VALUES (?, ?, 'campaign', ?, 'active', ?, ?)
         ON CONFLICT(phone) DO UPDATE SET
           monday_item_id = excluded.monday_item_id,
-          updated_at = datetime('now')
-      `).run(phone, name !== phone ? name : null, existingItem.id);
+          updated_at = ?
+      `).run(phone, name !== phone ? name : null, existingItem.id, now, now, now);
       log.info({ phone, itemId: existingItem.id }, 'existing Monday.com lead linked to local DB');
       return existingItem.id;
     }
@@ -103,13 +108,14 @@ export async function createMondayLead(
     }
 
     // Persist to SQLite
+    const now2 = nowIsrael();
     db.prepare(`
       INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
-      VALUES (?, ?, 'alon_dev', ?, '${LEAD_STATUS.NEW}', datetime('now'), datetime('now'))
+      VALUES (?, ?, 'alon_dev', ?, '${LEAD_STATUS.NEW}', ?, ?)
       ON CONFLICT(phone) DO UPDATE SET
         monday_item_id = excluded.monday_item_id,
-        updated_at = datetime('now')
-    `).run(phone, name !== phone ? name : null, itemId);
+        updated_at = ?
+    `).run(phone, name !== phone ? name : null, itemId, now2, now2, now2);
 
     log.info({ phone, name, itemId }, 'lead auto-created in Monday.com + SQLite');
     return itemId;
@@ -299,8 +305,8 @@ export function mondayWebhookHandler() {
       log.info({ phone: lead.phone, newStatus }, 'Monday status → WhatsApp message sent');
 
       // Store in messages DB
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`)
-        .run(lead.phone, message);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, ?)`)
+        .run(lead.phone, message, nowIsrael());
     } catch (e: any) {
       log.error({ err: e.message, phone: lead.phone }, 'Failed to send status change message');
     }

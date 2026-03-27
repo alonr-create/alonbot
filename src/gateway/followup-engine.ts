@@ -246,7 +246,7 @@ export async function autoTagLead(phone: string): Promise<'not_interested' | 'in
 
     // 1. Tag + update local DB
     db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'not_interested');
-    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', next_followup = NULL, bot_paused = 1, updated_at = datetime('now') WHERE phone = ?`).run(phone);
+    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', next_followup = NULL, bot_paused = 1, updated_at = ? WHERE phone = ?`).run(nowIsrael(), phone);
 
     // 2. Send apology message
     try {
@@ -282,7 +282,7 @@ export async function autoTagLead(phone: string): Promise<'not_interested' | 'in
   const positiveWords = ['מעוניין', 'מעוניינת', 'כן', 'אני רוצה', 'בוא נדבר', 'שלח', 'תתקשר', 'אשמח', 'בואי נדבר'];
   if (positiveWords.some(w => text.includes(w))) {
     db.prepare('INSERT OR IGNORE INTO lead_tags (phone, tag) VALUES (?, ?)').run(phone, 'interested');
-    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.INTERESTED}', updated_at = datetime('now') WHERE phone = ?`).run(phone);
+    db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.INTERESTED}', updated_at = ? WHERE phone = ?`).run(nowIsrael(), phone);
     log.info({ phone }, 'auto-tagged as interested');
     return 'interested';
   }
@@ -531,7 +531,7 @@ export function setupFollowupCron() {
       const today = israelTime.toISOString().split('T')[0];
       const lastReport = db.prepare("SELECT value FROM followup_config WHERE key = 'last_morning_report'").get() as any;
       if (lastReport?.value !== today) {
-        db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_morning_report', ?, datetime('now'))").run(today);
+        db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_morning_report', ?, ?)").run(today, nowIsrael());
         const report = generateMorningReport();
         try {
           const { sendPushNotification } = await import('./server.js');
@@ -551,7 +551,7 @@ export function setupFollowupCron() {
       const lastRun = db.prepare("SELECT value FROM followup_config WHERE key = 'last_auto_run'").get() as any;
       if (lastRun?.value === today) return;
 
-      db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_auto_run', ?, datetime('now'))").run(today);
+      db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES ('last_auto_run', ?, ?)").run(today, nowIsrael());
 
       log.info('running daily auto follow-ups (per workspace)');
       // Run separately per workspace so each gets its own templates

@@ -14,6 +14,10 @@ import { classifyComplexity, selectModel, buildModelCatalog, callFreeModel, type
 const log = createLogger('agent');
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 // Build model catalog once at startup
 const modelCatalog = buildModelCatalog();
 log.info({ models: modelCatalog.map(m => `${m.provider}/${m.model} (${m.tier})`).join(', ') }, 'model catalog');
@@ -43,25 +47,26 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
 const RATE_LIMIT = 10;
 
 const stmtRateLimitCheck = db.prepare(
-  "SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND timestamp > datetime('now', '-60 seconds')"
+  "SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND timestamp > datetime(?, '-60 seconds')"
 );
 const stmtRateLimitAdd = db.prepare(
-  "INSERT INTO rate_limits (user_id, timestamp) VALUES (?, datetime('now'))"
+  "INSERT INTO rate_limits (user_id, timestamp) VALUES (?, ?)"
 );
 const stmtRateLimitClean = db.prepare(
-  "DELETE FROM rate_limits WHERE timestamp < datetime('now', '-5 minutes')"
+  "DELETE FROM rate_limits WHERE timestamp < datetime(?, '-5 minutes')"
 );
 
 function checkRateLimit(userId: string): boolean {
-  const row = stmtRateLimitCheck.get(userId) as { count: number };
+  const now = nowIsrael();
+  const row = stmtRateLimitCheck.get(userId, now) as { count: number };
   if (row.count >= RATE_LIMIT) return false;
-  stmtRateLimitAdd.run(userId);
+  stmtRateLimitAdd.run(userId, now);
   return true;
 }
 
 // Cleanup old rate limit entries every 10 minutes
 setInterval(() => {
-  try { stmtRateLimitClean.run(); } catch (e) { log.debug({ err: (e as Error).message }, 'document index to memory failed'); }
+  try { stmtRateLimitClean.run(nowIsrael()); } catch (e) { log.debug({ err: (e as Error).message }, 'document index to memory failed'); }
 }, 10 * 60_000);
 
 export type StreamCallback = (text: string, toolName?: string) => void;

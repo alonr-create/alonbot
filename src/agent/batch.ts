@@ -6,6 +6,10 @@ import { createLogger } from '../utils/logger.js';
 const log = createLogger('batch');
 const client = new Anthropic({ apiKey: config.anthropicApiKey });
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 interface BatchJobRow {
   id: number;
   batch_id: string;
@@ -28,11 +32,11 @@ const stmtGetPending = db.prepare(
 );
 
 const stmtComplete = db.prepare(
-  `UPDATE batch_jobs SET status = 'completed', result = ?, completed_at = datetime('now') WHERE batch_id = ?`
+  `UPDATE batch_jobs SET status = 'completed', result = ?, completed_at = ? WHERE batch_id = ?`
 );
 
 const stmtFail = db.prepare(
-  `UPDATE batch_jobs SET status = 'failed', result = ?, completed_at = datetime('now') WHERE batch_id = ?`
+  `UPDATE batch_jobs SET status = 'failed', result = ?, completed_at = ? WHERE batch_id = ?`
 );
 
 // --- Submit ---
@@ -88,7 +92,7 @@ export async function pollBatches(): Promise<number> {
 
         // Process results based on job type
         await processResults(job.job_type, JSON.parse(job.payload), results);
-        stmtComplete.run(JSON.stringify(results.map(r => r.custom_id)), job.batch_id);
+        stmtComplete.run(JSON.stringify(results.map(r => r.custom_id)), nowIsrael(), job.batch_id);
         processed++;
         log.info({ batchId: job.batch_id, resultCount: results.length }, 'batch completed');
 
@@ -96,7 +100,7 @@ export async function pollBatches(): Promise<number> {
         const counts = batch.request_counts;
         log.info({ succeeded: counts.succeeded, errored: counts.errored, expired: counts.expired }, 'batch stats');
       } else if (batch.processing_status === 'canceling') {
-        stmtFail.run('Cancelled', job.batch_id);
+        stmtFail.run('Cancelled', nowIsrael(), job.batch_id);
         processed++;
       }
       // 'in_progress' → do nothing, check again later
@@ -104,7 +108,7 @@ export async function pollBatches(): Promise<number> {
       log.error({ batchId: job.batch_id, err: err.message }, 'batch poll error');
       // If batch not found, mark as failed
       if (err.status === 404) {
-        stmtFail.run('Batch not found', job.batch_id);
+        stmtFail.run('Batch not found', nowIsrael(), job.batch_id);
         processed++;
       }
     }

@@ -88,7 +88,7 @@ function bumpLeadScore(phone: string, action: 'message' | 'checkout' | 'paid' | 
   const scoreMap = { message: 2, clicked_link: 2, checkout: 3, booked: 3, paid: 4 };
   const newScore = scoreMap[action] || 1;
   try {
-    db.prepare(`UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), ?), updated_at = datetime('now') WHERE phone = ?`).run(newScore, phone);
+    db.prepare(`UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), ?), updated_at = ? WHERE phone = ?`).run(newScore, nowIsrael(), phone);
   } catch (e) { log.debug({ err: (e as Error).message, phone, action }, 'lead score bump failed'); }
 }
 
@@ -229,7 +229,7 @@ try {
     endpoint TEXT UNIQUE NOT NULL,
     keys_p256dh TEXT NOT NULL,
     keys_auth TEXT NOT NULL,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT
   )`);
 } catch (e) { log.debug({ err: (e as Error).message }, 'push_subscriptions table creation failed'); }
 
@@ -1141,8 +1141,9 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
       const wamid = data.messages?.[0]?.id;
       if (wamid) {
         try {
-          db.prepare(`INSERT INTO delivery_receipts (wamid, phone, status, created_at, sent_at) VALUES (?, ?, 'sent', datetime('now'), datetime('now'))
-            ON CONFLICT(wamid) DO UPDATE SET status = 'sent', sent_at = datetime('now')`).run(wamid, chatPhone);
+          const nowTs = nowIsrael();
+          db.prepare(`INSERT INTO delivery_receipts (wamid, phone, status, created_at, sent_at) VALUES (?, ?, 'sent', ?, ?)
+            ON CONFLICT(wamid) DO UPDATE SET status = 'sent', sent_at = ?`).run(wamid, chatPhone, nowTs, nowTs, nowTs);
         } catch (e) { log.debug({ err: (e as Error).message }, 'delivery receipt insert failed'); }
       }
     } else {
@@ -1273,7 +1274,8 @@ app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
       res.status(400).json({ success: false, error: 'No fields to update' });
       return;
     }
-    updates.push("updated_at = datetime('now')");
+    updates.push("updated_at = ?");
+    params.push(nowIsrael());
     params.push(phone);
     db.prepare(`UPDATE leads SET ${updates.join(', ')} WHERE phone = ?`).run(...params);
     res.json({ success: true });
@@ -1505,7 +1507,7 @@ app.patch('/api/wa-manager/followup/config', dashAuth, (req, res) => {
     for (const [key, value] of Object.entries(req.body)) {
       if (!allowed.includes(key)) continue;
       const val = typeof value === 'boolean' ? String(value) : Array.isArray(value) ? value.join(',') : String(value);
-      db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES (?, ?, datetime('now'))").run(key, val);
+      db.prepare("INSERT OR REPLACE INTO followup_config (key, value, updated_at) VALUES (?, ?, ?)").run(key, val, nowIsrael());
     }
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
@@ -1583,7 +1585,8 @@ app.post('/api/wa-manager/followup/postpone', dashAuth, (req, res) => {
   try {
     const { phone, days } = req.body;
     if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
-    db.prepare(`UPDATE leads SET next_followup = date('now', '+${Math.max(1, Math.min(days || 1, 30))} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
+    const israelDate = nowIsrael().slice(0, 10);
+    db.prepare(`UPDATE leads SET next_followup = date(?, '+${Math.max(1, Math.min(days || 1, 30))} days'), updated_at = ? WHERE phone = ?`).run(israelDate, nowIsrael(), phone);
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1593,7 +1596,7 @@ app.post('/api/wa-manager/followup/cancel', dashAuth, (req, res) => {
   try {
     const { phone } = req.body;
     if (!phone) { res.status(400).json({ success: false, error: 'Missing phone' }); return; }
-    db.prepare("UPDATE leads SET next_followup = NULL, updated_at = datetime('now') WHERE phone = ?").run(phone);
+    db.prepare("UPDATE leads SET next_followup = NULL, updated_at = ? WHERE phone = ?").run(nowIsrael(), phone);
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -1729,7 +1732,7 @@ app.post('/api/wa-manager/followup/reengage', dashAuth, async (req, res) => {
     const { scheduleFirstFollowup } = await import('./followup-engine.js');
     for (const lead of staleLeads) {
       scheduleFirstFollowup(lead.phone);
-      db.prepare("UPDATE leads SET followup_count = 0, updated_at = datetime('now') WHERE phone = ?").run(lead.phone);
+      db.prepare("UPDATE leads SET followup_count = 0, updated_at = ? WHERE phone = ?").run(nowIsrael(), lead.phone);
       scheduled++;
     }
     res.json({ success: true, scheduled, total_stale: staleLeads.length });
@@ -2179,7 +2182,7 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
         const ctx = leadContext || {};
         db.prepare(`
           INSERT INTO leads (phone, name, source, monday_item_id, last_call_summary, last_call_sentiment, last_call_duration_sec, was_booked, call_mode, lead_status, updated_at)
-          VALUES (?, ?, 'voice_agent', ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          VALUES (?, ?, 'voice_agent', ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(phone) DO UPDATE SET
             name = COALESCE(excluded.name, leads.name),
             last_call_summary = COALESCE(excluded.last_call_summary, leads.last_call_summary),
@@ -2189,12 +2192,13 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
             call_mode = COALESCE(excluded.call_mode, leads.call_mode),
             lead_status = COALESCE(excluded.lead_status, leads.lead_status),
             monday_item_id = COALESCE(excluded.monday_item_id, leads.monday_item_id),
-            updated_at = datetime('now')
+            updated_at = ?
         `).run(
           chatPhone, leadName || null, ctx.mondayItemId || null,
           ctx.callSummary || null, ctx.sentiment || null,
           ctx.callDurationSec || null, ctx.wasBooked ? 1 : 0,
-          ctx.callMode || null, ctx.leadStatus || null
+          ctx.callMode || null, ctx.leadStatus || null,
+          nowIsrael(), nowIsrael()
         );
         log.info({ phone: chatPhone, leadName }, 'lead registered/updated in DB');
       } catch (dbErr: any) {
@@ -2371,9 +2375,9 @@ app.post('/api/create-payment', async (req, res) => {
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         phone TEXT NOT NULL, name TEXT, plan TEXT, amount INTEGER,
         paid INTEGER DEFAULT 0, reminded INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now'))
+        created_at TEXT
       )`).run();
-      db.prepare('INSERT INTO checkout_visits (phone, name, plan, amount) VALUES (?, ?, ?, ?)').run(normalizedPhone, name, plan, amount);
+      db.prepare('INSERT INTO checkout_visits (phone, name, plan, amount, created_at) VALUES (?, ?, ?, ?, ?)').run(normalizedPhone, name, plan, amount, nowIsrael());
       bumpLeadScore(normalizedPhone, 'checkout');
       log.info({ phone: normalizedPhone, plan, amount }, 'checkout visit tracked');
     } catch (e: any) { log.warn({ err: e.message }, 'checkout visit tracking failed'); }
@@ -2437,8 +2441,8 @@ app.post('/api/grow-webhook', (req, res) => {
 
     if (statusCode === 1 || statusCode === '1') {
       // Payment successful!
-      db.prepare(`UPDATE orders SET status = 'paid', card_last4 = ?, updated_at = datetime('now') WHERE grow_process_id = ?`)
-        .run(cardSuffix || '', paymentProcessId || '');
+      db.prepare(`UPDATE orders SET status = 'paid', card_last4 = ?, updated_at = ? WHERE grow_process_id = ?`)
+        .run(cardSuffix || '', nowIsrael(), paymentProcessId || '');
 
       // Mark checkout_visits as paid (for abandoned cart recovery)
       try {
@@ -2454,15 +2458,15 @@ app.post('/api/grow-webhook', (req, res) => {
 
       if (order) {
         const normalizedPhone = order.phone;
-        db.prepare(`UPDATE leads SET lead_status = 'paid', updated_at = datetime('now') WHERE phone = ?`).run(normalizedPhone);
+        db.prepare(`UPDATE leads SET lead_status = 'paid', updated_at = ? WHERE phone = ?`).run(nowIsrael(), normalizedPhone);
         bumpLeadScore(normalizedPhone, 'paid');
 
         // Log payment in messages for dashboard
         const planLabel = plan === 'premium' ? 'פרימיום' : 'בסיסי';
         const payMsg = `💳 תשלום התקבל! ₪${sum}\nחבילה: ${planLabel}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || transactionId || ''}`;
         db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
-          VALUES ('whatsapp-inbound', ?, ?, 'system', ?, datetime('now'))`)
-          .run(normalizedPhone, order.name, payMsg);
+          VALUES ('whatsapp-inbound', ?, ?, 'system', ?, ?)`)
+          .run(normalizedPhone, order.name, payMsg, nowIsrael());
 
         // WhatsApp notifications
         (async () => {
@@ -2526,12 +2530,13 @@ function saveOrder(name: string, phone: string, email: string | undefined, plan:
     review_requested INTEGER DEFAULT 0,
     referral_code TEXT DEFAULT '',
     price_tier TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT,
+    updated_at TEXT
   )`).run();
-  db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, status, grow_process_id, price_tier)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '', priceTier || '');
+  const now = nowIsrael();
+  db.prepare(`INSERT INTO orders (name, phone, email, plan, price, discount, status, grow_process_id, price_tier, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '', priceTier || '', now, now);
 }
 
 app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
@@ -2558,8 +2563,8 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
       try {
         db.prepare(`
           INSERT INTO leads (phone, name, source) VALUES (?, ?, 'voice_agent')
-          ON CONFLICT(phone) DO UPDATE SET name = COALESCE(excluded.name, leads.name), updated_at = datetime('now')
-        `).run(chatPhone, leadName);
+          ON CONFLICT(phone) DO UPDATE SET name = COALESCE(excluded.name, leads.name), updated_at = ?
+        `).run(chatPhone, leadName, nowIsrael());
       } catch (e) { log.debug({ err: (e as Error).message, chatPhone }, 'voice lead register failed'); }
     }
 

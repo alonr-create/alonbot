@@ -9,6 +9,10 @@ import type { ChannelAdapter, UnifiedMessage, UnifiedReply } from './types.js';
 
 const log = createLogger('whatsapp-cloud');
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
 export function createWhatsAppCloudAdapter(): ChannelAdapter {
@@ -74,7 +78,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
             log.debug({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
             try {
               // db already imported at top of file
-              const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
+              const now = nowIsrael().replace('T', ' ');
               const phone = (s.recipient_id || '').replace(/^\+/, '');
               const wamid = s.id || '';
               if (wamid && phone) {
@@ -160,7 +164,8 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     // Auto-upsert lead in leads table for dashboard tracking
     try {
       const pushName = senderName !== senderId ? senderName : '';
-      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'alon_dev_whatsapp', datetime('now'), datetime('now')) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = datetime('now')`).run(senderId, pushName, pushName);
+      const now = nowIsrael();
+      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'alon_dev_whatsapp', ?, ?) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = ?`).run(senderId, pushName, now, now, pushName, now);
     } catch (e: any) {
       log.warn({ err: e.message, senderId }, 'lead upsert failed');
     }

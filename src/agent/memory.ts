@@ -4,6 +4,10 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('memory');
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 // Cold start gate: vector search is skipped until initial embedding pass completes
 let embeddingsReady = false;
 
@@ -81,7 +85,7 @@ const stmtAllMemories = db.prepare(
 );
 
 const stmtTouchMemory = db.prepare(
-  `UPDATE memories SET last_accessed = datetime('now'), access_count = access_count + 1 WHERE id = ?`
+  `UPDATE memories SET last_accessed = ?, access_count = access_count + 1 WHERE id = ?`
 );
 
 const stmtInsertSummary = db.prepare(
@@ -299,7 +303,7 @@ export async function getRelevantMemories(userMessage: string): Promise<Memory[]
 
   // Mark retrieved memories as accessed
   for (const m of results) {
-    stmtTouchMemory.run(m.id);
+    stmtTouchMemory.run(nowIsrael(), m.id);
   }
 
   // Cap at 25 memories max
@@ -482,7 +486,7 @@ const stmtUpsertEntity = db.prepare(
    VALUES (?, ?, ?, ?, ?)
    ON CONFLICT(subject, predicate, object) DO UPDATE SET
      confidence = MAX(entities.confidence, excluded.confidence),
-     updated_at = datetime('now')`
+     updated_at = ?`
 );
 
 const stmtGetEntities = db.prepare(
@@ -534,7 +538,7 @@ export function extractEntities(text: string, source: string = 'conversation'): 
         const entity = { subject: pattern.subject, predicate: pattern.predicate, object: obj };
         extracted.push(entity);
         try {
-          stmtUpsertEntity.run(entity.subject, entity.predicate, entity.object, 0.7, source);
+          stmtUpsertEntity.run(entity.subject, entity.predicate, entity.object, 0.7, source, nowIsrael());
           log.info({ entity }, 'extracted entity');
         } catch (e: any) {
           log.debug({ err: e.message }, 'entity upsert failed');
@@ -742,9 +746,9 @@ const TOPIC_KEYWORDS: Record<string, string[]> = {
 
 const stmtUpsertTopic = db.prepare(
   `INSERT INTO conversation_topics (channel, sender_id, topic, first_mentioned, last_mentioned, mention_count)
-   VALUES (?, ?, ?, datetime('now'), datetime('now'), 1)
+   VALUES (?, ?, ?, ?, ?, 1)
    ON CONFLICT(channel, sender_id, topic) DO UPDATE SET
-     last_mentioned = datetime('now'),
+     last_mentioned = ?,
      mention_count = mention_count + 1`
 );
 
@@ -768,7 +772,8 @@ export function tagConversationTopics(channel: string, senderId: string, message
     if (keywords.some(kw => lower.includes(kw))) {
       detected.push(topic);
       try {
-        stmtUpsertTopic.run(channel, senderId, topic);
+        const now = nowIsrael();
+        stmtUpsertTopic.run(channel, senderId, topic, now, now, now);
       } catch (e: any) {
         log.debug({ err: e.message }, 'topic upsert failed');
       }
@@ -929,7 +934,7 @@ const stmtInsertCommitment = db.prepare(
 );
 
 const stmtResolveCommitment = db.prepare(
-  `UPDATE commitments SET status = 'done', resolved_at = datetime('now') WHERE id = ?`
+  `UPDATE commitments SET status = 'done', resolved_at = ? WHERE id = ?`
 );
 
 const stmtSearchCommitments = db.prepare(
@@ -977,7 +982,7 @@ export function getPendingCommitments(channel: string, senderId: string): Array<
 }
 
 export function resolveCommitment(id: number) {
-  stmtResolveCommitment.run(id);
+  stmtResolveCommitment.run(nowIsrael(), id);
 }
 
 export function expireOldCommitments(): number {
@@ -1006,7 +1011,7 @@ const stmtUpsertRelationship = db.prepare(
    ON CONFLICT(person_name, role) DO UPDATE SET
      context = COALESCE(excluded.context, relationships.context),
      confidence = MAX(relationships.confidence, excluded.confidence),
-     updated_at = datetime('now')`
+     updated_at = ?`
 );
 
 const stmtGetRelationships = db.prepare(
@@ -1027,7 +1032,7 @@ export function extractRelationships(text: string, source: string = 'conversatio
       const role = pattern.extractRole(match)?.trim();
       if (person && role && person.length >= 2 && person.length <= 30 && role.length >= 2) {
         try {
-          stmtUpsertRelationship.run(person, role, source, 0.7);
+          stmtUpsertRelationship.run(person, role, source, 0.7, nowIsrael());
           extracted.push({ person, role });
           log.info({ person, role }, 'extracted relationship');
         } catch (e: any) {
