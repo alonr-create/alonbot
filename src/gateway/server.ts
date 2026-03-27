@@ -1130,7 +1130,6 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
 
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
     } catch (e) { log.warn({ err: (e as Error).message }, 'message log DB write failed'); }
     // WebSocket broadcast so CRM updates in real-time
     try {
@@ -2189,8 +2188,6 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
     const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
-      // Also log to whatsapp-inbound channel so 360Shmikley CRM shows the message
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
     } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }
     // WebSocket broadcast so CRM updates in real-time
     try {

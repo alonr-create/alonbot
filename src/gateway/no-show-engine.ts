@@ -381,7 +381,6 @@ async function sendWhatsAppText(phone: string, text: string) {
 
   // Log to DB
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
-  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
 }
 
 // ── Cancel Reschedule Messages ──
