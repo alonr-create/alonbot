@@ -915,8 +915,12 @@ app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
       WHERE sender_id = ? AND channel IN ('whatsapp-inbound','whatsapp-outbound')
       ORDER BY id ASC
     `).all(phone);
+    // Get latest delivery status for this phone
+    const lastReceipt = db.prepare(`
+      SELECT status FROM delivery_receipts WHERE phone = ? ORDER BY created_at DESC LIMIT 1
+    `).get(phone) as { status: string } | undefined;
     const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone);
-    res.json({ success: true, lead, messages });
+    res.json({ success: true, lead, messages, deliveryStatus: lastReceipt?.status || 'sent' });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
