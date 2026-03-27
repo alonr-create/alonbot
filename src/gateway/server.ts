@@ -1982,6 +1982,8 @@ app.get('/wa-inbox', (_req, res) => {
 // Auth is enforced on API calls; the HTML shell itself contains no sensitive data
 app.get('/wa-mobile', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   res.send(waMobileHTML);
 });
 
