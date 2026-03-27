@@ -1650,7 +1650,14 @@ function renderMessages() {
   let html = '';
   let lastDate = '';
 
-  activeMessages.forEach(msg => {
+  // Find the last outbound message index for delivery status
+  let lastOutIdx = -1;
+  activeMessages.forEach((msg, i) => {
+    const out = msg.role === 'assistant' || msg.role === 'system' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    if (out && msg.source !== 'campaign-log') lastOutIdx = i;
+  });
+
+  activeMessages.forEach((msg, idx) => {
     const msgDate = formatDate(msg.timestamp || msg.time || msg.created_at);
     if (msgDate !== lastDate) {
       html += `<div class="day-divider"><span>${msgDate}</span></div>`;
@@ -1662,9 +1669,9 @@ function renderMessages() {
     const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
     let checks = '';
     if (isOut) {
-      if (activeDeliveryStatus === 'read') {
+      if (idx === lastOutIdx && activeDeliveryStatus === 'read') {
         checks = '<span class="msg-check read">✓✓</span>';
-      } else if (activeDeliveryStatus === 'delivered') {
+      } else if (idx === lastOutIdx && activeDeliveryStatus === 'delivered') {
         checks = '<span class="msg-check">✓✓</span>';
       } else {
         checks = '<span class="msg-check">✓</span>';

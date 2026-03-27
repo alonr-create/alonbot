@@ -1131,6 +1131,14 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
       });
       const data = await r.json() as any;
       if (data.error) throw new Error(data.error.message || 'Cloud API error');
+      // Save wamid for delivery receipt tracking
+      const wamid = data.messages?.[0]?.id;
+      if (wamid) {
+        try {
+          db.prepare(`INSERT INTO delivery_receipts (wamid, phone, status, created_at, sent_at) VALUES (?, ?, 'sent', datetime('now'), datetime('now'))
+            ON CONFLICT(wamid) DO UPDATE SET status = 'sent', sent_at = datetime('now')`).run(wamid, chatPhone);
+        } catch (e) { log.debug({ err: (e as Error).message }, 'delivery receipt insert failed'); }
+      }
     } else {
       res.json({ success: false, error: 'WhatsApp not connected' });
       return;
