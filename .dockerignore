@@ -1,0 +1,8 @@
+node_modules
+dist
+data
+.venv
+.git
+.planning
+.claude
+*.md
