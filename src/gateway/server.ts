@@ -14,6 +14,11 @@ import { LEAD_STATUS, PIPELINE_STAGES, TERMINAL_STATUSES } from '../utils/lead-s
 
 const log = createLogger('server');
 
+/** Return current Israel time as ISO string for SQLite (handles DST automatically) */
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 // Cache HTML at startup (no server-side variables needed)
 const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard.html'), 'utf-8');
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
@@ -696,10 +701,10 @@ app.post('/api/wa-manager/import-campaign-messages', dashAuth, (_req, res) => {
       return;
     }
     const stmt = db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
-      VALUES ('whatsapp-outbound', ?, ?, 'assistant', ?, datetime('now'))`);
+      VALUES ('whatsapp-outbound', ?, ?, 'assistant', ?, ?)`);
     let count = 0;
     for (const lead of leadsWithoutMsgs) {
-      stmt.run(lead.phone, lead.name || lead.phone, 'הודעת קמפיין נשלחה');
+      stmt.run(lead.phone, lead.name || lead.phone, 'הודעת קמפיין נשלחה', nowIsrael());
       count++;
     }
     // Schedule follow-ups for imported leads
@@ -732,14 +737,15 @@ app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any)
     const role = direction === 'inbound' ? 'user' : 'assistant';
     // Ensure lead exists in leads table
     const source = req.body.source || 'alon_dev';
+    const now = nowIsrael();
     db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at)
-      VALUES (?, ?, ?, datetime('now'), datetime('now'))
-      ON CONFLICT(phone) DO UPDATE SET updated_at = datetime('now')`)
-      .run(normalizedPhone, sender_name || normalizedPhone, source);
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(phone) DO UPDATE SET updated_at = ?`)
+      .run(normalizedPhone, sender_name || normalizedPhone, source, now, now, now);
     bumpLeadScore(normalizedPhone, 'message');
     db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
-      VALUES (?, ?, ?, ?, ?, datetime('now'))`)
-      .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message);
+      VALUES (?, ?, ?, ?, ?, ?)`)
+      .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message, now);
     log.info({ phone: normalizedPhone, direction }, 'external message logged');
     res.json({ success: true });
   } catch (e: any) {
@@ -1145,7 +1151,7 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
     }
 
     try {
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, message, nowIsrael());
     } catch (e) { log.warn({ err: (e as Error).message }, 'message log DB write failed'); }
     // WebSocket broadcast so CRM updates in real-time
     try {
@@ -1186,7 +1192,7 @@ app.post('/api/wa-manager/send-media', dashAuth, async (req, res) => {
     }
     try {
       const label = isImage ? '[תמונה]' : `[קובץ: ${filename || 'file'}]`;
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, caption ? `${label} ${caption}` : label);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, caption ? `${label} ${caption}` : label, nowIsrael());
     } catch (e) { log.debug({ err: (e as Error).message }, 'media send DB log failed'); }
     log.info({ phone: chatPhone, type: isImage ? 'image' : 'document' }, 'wa-manager: media sent');
     res.json({ success: true });
@@ -1230,7 +1236,7 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
           { text: personalMsg }
         );
         try {
-          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, personalMsg);
+          db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, personalMsg, nowIsrael());
         } catch (e) { log.warn({ err: (e as Error).message }, 'broadcast message log DB write failed'); }
         results.push({ phone: chatPhone, success: true });
         // Small delay between sends to avoid rate limiting
@@ -1745,7 +1751,7 @@ app.post('/api/wa-manager/followup/quick-reply', dashAuth, async (req, res) => {
       body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: message } })
     });
     if (!resp.ok) throw new Error(`WhatsApp API error: ${resp.status}`);
-    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, message);
+    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, message, nowIsrael());
     res.json({ success: true });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
@@ -2207,7 +2213,7 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
     // Log outbound WA message for flow tracking + 360Shmikley CRM visibility
     const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
     try {
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, logContent, nowIsrael());
     } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }
     // WebSocket broadcast so CRM updates in real-time
     try {
@@ -2564,7 +2570,7 @@ app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
     );
     // Log outbound voice note for flow tracking
     try {
-      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, `[הודעה קולית — ${voiceBuffer.length} bytes]`);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, `[הודעה קולית — ${voiceBuffer.length} bytes]`, nowIsrael());
     } catch (e) { log.warn({ err: (e as Error).message }, 'voice outbound log DB write failed'); }
     log.info({ phone, leadName, bytes: voiceBuffer.length }, 'external WhatsApp voice sent');
     res.json({ success: true });

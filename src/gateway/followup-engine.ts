@@ -7,6 +7,11 @@ import { join } from 'path';
 
 const log = createLogger('followup-engine');
 
+/** Return current Israel time as ISO string for SQLite (handles DST automatically) */
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 /** Validate and sanitize a day offset for SQL date arithmetic */
 function safeDayOffset(value: unknown): number {
   const num = typeof value === 'number' ? value : parseInt(String(value), 10);
@@ -66,7 +71,7 @@ export function getFollowupConfig(): FollowupConfig {
     auto_enabled: cfg.auto_enabled !== 'false',
     send_hour: parseInt(cfg.send_hour || '10', 10),
     max_followups: parseInt(cfg.max_followups || '3', 10),
-    skip_statuses: (cfg.skip_statuses || 'closed,refused,not_relevant,done').split(',').map(s => s.trim()),
+    skip_statuses: (cfg.skip_statuses || 'closed,refused,not_relevant,done,no_show,booked').split(',').map(s => s.trim()),
     skip_replied: cfg.skip_replied !== 'false',
   };
 }
@@ -107,12 +112,12 @@ export function getPendingFollowups(workspace?: string): any[] {
       (SELECT created_at FROM messages WHERE sender_id = l.phone ORDER BY created_at DESC LIMIT 1) as last_message_at
     FROM leads l
     WHERE l.next_followup IS NOT NULL
-      AND l.next_followup <= date('now')
+      AND l.next_followup <= date('${nowIsrael()}')
       AND l.followup_count < ?
       AND l.bot_paused = 0
       ${skipStatusPlaceholders ? `AND (l.lead_status IS NULL OR l.lead_status NOT IN (${skipStatusPlaceholders}))` : ''}
       ${cfg.skip_replied ? `AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'user' AND channel IN ('whatsapp','whatsapp-inbound')) = 0` : ''}
-      AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'assistant' AND channel = 'whatsapp-outbound' AND created_at > datetime('now', '-24 hours')) = 0
+      AND (SELECT COUNT(*) FROM messages WHERE sender_id = l.phone AND role = 'assistant' AND channel = 'whatsapp-outbound' AND created_at > datetime('${nowIsrael()}', '-24 hours')) = 0
       ${srcFilter}
     ORDER BY l.next_followup ASC
   `;
@@ -327,11 +332,12 @@ export async function sendFollowup(phone: string, templateId?: number) {
   const cfg = getFollowupConfig();
 
   if ((lead.followup_count || 0) + 1 >= cfg.max_followups || !nextTemplate) {
-    db.prepare('UPDATE leads SET followup_count = followup_count + 1, next_followup = NULL, updated_at = datetime(\'now\') WHERE phone = ?').run(phone);
+    db.prepare('UPDATE leads SET followup_count = followup_count + 1, next_followup = NULL, updated_at = ? WHERE phone = ?').run(nowIsrael(), phone);
   } else {
     const daysUntilNext = nextTemplate.day_offset - template.day_offset;
     const nextDate = safeDayOffset(daysUntilNext > 0 ? daysUntilNext : 2);
-    db.prepare(`UPDATE leads SET followup_count = followup_count + 1, next_followup = date('now', '+${nextDate} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
+    const israelDate = nowIsrael().split('T')[0]; // YYYY-MM-DD in Israel tz
+    db.prepare(`UPDATE leads SET followup_count = followup_count + 1, next_followup = date(?, '+${nextDate} days'), updated_at = ? WHERE phone = ?`).run(israelDate, nowIsrael(), phone);
   }
 
   // Add tag
@@ -431,13 +437,15 @@ export function scheduleFirstFollowup(phone: string) {
   if (!templates) return;
 
   const dayOff = safeDayOffset(templates.day_offset);
-  db.prepare(`UPDATE leads SET next_followup = date('now', '+${dayOff} days'), followup_count = 0, updated_at = datetime('now') WHERE phone = ? AND next_followup IS NULL`).run(phone);
+  const israelDate = nowIsrael().split('T')[0];
+  db.prepare(`UPDATE leads SET next_followup = date(?, '+${dayOff} days'), followup_count = 0, updated_at = ? WHERE phone = ? AND next_followup IS NULL`).run(israelDate, nowIsrael(), phone);
 }
 
 // Postpone a lead's follow-up by N days
 export function postponeFollowup(phone: string, days: number = 1) {
   const safeDays = safeDayOffset(Math.max(1, Math.min(days, 30)));
-  db.prepare(`UPDATE leads SET next_followup = date('now', '+${safeDays} days'), updated_at = datetime('now') WHERE phone = ?`).run(phone);
+  const israelDate = nowIsrael().split('T')[0];
+  db.prepare(`UPDATE leads SET next_followup = date(?, '+${safeDays} days'), updated_at = ? WHERE phone = ?`).run(israelDate, nowIsrael(), phone);
 }
 
 // Cancel all follow-ups for a lead
@@ -477,7 +485,7 @@ async function sendWhatsAppTemplate(phone: string, templateName: string, params:
   }
 
   const bodyText = `[Template: ${templateName}] ${params.join(' | ')}`;
-  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, bodyText);
+  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, bodyText, nowIsrael());
 }
 
 async function sendWhatsAppText(phone: string, text: string) {
@@ -502,7 +510,7 @@ async function sendWhatsAppText(phone: string, text: string) {
     throw new Error(`WhatsApp API error: ${resp.status} ${err}`);
   }
 
-  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
+  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, text, nowIsrael());
 }
 
 // Setup daily cron (called from server startup)

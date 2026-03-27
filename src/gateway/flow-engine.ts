@@ -5,6 +5,10 @@ import { config } from '../utils/config.js';
 
 const log = createLogger('flow-engine');
 
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 interface FlowStep {
   type: 'send_message' | 'send_voice' | 'wait' | 'condition' | 'add_tag' | 'update_status';
   params: Record<string, any>;
@@ -120,7 +124,7 @@ async function sendWhatsAppMessage(phone: string, text: string) {
     })
   });
   // Log outbound message
-  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
+  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, text, nowIsrael());
 }
 
 async function sendWhatsAppVoice(phone: string, text: string, voice: string) {
@@ -168,7 +172,7 @@ async function sendWhatsAppVoice(phone: string, text: string, voice: string) {
       body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'audio', audio: { id: mediaId } }),
     });
 
-    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, `[הודעה קולית — ${voice}] ${text}`);
+    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, `[הודעה קולית — ${voice}] ${text}`, nowIsrael());
     log.info({ phone, voice, textLen: text.length }, 'flow: voice message sent');
   } catch (e: any) {
     log.error({ phone, err: e.message }, 'flow: voice send failed');

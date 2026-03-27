@@ -7,6 +7,11 @@ const log = createLogger('no-show');
 
 const ALON_DEV_BOARD_ID = 5092777389;
 
+/** Return current Israel time as ISO string for SQLite (handles DST automatically) */
+function nowIsrael(): string {
+  return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
+}
+
 // ── No-Show Detection Settings ──
 const NO_SHOW_BUFFER_MIN = 10;   // minutes after meeting end to wait before marking no-show
 const CHECK_INTERVAL_MS = 5 * 60 * 1000; // check every 5 minutes
@@ -83,10 +88,10 @@ export function recordMeeting(opts: {
 // ── Mark Meeting as Completed ──
 export function markMeetingCompleted(phone: string) {
   db.prepare(`
-    UPDATE meetings SET status = 'completed', updated_at = datetime('now')
+    UPDATE meetings SET status = 'completed', updated_at = ?
     WHERE phone = ? AND status = 'scheduled'
     ORDER BY meeting_time DESC LIMIT 1
-  `).run(phone);
+  `).run(nowIsrael(), phone);
 }
 
 // ── Check for No-Shows ──
@@ -98,8 +103,8 @@ async function checkNoShows() {
     LEFT JOIN leads l ON l.phone = m.phone
     WHERE m.status = 'scheduled'
       AND m.no_show_handled = 0
-      AND datetime(m.meeting_time, '+' || m.duration_min || ' minutes', '+${NO_SHOW_BUFFER_MIN} minutes') < datetime('now')
-  `).all() as any[];
+      AND datetime(m.meeting_time, '+' || m.duration_min || ' minutes', '+${NO_SHOW_BUFFER_MIN} minutes') < ?
+  `).all(nowIsrael()) as any[];
 
   if (!overdueMeetings.length) return;
 
@@ -108,7 +113,8 @@ async function checkNoShows() {
   for (const meeting of overdueMeetings) {
     try {
       // Mark as handled and record when we asked — for auto-timeout
-      db.prepare(`UPDATE meetings SET no_show_handled = 1, asked_at = datetime('now'), updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
+      const now = nowIsrael();
+      db.prepare(`UPDATE meetings SET no_show_handled = 1, asked_at = ?, updated_at = ? WHERE id = ?`).run(now, now, meeting.id);
 
       // Ask Alon via Telegram with inline buttons
       await askAlonAboutMeeting(meeting);
@@ -126,9 +132,9 @@ async function checkNoShows() {
     WHERE m.status = 'scheduled'
       AND m.no_show_handled = 1
       AND m.asked_at IS NOT NULL
-      AND datetime(m.asked_at, '+${REMINDER_AFTER_MIN} minutes') < datetime('now')
-      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') > datetime('now')
-  `).all() as any[];
+      AND datetime(m.asked_at, '+${REMINDER_AFTER_MIN} minutes') < ?
+      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') > ?
+  `).all(nowIsrael(), nowIsrael()) as any[];
 
   for (const meeting of needsReminder) {
     // Check if we already sent a reminder (avoid spam)
@@ -139,8 +145,8 @@ async function checkNoShows() {
 
     // Mark reminder as sent
     db.prepare(
-      `INSERT OR IGNORE INTO scheduled_messages (label, message, send_at, channel, target_id, sent) VALUES (?, '', datetime('now'), 'internal', ?, 1)`
-    ).run(`reminder-ask-${meeting.id}`, meeting.phone);
+      `INSERT OR IGNORE INTO scheduled_messages (label, message, send_at, channel, target_id, sent) VALUES (?, '', ?, 'internal', ?, 1)`
+    ).run(`reminder-ask-${meeting.id}`, nowIsrael(), meeting.phone);
 
     await askAlonAboutMeeting(meeting, true); // isReminder = true
     log.info({ meetingId: meeting.id, phone: meeting.phone }, 'sent reminder — Alon hasn\'t responded');
@@ -154,8 +160,8 @@ async function checkNoShows() {
     WHERE m.status = 'scheduled'
       AND m.no_show_handled = 1
       AND m.asked_at IS NOT NULL
-      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') < datetime('now')
-  `).all() as any[];
+      AND datetime(m.asked_at, '+${AUTO_NOSHOW_TIMEOUT_MIN} minutes') < ?
+  `).all(nowIsrael()) as any[];
 
   for (const meeting of timedOut) {
     log.warn({ meetingId: meeting.id, phone: meeting.phone }, 'auto-triggering no-show — Alon never responded after 2h');
@@ -225,7 +231,7 @@ export async function handleMeetingCallback(callbackData: string, callbackQueryI
   if (action === 'noshow_call' || action === 'noshow_close') {
     const phone = idStr;
     if (action === 'noshow_close') {
-      db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', updated_at = datetime('now') WHERE phone = ?`).run(phone);
+      db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NOT_RELEVANT}', next_followup = NULL, bot_paused = 1, updated_at = ? WHERE phone = ?`).run(nowIsrael(), phone);
       log.info({ phone }, 'no-show lead marked as not relevant');
     }
     if (botToken) {
@@ -254,8 +260,9 @@ export async function handleMeetingCallback(callbackData: string, callbackQueryI
 
   if (action === 'meeting_show') {
     // Lead showed up — mark completed
-    db.prepare(`UPDATE meetings SET status = 'completed', updated_at = datetime('now') WHERE id = ?`).run(meetingId);
-    db.prepare(`UPDATE leads SET lead_status = 'interested', updated_at = datetime('now') WHERE phone = ?`).run(meeting.phone);
+    const now = nowIsrael();
+    db.prepare(`UPDATE meetings SET status = 'completed', updated_at = ? WHERE id = ?`).run(now, meetingId);
+    db.prepare(`UPDATE leads SET lead_status = 'interested', updated_at = ? WHERE phone = ?`).run(now, meeting.phone);
 
     // Cancel any pending reschedule messages (in case auto-timeout already started the flow)
     cancelRescheduleMessages(meeting.phone);
@@ -292,11 +299,13 @@ async function handleNoShow(meeting: any) {
 
   log.info({ phone, name, meetingTime: meeting.meeting_time }, 'NO-SHOW detected — starting reschedule flow');
 
-  // 1. Update meeting status
-  db.prepare(`UPDATE meetings SET status = 'no_show', no_show_handled = 1, updated_at = datetime('now') WHERE id = ?`).run(meeting.id);
+  const now = nowIsrael();
 
-  // 2. Update lead status in local DB
-  db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NO_SHOW}', updated_at = datetime('now') WHERE phone = ?`).run(phone);
+  // 1. Update meeting status
+  db.prepare(`UPDATE meetings SET status = 'no_show', no_show_handled = 1, updated_at = ? WHERE id = ?`).run(now, meeting.id);
+
+  // 2. Update lead status + CLEAR follow-up scheduling (prevent follow-up engine from interfering)
+  db.prepare(`UPDATE leads SET lead_status = '${LEAD_STATUS.NO_SHOW}', next_followup = NULL, updated_at = ? WHERE phone = ?`).run(now, phone);
 
   // 3. Record status change
   db.prepare(`INSERT INTO status_history (phone, old_status, new_status) VALUES (?, ?, ?)`).run(
@@ -414,10 +423,10 @@ async function handleNoShow(meeting: any) {
 async function processScheduledMessages() {
   const pending = db.prepare(`
     SELECT * FROM scheduled_messages
-    WHERE sent = 0 AND send_at <= datetime('now')
+    WHERE sent = 0 AND send_at <= ?
     ORDER BY send_at ASC
     LIMIT 10
-  `).all() as any[];
+  `).all(nowIsrael()) as any[];
 
   for (const msg of pending) {
     try {
@@ -498,8 +507,8 @@ async function sendWhatsAppText(phone: string, text: string) {
     throw new Error(`WhatsApp API error: ${resp.status} ${err}`);
   }
 
-  // Log to DB
-  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
+  // Log to DB (Israel time)
+  db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, text, nowIsrael());
 }
 
 // ── Cancel Reschedule Messages ──
