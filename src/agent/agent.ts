@@ -516,7 +516,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     }
   }
 
-  // Attach interactive message (buttons/list/CTA) if queued
+  // Attach interactive message (buttons/list/CTA) if queued via send_buttons tool
   if (interactive) {
     if (interactive.buttons) reply.buttons = interactive.buttons;
     if (interactive.listSections) reply.listSections = interactive.listSections;
@@ -525,6 +525,34 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
     if (interactive.interactiveFooter) reply.interactiveFooter = interactive.interactiveFooter;
     if (interactive.listButtonText) reply.listButtonText = interactive.listButtonText;
     if (interactive.ctaUrl) reply.ctaUrl = interactive.ctaUrl;
+  }
+
+  // Fallback: parse [interactive:buttons:...] from text if AI wrote it inline instead of using send_buttons tool
+  if (!reply.buttons && !reply.listSections) {
+    const btnMatch = reply.text.match(/\[interactive:buttons:(\[.*?\])\]/);
+    if (btnMatch) {
+      try {
+        const titles: string[] = JSON.parse(btnMatch[1]);
+        reply.buttons = titles.map((t, i) => ({ id: `btn_${i}`, title: t.slice(0, 20) }));
+        reply.interactiveBody = reply.text.replace(/\[interactive:buttons:\[.*?\]\]\s*/g, '').trim();
+        reply.text = reply.text.replace(/\[interactive:buttons:\[.*?\]\]\s*/g, '').trim();
+      } catch {}
+    }
+    const listMatch = reply.text.match(/\[interactive:list:(\[.*?\])\]/);
+    if (listMatch) {
+      try {
+        const titles: string[] = JSON.parse(listMatch[1]);
+        reply.listSections = [{ title: 'אפשרויות', rows: titles.map((t, i) => ({ id: `opt_${i}`, title: t.slice(0, 24) })) }];
+        reply.interactiveBody = reply.text.replace(/\[interactive:list:\[.*?\]\]\s*/g, '').trim();
+        reply.text = reply.text.replace(/\[interactive:list:\[.*?\]\]\s*/g, '').trim();
+      } catch {}
+    }
+    const ctaMatch = reply.text.match(/\[interactive:cta:([^:]+):([^\]]+)\]/);
+    if (ctaMatch) {
+      reply.ctaUrl = { display_text: ctaMatch[1], url: ctaMatch[2] };
+      reply.interactiveBody = reply.text.replace(/\[interactive:cta:[^\]]+\]\s*/g, '').trim();
+      reply.text = reply.text.replace(/\[interactive:cta:[^\]]+\]\s*/g, '').trim();
+    }
   }
 
   // Voice-to-voice: if user sent voice message, auto-generate TTS reply
