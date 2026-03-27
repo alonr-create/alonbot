@@ -99,6 +99,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
   // Webhook handler — receives forwarded messages from the webhook middleware
   function webhookHandler(req: any, res: any) {
     const body = req.body;
+    log.info({ hasStatuses: !!(body.entry?.[0]?.changes?.[0]?.value?.statuses), hasMessages: !!(body.entry?.[0]?.changes?.[0]?.value?.messages), object: body.object }, 'webhook POST received');
 
     // Direct Meta webhook format
     if (body.object === 'whatsapp_business_account') {
