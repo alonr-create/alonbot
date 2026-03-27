@@ -242,7 +242,95 @@ const STATUS_MESSAGES: Record<string, string | null> = {
 };
 
 /**
- * Handle Monday.com webhook for column value changes.
+ * Handle a new item created on Monday.com board.
+ * Sends a WhatsApp welcome message ONLY if the lead came from the website or Facebook.
+ */
+async function handleNewItem(event: any): Promise<void> {
+  const pulseId = event.pulseId;
+  const boardId = event.boardId;
+  if (!pulseId) return;
+
+  log.info({ pulseId, boardId }, 'New item webhook received');
+
+  if (!config.mondayApiKey) return;
+
+  // Fetch item from Monday API to get phone + source
+  const query = `query { items(ids: [${pulseId}]) { name column_values { id text } } }`;
+  const res = await fetch('https://api.monday.com/v2', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+    body: JSON.stringify({ query }),
+  });
+  const data = await res.json() as any;
+  const item = data.data?.items?.[0];
+  if (!item) { log.warn({ pulseId }, 'Item not found'); return; }
+
+  const columns = item.column_values || [];
+  const phoneCol = columns.find((c: any) => c.id === 'phone_mm16hqz2');
+  const sourceCol = columns.find((c: any) => c.id === 'text_mm16pfzp');
+  const phone = (phoneCol?.text || '').replace(/[\s\-()]/g, '');
+  const source = (sourceCol?.text || '').toLowerCase();
+
+  if (!phone || phone.length < 9) {
+    log.warn({ pulseId }, 'No valid phone');
+    return;
+  }
+
+  // Only send WA for website/Facebook leads — NOT bulk imports
+  const allowedSources = ['alon-dev-website', 'facebook', 'fb', 'instagram', 'meta'];
+  const isAllowedSource = allowedSources.some(s => source.includes(s));
+  if (!isAllowedSource) {
+    log.info({ pulseId, source, phone }, 'Source not allowed for auto-WA — skipping');
+    return;
+  }
+
+  // Normalize phone
+  let normalizedPhone = phone;
+  if (normalizedPhone.startsWith('+')) normalizedPhone = normalizedPhone.slice(1);
+  if (normalizedPhone.startsWith('0')) normalizedPhone = '972' + normalizedPhone.slice(1);
+  if (!normalizedPhone.startsWith('972')) normalizedPhone = '972' + normalizedPhone;
+
+  // Don't message Alon
+  if (config.allowedWhatsApp.includes(normalizedPhone)) return;
+
+  // Save to local DB
+  const now = nowIsrael();
+  db.prepare(`INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
+    VALUES (?, ?, 'alon_dev', ?, '${LEAD_STATUS.NEW}', ?, ?)
+    ON CONFLICT(phone) DO UPDATE SET monday_item_id = excluded.monday_item_id, updated_at = ?
+  `).run(normalizedPhone, item.name, String(pulseId), now, now, now);
+
+  // Send welcome WhatsApp
+  try {
+    const { getAdapter } = await import('../gateway/router.js');
+    const whatsapp = getAdapter('whatsapp');
+    if (!whatsapp) { log.warn('No WhatsApp adapter'); return; }
+
+    const leadName = item.name.split('—')[0]?.trim() || '';
+    const greeting = leadName ? `היי ${leadName}!` : 'היי!';
+    const welcomeMessage = `${greeting} קיבלתי את הפנייה שלך באתר Alon.dev 🙏\nאשמח לשמוע יותר על העסק שלך ואיך אוכל לעזור.\nמה השירות שמעניין אותך?`;
+
+    const fakeMsg = {
+      id: 'monday-new-item',
+      channel: 'whatsapp' as const,
+      senderId: normalizedPhone,
+      senderName: leadName,
+      text: '',
+      timestamp: Date.now(),
+      raw: null,
+    };
+    await whatsapp.sendReply(fakeMsg, { text: welcomeMessage });
+    log.info({ phone: normalizedPhone, source }, 'New lead welcome WhatsApp sent');
+
+    db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, ?)`)
+      .run(normalizedPhone, welcomeMessage, nowIsrael());
+  } catch (e: any) {
+    log.error({ err: e.message, phone: normalizedPhone }, 'Failed to send welcome message');
+  }
+}
+
+/**
+ * Handle Monday.com webhook for column value changes + new item creation.
  * Returns the Express route handler.
  */
 export function mondayWebhookHandler() {
@@ -260,6 +348,14 @@ export function mondayWebhookHandler() {
 
     // Respond 200 immediately
     res.status(200).json({ ok: true });
+
+    // Handle new item creation — send welcome WA to website/FB leads only
+    if (event.type === 'create_item') {
+      handleNewItem(event).catch((e: any) =>
+        log.error({ err: e.message, pulseId: event.pulseId }, 'Failed to handle new item'),
+      );
+      return;
+    }
 
     // Only handle status column changes
     if (event.type !== 'update_column_value') return;
