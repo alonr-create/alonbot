@@ -915,12 +915,16 @@ app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
       WHERE sender_id = ? AND channel IN ('whatsapp-inbound','whatsapp-outbound')
       ORDER BY id ASC
     `).all(phone);
-    // Get latest delivery status for this phone
-    const lastReceipt = db.prepare(`
-      SELECT status FROM delivery_receipts WHERE phone = ? ORDER BY created_at DESC LIMIT 1
-    `).get(phone) as { status: string } | undefined;
+    // Get delivery receipts for this phone to determine read/delivered status
+    const receipts = db.prepare(`
+      SELECT status, read_at, delivered_at, sent_at FROM delivery_receipts
+      WHERE phone = ? ORDER BY created_at DESC LIMIT 10
+    `).all(phone) as { status: string; read_at: string | null; delivered_at: string | null; sent_at: string | null }[];
+    const lastRead = receipts.find(r => r.read_at);
+    const lastDelivered = receipts.find(r => r.delivered_at);
+    const deliveryStatus = lastRead ? 'read' : lastDelivered ? 'delivered' : 'sent';
     const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone);
-    res.json({ success: true, lead, messages, deliveryStatus: lastReceipt?.status || 'sent' });
+    res.json({ success: true, lead, messages, deliveryStatus });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -1969,6 +1973,8 @@ app.post('/api/wa-manager/create-template', dashAuth, async (req, res) => {
 // WA Inbox HTML — served without auth (API calls still require token)
 app.get('/wa-inbox', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
   res.send(waInboxHTML);
 });
 
