@@ -1114,7 +1114,12 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
     );
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, message);
     } catch (e) { log.warn({ err: (e as Error).message }, 'message log DB write failed'); }
+    // WebSocket broadcast so CRM updates in real-time
+    try {
+      wsBroadcast({ type: 'new_message', phone: chatPhone, name: 'Alon', text: message.slice(0, 200), role: 'assistant', timestamp: new Date().toISOString() });
+    } catch { /* non-critical */ }
     log.info({ phone: chatPhone }, 'wa-manager: message sent');
     res.json({ success: true });
   } catch (e: any) {

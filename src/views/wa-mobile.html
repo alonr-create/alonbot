@@ -1726,6 +1726,7 @@ async function sendMessage() {
   const msg = input.value.trim();
   if (!msg || !currentPhone) return;
 
+  const savedMsg = msg; // backup in case of failure
   input.value = '';
   input.style.height = 'auto';
   document.getElementById('sendBtn').disabled = true;
@@ -1736,19 +1737,21 @@ async function sendMessage() {
   renderMessages();
   scrollToBottom();
 
-  // Feature 5: Show typing indicator
-  showTypingIndicator(true);
-
   try {
     await api('/send', { method: 'POST', body: JSON.stringify({ phone: currentPhone, message: msg }) });
-    // Poll after short delay then hide typing indicator
+    // Reload from server to confirm persistence
     setTimeout(async () => {
       await loadMessages(currentPhone, true);
-      showTypingIndicator(false);
-    }, 2000);
+    }, 800);
   } catch (e) {
-    toast('שגיאה בשליחה');
-    showTypingIndicator(false);
+    toast('שגיאה בשליחה — ההודעה שוחזרה');
+    // Restore the message so user doesn't lose it
+    input.value = savedMsg;
+    input.style.height = 'auto';
+    document.getElementById('sendBtn').disabled = false;
+    // Remove the optimistic message
+    currentMessages = currentMessages.filter(m => !(m.content === msg && m.created_at === now));
+    renderMessages();
   }
 }
 
