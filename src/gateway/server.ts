@@ -229,7 +229,7 @@ try {
 } catch (e) { log.debug({ err: (e as Error).message }, 'push_subscriptions table creation failed'); }
 
 // Seed example chatbot flows
-import('./flow-engine.js').then(m => m.seedExampleFlows()).catch((e) => { log.debug({ err: (e as Error).message }, 'seed example flows failed'); });
+import('./flow-engine.js').then(m => { m.seedExampleFlows(); m.migrateFlowsAddVoice(); }).catch((e) => { log.debug({ err: (e as Error).message }, 'seed/migrate flows failed'); });
 
 // Setup follow-up cron
 import('./followup-engine.js').then(m => m.setupFollowupCron()).catch((e) => { log.debug({ err: (e as Error).message }, 'followup cron setup failed'); });

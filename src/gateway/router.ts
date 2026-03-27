@@ -9,6 +9,11 @@ const log = createLogger('router');
 
 const adapters = new Map<string, ChannelAdapter>();
 
+// Debounce: batch rapid WhatsApp messages from same lead before AI processing
+// When a lead sends multiple messages quickly (e.g. question + "thanks"), merge them into one AI call
+const pendingLeadMessages = new Map<string, { messages: UnifiedMessage[]; timer: ReturnType<typeof setTimeout> }>();
+const DEBOUNCE_MS = 4000; // Wait 4 seconds for additional messages
+
 // Sync messages to cloud DB when running in local mode
 // This ensures the dashboard on Render can see all conversations
 async function syncToCloud(messages: Array<{ channel: string; sender_id: string; sender_name?: string; role: string; content: string; created_at: string }>) {
@@ -79,7 +84,8 @@ const TOOL_LABELS: Record<string, string> = {
 export function registerAdapter(adapter: ChannelAdapter) {
   adapters.set(adapter.name, adapter);
 
-  adapter.onMessage(async (msg: UnifiedMessage) => {
+  adapter.onMessage(async (originalMsg: UnifiedMessage) => {
+    let msg = originalMsg;
     // Deduplicate: skip if we already processed this exact message
     const dedupKey = `${msg.channel}:${msg.senderId}:${msg.id}`;
     if (recentMessageIds.has(dedupKey)) {
@@ -216,6 +222,43 @@ export function registerAdapter(adapter: ChannelAdapter) {
           return;
         }
       } catch { /* non-critical — proceed normally */ }
+    }
+
+    // Debounce: for WhatsApp leads, wait a few seconds to batch rapid messages
+    // This prevents sending 2 AI replies when user sends "question" + "thanks" in quick succession
+    if (msg.channel === 'whatsapp' && !config.allowedWhatsApp.includes(msg.senderId) && !msg.text.startsWith('[SYSTEM:')) {
+      const debounceKey = `wa:${msg.senderId}`;
+      const pending = pendingLeadMessages.get(debounceKey);
+      if (pending) {
+        // Another message within window — add text and reset timer
+        pending.messages.push(msg);
+        clearTimeout(pending.timer);
+        pending.timer = setTimeout(() => {
+          pendingLeadMessages.delete(debounceKey);
+        }, DEBOUNCE_MS);
+        log.debug({ phone: msg.senderId, batchSize: pending.messages.length }, 'debounce: batching message');
+        if (typingInterval) clearInterval(typingInterval);
+        return; // Skip AI — will be included when first message's debounce fires
+      }
+      // First message — start debounce, then continue processing below
+      await new Promise<void>(resolve => {
+        const entry = {
+          messages: [msg],
+          timer: setTimeout(() => {
+            pendingLeadMessages.delete(debounceKey);
+            resolve();
+          }, DEBOUNCE_MS),
+        };
+        pendingLeadMessages.set(debounceKey, entry);
+      });
+      // After debounce: merge any additional messages that arrived
+      const batch = pendingLeadMessages.get(debounceKey);
+      if (batch && batch.messages.length > 1) {
+        const combined = batch.messages.map(m => m.text).join('\n');
+        msg = { ...msg, text: combined };
+        log.info({ phone: msg.senderId, count: batch.messages.length }, 'debounce: merged messages');
+      }
+      pendingLeadMessages.delete(debounceKey);
     }
 
     try {

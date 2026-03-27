@@ -132,6 +132,23 @@ const handlers: ToolHandler[] = [
                   .run(`תזכורת ללקוח: ${input.title}`, `היי${customerName ? ' ' + customerName : ''} 👋\n\nתזכורת — יש לנו פגישה בעוד 15 דקות! ⏰\n🕐 ${input.time}\n\nנתראה בזום 🎥`, reminderStr, 'whatsapp', customerPhone);
               }
 
+              // Email follow-up: if lead didn't provide email, remind to ask 2 hours after booking
+              if (customerPhone) {
+                const lead = db.prepare('SELECT name FROM leads WHERE phone = ?').get(customerPhone) as any;
+                const hasEmail = db.prepare("SELECT 1 FROM messages WHERE sender_id = ? AND content LIKE '%@%.%' AND role = 'user'").get(customerPhone);
+                if (!hasEmail) {
+                  const followupDate = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours from now
+                  // Only schedule if within working hours (08:00-21:00)
+                  const hour = followupDate.getHours();
+                  if (hour >= 8 && hour < 21) {
+                    const followupStr = `${followupDate.getFullYear()}-${String(followupDate.getMonth() + 1).padStart(2, '0')}-${String(followupDate.getDate()).padStart(2, '0')} ${String(followupDate.getHours()).padStart(2, '0')}:${String(followupDate.getMinutes()).padStart(2, '0')}`;
+                    db.prepare('INSERT INTO scheduled_messages (label, message, send_at, channel, target_id) VALUES (?, ?, ?, ?, ?)')
+                      .run(`בקשת מייל: ${lead?.name || customerPhone}`, `היי${customerName ? ' ' + customerName : ''} 😊\n\nאגב, מה המייל שלך? ככה אשלח לך זימון מסודר עם לינק לזום לפגישה שלנו 📧`, followupStr, 'whatsapp', customerPhone);
+                    log.info({ phone: customerPhone, at: followupStr }, 'scheduled email follow-up reminder');
+                  }
+                }
+              }
+
               log.info({ title: input.title, reminderAt: reminderStr }, 'scheduled 15min meeting reminders');
             }
           } catch (e: any) {

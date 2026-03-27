@@ -6,7 +6,7 @@ import { config } from '../utils/config.js';
 const log = createLogger('flow-engine');
 
 interface FlowStep {
-  type: 'send_message' | 'wait' | 'condition' | 'add_tag' | 'update_status';
+  type: 'send_message' | 'send_voice' | 'wait' | 'condition' | 'add_tag' | 'update_status';
   params: Record<string, any>;
   delay_ms?: number;
 }
@@ -46,6 +46,12 @@ export async function executeFlow(flowId: number, phone: string) {
         case 'send_message': {
           const text = (step.params.message || '').replace(/\{name\}/g, getLeadName(phone));
           if (text) await sendWhatsAppMessage(phone, text);
+          break;
+        }
+        case 'send_voice': {
+          const voiceText = (step.params.text || '').replace(/\{name\}/g, getLeadName(phone));
+          const voicePreset = step.params.voice || 'yael';
+          if (voiceText) await sendWhatsAppVoice(phone, voiceText, voicePreset);
           break;
         }
         case 'add_tag': {
@@ -117,6 +123,58 @@ async function sendWhatsAppMessage(phone: string, text: string) {
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, text);
 }
 
+async function sendWhatsAppVoice(phone: string, text: string, voice: string) {
+  const elevenLabsKey = config.elevenlabsApiKey;
+  const waToken = config.waCloudToken;
+  const waPhoneId = config.waCloudPhoneId;
+  if (!elevenLabsKey || !waToken || !waPhoneId) {
+    log.warn('voice or Cloud API not configured for flow voice');
+    return;
+  }
+
+  try {
+    // Import voice presets
+    const { VOICE_PRESETS } = await import('../tools/handlers/send-voice.js');
+    const preset = VOICE_PRESETS[voice] || VOICE_PRESETS.yael;
+
+    // Generate TTS via ElevenLabs
+    const ttsRes = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${preset.id}?output_format=ogg_opus`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'xi-api-key': elevenLabsKey },
+      body: JSON.stringify({ text, model_id: 'eleven_v3', voice_settings: preset.settings }),
+    });
+    if (!ttsRes.ok) { log.warn({ status: ttsRes.status }, 'ElevenLabs TTS failed in flow'); return; }
+    const audioBuffer = Buffer.from(await ttsRes.arrayBuffer());
+
+    // Upload audio to WhatsApp Media API
+    const formData = new FormData();
+    formData.append('messaging_product', 'whatsapp');
+    formData.append('type', 'audio/ogg');
+    formData.append('file', new Blob([audioBuffer], { type: 'audio/ogg; codecs=opus' }), 'voice.ogg');
+
+    const uploadRes = await fetch(`https://graph.facebook.com/v21.0/${waPhoneId}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${waToken}` },
+      body: formData,
+    });
+    if (!uploadRes.ok) { log.warn({ status: uploadRes.status }, 'WA media upload failed in flow'); return; }
+    const { id: mediaId } = await uploadRes.json() as any;
+
+    // Send voice note
+    const to = phone.replace(/\D/g, '');
+    await fetch(`https://graph.facebook.com/v21.0/${waPhoneId}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${waToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'audio', audio: { id: mediaId } }),
+    });
+
+    db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))").run(phone, `[הודעה קולית — ${voice}] ${text}`);
+    log.info({ phone, voice, textLen: text.length }, 'flow: voice message sent');
+  } catch (e: any) {
+    log.error({ phone, err: e.message }, 'flow: voice send failed');
+  }
+}
+
 // Trigger flows by event (called from router)
 export function triggerFlows(triggerType: string, triggerValue: string, phone: string) {
   try {
@@ -141,10 +199,10 @@ export function seedExampleFlows() {
   const existing = db.prepare('SELECT COUNT(*) as c FROM chatbot_flows').get() as any;
   if (existing.c > 0) return; // Don't seed if flows already exist
 
-  // Flow 1: Welcome new lead — greet + ask for details + tag
+  // Flow 1: Welcome new lead — voice + text + tag
   const welcomeSteps: FlowStep[] = [
-    { type: 'send_message', params: { message: 'היי {name}! 👋 תודה שפנית אלינו.\nאני יעל, העוזרת הדיגיטלית של Alon.dev — אשמח לעזור לך.' }, delay_ms: 0 },
-    { type: 'send_message', params: { message: 'ב-48 שעות אני בונה אתר מקצועי ומותאם אישית לעסק שלך.\n\nמה סוג העסק שלך? 🏪' }, delay_ms: 3000 },
+    { type: 'send_voice', params: { text: 'היי {name}! כאן יעל מ-Alon.dev. ראיתי את העסק שלך ורציתי להציע לך משהו שיכול לעזור. אם יש לך דקה, שלח לי הודעה ואני אספר!', voice: 'yael' }, delay_ms: 0 },
+    { type: 'send_message', params: { message: 'מה דעתך? אם יש שאלות אני כאן 😊' }, delay_ms: 3000 },
     { type: 'add_tag', params: { tag: 'welcome_sent' }, delay_ms: 0 },
     { type: 'update_status', params: { status: LEAD_STATUS.CONTACTED }, delay_ms: 0 },
   ];
@@ -163,4 +221,26 @@ export function seedExampleFlows() {
   );
 
   log.info('seeded 2 example chatbot flows');
+}
+
+// One-time migration: update existing welcome flow to include voice message
+export function migrateFlowsAddVoice() {
+  try {
+    const welcomeFlow = db.prepare("SELECT id, steps FROM chatbot_flows WHERE name LIKE '%קבלת פנים%' OR name LIKE '%welcome%' LIMIT 1").get() as any;
+    if (!welcomeFlow) return;
+    const steps: FlowStep[] = JSON.parse(welcomeFlow.steps);
+    // Check if already has send_voice
+    if (steps.some(s => s.type === 'send_voice')) return;
+    // Replace text-only welcome with voice + text
+    const newSteps: FlowStep[] = [
+      { type: 'send_voice', params: { text: 'היי {name}! כאן יעל מ-Alon.dev. ראיתי את העסק שלך ורציתי להציע לך משהו שיכול לעזור. אם יש לך דקה, שלח לי הודעה ואני אספר!', voice: 'yael' }, delay_ms: 0 },
+      { type: 'send_message', params: { message: 'מה דעתך? אם יש שאלות אני כאן 😊' }, delay_ms: 3000 },
+      { type: 'add_tag', params: { tag: 'welcome_sent' }, delay_ms: 0 },
+      { type: 'update_status', params: { status: LEAD_STATUS.CONTACTED }, delay_ms: 0 },
+    ];
+    db.prepare('UPDATE chatbot_flows SET steps = ? WHERE id = ?').run(JSON.stringify(newSteps), welcomeFlow.id);
+    log.info({ flowId: welcomeFlow.id }, 'migrated welcome flow to include voice');
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'flow voice migration skipped');
+  }
 }
