@@ -139,9 +139,9 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 .chat-messages{
   flex:1;overflow-y:auto;padding:16px 60px;
-  background-color:#e5ddd5;
-  background-image:url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
-  background-size:contain;
+  background-color:#efeae2;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cdefs%3E%3Cstyle%3E.d%7Bfill:%23dcd4c6;opacity:.45%7D%3C/style%3E%3C/defs%3E%3Ccircle class='d' cx='25' cy='18' r='3'/%3E%3Ccircle class='d' cx='180' cy='45' r='2.5'/%3E%3Ccircle class='d' cx='85' cy='80' r='2'/%3E%3Ccircle class='d' cx='250' cy='110' r='3'/%3E%3Ccircle class='d' cx='45' cy='145' r='2.5'/%3E%3Ccircle class='d' cx='200' cy='170' r='2'/%3E%3Ccircle class='d' cx='130' cy='210' r='3'/%3E%3Ccircle class='d' cx='270' cy='240' r='2'/%3E%3Ccircle class='d' cx='60' cy='270' r='2.5'/%3E%3Cpath class='d' d='M150 15l4-6h-8z'/%3E%3Cpath class='d' d='M220 60l3-5h-6z'/%3E%3Cpath class='d' d='M30 95l4-6h-8z'/%3E%3Cpath class='d' d='M280 30l3-5h-6z'/%3E%3Cpath class='d' d='M110 130l4-6h-8z'/%3E%3Cpath class='d' d='M170 260l3-5h-6z'/%3E%3Crect class='d' x='70' y='30' width='5' height='5' rx='1'/%3E%3Crect class='d' x='240' y='75' width='4' height='4' rx='1'/%3E%3Crect class='d' x='160' y='120' width='5' height='5' rx='1'/%3E%3Crect class='d' x='20' y='200' width='4' height='4' rx='1'/%3E%3Crect class='d' x='230' y='195' width='5' height='5' rx='1'/%3E%3Crect class='d' x='100' y='280' width='4' height='4' rx='1'/%3E%3Cpath class='d' d='M95 50c3-2 7 0 5 3s-7 1-5-3'/%3E%3Cpath class='d' d='M195 95c3-2 7 0 5 3s-7 1-5-3'/%3E%3Cpath class='d' d='M55 175c3-2 7 0 5 3s-7 1-5-3'/%3E%3Cpath class='d' d='M265 155c3-2 7 0 5 3s-7 1-5-3'/%3E%3Cpath class='d' d='M145 235c3-2 7 0 5 3s-7 1-5-3'/%3E%3Cpath class='d' d='M120 5a4 4 0 11-1 7 4 4 0 011-7M215 140a4 4 0 11-1 7 4 4 0 011-7'/%3E%3Cpath class='d' d='M40 240a3 3 0 11-1 5 3 3 0 011-5M280 280a3 3 0 11-1 5 3 3 0 011-5'/%3E%3Cpath class='d' d='M175 75l2-8 2 8-8-2 8-2z' fill-opacity='.3'/%3E%3Cpath class='d' d='M75 160l2-8 2 8-8-2 8-2z' fill-opacity='.3'/%3E%3Cpath class='d' d='M255 210l2-8 2 8-8-2 8-2z' fill-opacity='.3'/%3E%3C/svg%3E");
+  background-size:300px 300px;
   display:flex;flex-direction:column;gap:3px;
 }
 .chat-messages::-webkit-scrollbar{width:5px;}
@@ -1658,7 +1658,7 @@ function renderMessages() {
     const isOut = msg.role === 'assistant' || msg.role === 'system' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
     const dir = isOut ? 'outgoing' : 'incoming';
     const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
-    const checks = isOut ? `<span class="msg-check read">✓✓</span>` : '';
+    const checks = isOut ? `<span class="msg-check">✓</span>` : '';
     const text = linkify(msg.body || msg.message || msg.text || msg.content || '');
 
     // Campaign log entries as system notifications (like day dividers)
@@ -1706,7 +1706,7 @@ function renderMessages() {
       try {
         const titles = JSON.parse(btnMatch[1]);
         buttonsHtml = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
-          titles.map(t => `<div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;cursor:default;">${esc(t)}</div>`).join('') +
+          titles.map(t => `<div onclick="simulateButtonClick('${esc(t).replace(/'/g, "\\'")}')" style="text-align:center;padding:10px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:14px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:rgba(37,211,102,.2);">${esc(t)}</div>`).join('') +
           `</div>`;
       } catch {}
       cleanText = cleanText.replace(/\[interactive:buttons:[^\]]+\]\s*/, '');
@@ -1715,10 +1715,9 @@ function renderMessages() {
     if (listMatch) {
       try {
         const titles = JSON.parse(listMatch[1]);
-        buttonsHtml = `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">
-          <div style="text-align:center;padding:8px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:13px;font-weight:600;cursor:default;">☰ בחר אופציה (${titles.length})</div>
-          <div style="display:flex;flex-wrap:wrap;gap:3px;margin-top:4px;">${titles.map(t => `<span style="font-size:10px;background:rgba(37,211,102,0.1);color:#128C7E;padding:2px 6px;border-radius:4px;">${esc(t)}</span>`).join('')}</div>
-        </div>`;
+        buttonsHtml = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
+          titles.map(t => `<div onclick="simulateButtonClick('${esc(t).replace(/'/g, "\\'")}')" style="text-align:center;padding:10px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:14px;font-weight:600;cursor:pointer;">${esc(t)}</div>`).join('') +
+          `</div>`;
       } catch {}
       cleanText = cleanText.replace(/\[interactive:list:[^\]]+\]\s*/, '');
     }
@@ -1769,6 +1768,13 @@ function scrollToBottom() {
 }
 
 // ===== SEND MESSAGE =====
+function simulateButtonClick(text) {
+  if (!activePhone || !text) return;
+  const input = document.getElementById('chatInput');
+  input.value = text;
+  sendMessage();
+}
+
 async function sendMessage() {
   const input = document.getElementById('chatInput');
   const text = input.value.trim();
