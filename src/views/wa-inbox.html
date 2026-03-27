@@ -1671,10 +1671,8 @@ function renderMessages() {
     if (isOut) {
       if (idx === lastOutIdx && activeDeliveryStatus === 'read') {
         checks = '<span class="msg-check read">✓✓</span>';
-      } else if (idx === lastOutIdx && activeDeliveryStatus === 'delivered') {
-        checks = '<span class="msg-check">✓✓</span>';
       } else {
-        checks = '<span class="msg-check">✓</span>';
+        checks = '<span class="msg-check">✓✓</span>';
       }
     }
     const text = linkify(msg.body || msg.message || msg.text || msg.content || '');

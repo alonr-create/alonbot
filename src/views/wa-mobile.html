@@ -1712,16 +1712,16 @@ function renderMessages() {
       content += `<div class="msg-text">${displayBody}</div>`;
     }
 
-    // Check marks: ✓ sent, ✓✓ delivered, blue ✓✓ read (only last outbound msg gets live status)
+    // Check marks: ✓ sent, ✓✓ delivered, blue ✓✓ read
+    // When delivery receipts available from Meta: use real status on last msg
+    // Fallback: ✓✓ gray (delivered) for all outbound (Meta doesn't send receipts in dev mode)
     let checkHtml = '';
     if (isOut) {
       const isLast = i === currentMessages.length - 1 || !currentMessages.slice(i + 1).some(m => m.role === 'assistant');
       if (isLast && currentDeliveryStatus === 'read') {
         checkHtml = '<span class="msg-check read">✓✓</span>';
-      } else if (isLast && currentDeliveryStatus === 'delivered') {
-        checkHtml = '<span class="msg-check">✓✓</span>';
       } else {
-        checkHtml = '<span class="msg-check">✓</span>';
+        checkHtml = '<span class="msg-check">✓✓</span>';
       }
     }
     content += `<div class="msg-footer">
