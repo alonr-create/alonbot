@@ -2066,7 +2066,17 @@ app.get('/api/memory/all', externalAuth, (_req, res) => {
   }
 });
 
-app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
+// Accept both externalAuth (x-api-secret header) and dashAuth (token query param)
+function combinedAuth(req: any, res: any, next: any) {
+  // Try external auth first (x-api-secret header)
+  const secret = req.headers['x-api-secret'];
+  if (secret === config.localApiSecret) { next(); return; }
+  // Fall back to dashboard auth (token query param)
+  if (req.query.token === config.dashboardSecret) { next(); return; }
+  res.status(401).json({ success: false, error: 'Unauthorized' });
+}
+
+app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
   const { phone, message, leadName, leadContext, template, templateParams } = req.body;
   if (!phone || (!message && !template)) {
     res.status(400).json({ success: false, error: 'Missing phone or message/template' });
@@ -2122,11 +2132,17 @@ app.post('/api/send-whatsapp', externalAuth, async (req, res) => {
       { id: 'ext', channel: 'whatsapp', senderId: chatPhone, senderName: leadName || '', text: '', timestamp: Date.now(), raw: { from: chatId } },
       replyPayload
     );
-    // Log outbound WA message for flow tracking
+    // Log outbound WA message for flow tracking + 360Shmikley CRM visibility
     const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
+      // Also log to whatsapp-inbound channel so 360Shmikley CRM shows the message
+      db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-inbound', ?, 'assistant', ?, datetime('now'))`).run(chatPhone, logContent);
     } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }
+    // WebSocket broadcast so CRM updates in real-time
+    try {
+      wsBroadcast({ type: 'new_message', phone: chatPhone, name: 'Bot', text: logContent.slice(0, 200), role: 'assistant', timestamp: new Date().toISOString() });
+    } catch { /* non-critical */ }
     log.info({ phone, leadName, template: template || 'none' }, 'external WhatsApp sent');
     res.json({ success: true });
   } catch (e: any) {
