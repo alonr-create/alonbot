@@ -71,7 +71,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
         }
         if (value.statuses) {
           for (const s of value.statuses) {
-            log.info({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
+            log.debug({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
             try {
               // db already imported at top of file
               const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
@@ -99,8 +99,6 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
   // Webhook handler — receives forwarded messages from the webhook middleware
   function webhookHandler(req: any, res: any) {
     const body = req.body;
-    const allChanges = (body.entry || []).flatMap((e: any) => (e.changes || []).map((c: any) => ({ hasStatuses: !!c.value?.statuses, hasMessages: !!c.value?.messages, statusCount: c.value?.statuses?.length || 0 })));
-    log.info({ object: body.object, changes: JSON.stringify(allChanges) }, 'webhook POST received');
 
     // Direct Meta webhook format
     if (body.object === 'whatsapp_business_account') {

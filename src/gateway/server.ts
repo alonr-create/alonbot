@@ -923,7 +923,6 @@ app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
     const lastRead = receipts.find(r => r.read_at);
     const lastDelivered = receipts.find(r => r.delivered_at);
     const deliveryStatus = lastRead ? 'read' : lastDelivered ? 'delivered' : 'sent';
-    log.info({ phone, receiptsCount: receipts.length, deliveryStatus }, 'delivery status query');
     const lead = db.prepare('SELECT * FROM leads WHERE phone = ?').get(phone);
     res.json({ success: true, lead, messages, deliveryStatus });
   } catch (e: any) {
