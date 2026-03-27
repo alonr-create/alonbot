@@ -71,7 +71,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
         }
         if (value.statuses) {
           for (const s of value.statuses) {
-            log.debug({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
+            log.info({ recipient: s.recipient_id, status: s.status, wamid: s.id }, 'delivery receipt');
             try {
               // db already imported at top of file
               const now = new Date().toISOString().replace('T', ' ').slice(0, 19);
