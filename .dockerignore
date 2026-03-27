@@ -5,4 +5,5 @@ data
 .git
 .planning
 .claude
-*.md
+README.md
+CLAUDE.md
