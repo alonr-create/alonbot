@@ -232,6 +232,24 @@ db.exec(`
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
 
+  CREATE TABLE IF NOT EXISTS meetings (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    phone TEXT NOT NULL,
+    lead_name TEXT,
+    meeting_time TEXT NOT NULL,
+    duration_min INTEGER NOT NULL DEFAULT 15,
+    meeting_link TEXT,
+    calendar_event_id TEXT,
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK(status IN ('scheduled', 'completed', 'no_show', 'cancelled', 'rescheduled')),
+    no_show_handled INTEGER NOT NULL DEFAULT 0,
+    reschedule_count INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_meetings_phone ON meetings(phone);
+  CREATE INDEX IF NOT EXISTS idx_meetings_status ON meetings(status, meeting_time);
+
   CREATE TABLE IF NOT EXISTS chatbot_flows (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,

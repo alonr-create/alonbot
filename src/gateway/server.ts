@@ -234,6 +234,9 @@ import('./flow-engine.js').then(m => { m.seedExampleFlows(); m.migrateFlowsAddVo
 // Setup follow-up cron
 import('./followup-engine.js').then(m => m.setupFollowupCron()).catch((e) => { log.debug({ err: (e as Error).message }, 'followup cron setup failed'); });
 
+// Setup no-show detection engine
+import('./no-show-engine.js').then(m => m.startNoShowEngine()).catch((e) => { log.debug({ err: (e as Error).message }, 'no-show engine setup failed'); });
+
 // Public key endpoint (no auth — needed before subscribing)
 app.get('/api/push/vapid-key', (_req, res) => {
   res.json({ publicKey: VAPID_PUBLIC });
@@ -1589,6 +1592,38 @@ app.get('/api/wa-manager/followup/score/:phone', dashAuth, async (req, res) => {
     const { calculateLeadScore } = await import('./followup-engine.js');
     const result = calculateLeadScore(req.params.phone);
     res.json({ success: true, ...result });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// ===== Meetings & No-Show =====
+
+// Record a meeting
+app.post('/api/wa-manager/meetings', dashAuth, (req, res) => {
+  try {
+    const { phone, leadName, meetingTime, durationMin, meetingLink, calendarEventId } = req.body;
+    if (!phone || !meetingTime) { res.status(400).json({ success: false, error: 'Missing phone or meetingTime' }); return; }
+    import('./no-show-engine.js').then(({ recordMeeting }) => {
+      const id = recordMeeting({ phone, leadName, meetingTime, durationMin, meetingLink, calendarEventId });
+      res.json({ success: true, meetingId: id });
+    });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// List meetings
+app.get('/api/wa-manager/meetings', dashAuth, (_req, res) => {
+  try {
+    const meetings = db.prepare('SELECT * FROM meetings ORDER BY meeting_time DESC LIMIT 50').all();
+    res.json({ success: true, meetings });
+  } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
+});
+
+// Mark meeting completed
+app.post('/api/wa-manager/meetings/:phone/complete', dashAuth, (req, res) => {
+  try {
+    import('./no-show-engine.js').then(({ markMeetingCompleted }) => {
+      markMeetingCompleted(req.params.phone);
+      res.json({ success: true });
+    });
   } catch (e: any) { res.status(500).json({ success: false, error: e.message }); }
 });
 

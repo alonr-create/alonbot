@@ -164,6 +164,20 @@ const handlers: ToolHandler[] = [
             db.prepare('UPDATE leads SET was_booked = 1, lead_status = ?, updated_at = datetime(\'now\') WHERE phone = ?').run('דובר', phone);
             log.info({ phone, title: input.title }, 'lead marked as booked');
 
+            // 1.5. Record meeting for no-show detection
+            if (input.date && input.time) {
+              try {
+                const { recordMeeting } = await import('../../gateway/no-show-engine.js');
+                const meetingTime = `${input.date}T${input.time}:00+03:00`;
+                recordMeeting({
+                  phone,
+                  leadName: ctx.senderName || undefined,
+                  meetingTime,
+                  durationMin: input.duration_minutes || 15,
+                });
+              } catch { /* non-critical */ }
+            }
+
             // 2. Bump lead score to max
             db.prepare('UPDATE leads SET lead_score = MAX(COALESCE(lead_score, 0), 3) WHERE phone = ?').run(phone);
 

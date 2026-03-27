@@ -122,6 +122,12 @@ export function registerAdapter(adapter: ChannelAdapter) {
           return; // Don't let the bot respond — apology was already sent
         }
       } catch { /* non-critical — continue with normal flow */ }
+
+      // Cancel pending reschedule messages if lead replies
+      try {
+        const { cancelRescheduleMessages } = await import('./no-show-engine.js');
+        cancelRescheduleMessages(msg.senderId);
+      } catch { /* non-critical */ }
     }
 
     // Push notification + WebSocket broadcast for all inbound WhatsApp messages

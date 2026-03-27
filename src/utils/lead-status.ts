@@ -13,6 +13,7 @@ export const LEAD_STATUS = {
   NOT_RELEVANT: 'not_relevant',
   REFUSED: 'refused',
   BOOKED: 'booked',
+  NO_SHOW: 'no_show',
 } as const;
 
 /** Union type of all valid lead status strings */
