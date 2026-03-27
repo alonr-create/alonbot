@@ -75,6 +75,19 @@ mondayWebhookRouter.post('/monday', (req, res) => {
     return;
   }
 
+  // Webhook authentication — verify shared secret
+  const webhookSecret = process.env.MONDAY_WEBHOOK_SECRET;
+  if (webhookSecret) {
+    const authHeader = req.headers['authorization'];
+    if (authHeader !== webhookSecret) {
+      log.warn('unauthorized Monday.com webhook attempt');
+      res.status(401).json({ error: 'Unauthorized' });
+      return;
+    }
+  } else {
+    log.warn('MONDAY_WEBHOOK_SECRET not set — webhook is unprotected!');
+  }
+
   const event = payload.event;
   if (!event) {
     log.warn('Webhook received with no event and no challenge');
