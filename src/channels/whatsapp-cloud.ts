@@ -257,7 +257,16 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     } else if (type === 'video') {
       text = msg.video?.caption || '[סרטון]';
     } else if (type === 'sticker') {
-      text = '[סטיקר — כנראה לייק/אישור/תגובה רגשית. התייחס לכוונה, לא לתמונה]';
+      text = '[סטיקר]';
+      // Download sticker image for dashboard display
+      const stickerId = msg.sticker?.id;
+      if (stickerId) {
+        const buffer = await downloadCloudMedia(stickerId);
+        if (buffer) {
+          image = buffer.toString('base64');
+          imageMediaType = 'image/webp';
+        }
+      }
     } else if (type === 'location') {
       text = `[מיקום: ${msg.location?.latitude}, ${msg.location?.longitude}]`;
     } else if (type === 'contacts') {
@@ -287,7 +296,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       try {
         const mediaDir = join(config.dataDir, 'media');
         if (!existsSync(mediaDir)) mkdirSync(mediaDir, { recursive: true });
-        const ext = image ? (imageMediaType === 'image/png' ? '.png' : '.jpg') : (documentName?.split('.').pop() || 'bin');
+        const ext = image ? (imageMediaType === 'image/png' ? '.png' : imageMediaType === 'image/webp' ? '.webp' : '.jpg') : (documentName?.split('.').pop() || 'bin');
         const filename = `${senderId}_${Date.now()}.${ext.replace(/^\./, '')}`;
         const filepath = join(mediaDir, filename);
         writeFileSync(filepath, Buffer.from((image || document)!, 'base64'));
