@@ -1166,47 +1166,46 @@ function getBizLabel(source) {
 }
 
 // ===== FORMAT TIME =====
-// DB stores datetime('now') as UTC without timezone — parse as UTC
-function parseUTC(ts) {
+// DB stores Israel-local time via nowIsrael() — parse as local (no 'Z' suffix)
+function parseTS(ts) {
   if (!ts) return null;
   const s = String(ts).trim();
+  // Already has timezone info — parse as-is
   if (s.endsWith('Z') || s.includes('+') || (s.includes('T') && s.match(/[+-]\d{2}:/))) return new Date(s);
-  return new Date(s.replace(' ', 'T') + 'Z');
+  // Local Israel time from nowIsrael() — parse without 'Z' so browser treats as local
+  return new Date(s.replace(' ', 'T'));
 }
-const TZ = {timeZone:'Asia/Jerusalem'};
 function formatTime(ts) {
   if (!ts) return '';
-  const d = parseUTC(ts);
+  const d = parseTS(ts);
   if (!d || isNaN(d)) return '';
   const now = new Date();
   const diffMs = now - d;
   const diffDays = Math.floor(diffMs / 86400000);
-  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit', ...TZ});
+  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
   if (diffDays === 0) return timeStr;
   if (diffDays === 1) return 'אתמול';
-  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short', ...TZ});
-  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric', ...TZ});
+  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short'});
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric'});
 }
 function formatFullTime(ts) {
   if (!ts) return '';
-  const d = parseUTC(ts);
+  const d = parseTS(ts);
   if (!d || isNaN(d)) return '';
-  return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit', ...TZ});
+  return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
 }
 function formatDate(ts) {
   if (!ts) return '';
-  const d = parseUTC(ts);
+  const d = parseTS(ts);
   if (!d || isNaN(d)) return '';
   const now = new Date();
-  // Compare dates in Israel timezone without double-conversion
-  const opts = {timeZone:'Asia/Jerusalem', year:'numeric', month:'2-digit', day:'2-digit'};
-  const dStr = d.toLocaleDateString('en-CA', opts);   // YYYY-MM-DD
-  const nowStr = now.toLocaleDateString('en-CA', opts);
+  const dStr = d.toLocaleDateString('en-CA');   // YYYY-MM-DD
+  const nowStr = now.toLocaleDateString('en-CA');
   if (dStr === nowStr) return 'היום';
   const yesterday = new Date(now.getTime() - 86400000);
-  const yStr = yesterday.toLocaleDateString('en-CA', opts);
+  const yStr = yesterday.toLocaleDateString('en-CA');
   if (dStr === yStr) return 'אתמול';
-  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric', ...TZ});
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
 }
 
 // ===== LOAD CONTACTS =====
