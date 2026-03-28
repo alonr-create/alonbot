@@ -23,8 +23,8 @@ export async function executeFlow(flowId: number, phone: string) {
   const steps: FlowStep[] = JSON.parse(flow.steps);
   if (!steps.length) return;
 
-  // Check if already running this flow for this phone
-  const existing = db.prepare('SELECT * FROM flow_runs WHERE flow_id = ? AND phone = ? AND status = \'active\'').get(flowId, phone) as any;
+  // Check if already running OR already completed this flow for this phone (prevent duplicates)
+  const existing = db.prepare('SELECT * FROM flow_runs WHERE flow_id = ? AND phone = ?').get(flowId, phone) as any;
   if (existing) return;
 
   // Create flow run

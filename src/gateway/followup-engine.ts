@@ -228,18 +228,24 @@ export async function autoTagLead(phone: string): Promise<'not_interested' | 'in
   const text = lastUserMsg.content.toLowerCase();
 
   // Expanded negative keywords — Hebrew opt-out phrases
+  // Use exact phrases to avoid false positives (e.g. "הסרת שיער" is NOT opt-out)
   const negativeWords = [
     'לא מעוניין', 'לא מעוניינת', 'לא רלוונטי', 'לא רלוונטית',
-    'הסר', 'הסירו', 'תפסיק', 'תפסיקו', 'הורד אותי', 'הורידו אותי',
+    'הסירו אותי', 'הסר אותי', 'תפסיק', 'תפסיקו', 'הורד אותי', 'הורידו אותי',
     'spam', 'ספאם', 'לא צריך', 'לא צריכה', 'עזוב', 'עזבו',
     'אל תשלח', 'אל תשלחו', 'לא לשלוח', 'חסום', 'תחסום',
     'מפריע', 'מפריעה', 'תמחק', 'תמחקו', 'מחק אותי',
     'לא תודה', 'לא תודהה', 'לא רוצה', 'לא מתעניין', 'לא מתעניינת',
     'תוריד אותי', 'תסיר אותי', 'בלי ספאם', 'חבל על הזמן',
-    'stop', 'unsubscribe', 'remove',
+    'stop', 'unsubscribe', 'remove me',
   ];
 
-  if (negativeWords.some(w => text.includes(w))) {
+  // Only match if the negative phrase is the MAIN intent (short message or starts with it)
+  // Avoid false positives like "הסרת שיער" or "remove hair"
+  const isShortMessage = text.length < 50;
+  const matched = negativeWords.some(w => text.includes(w));
+
+  if (matched && (isShortMessage || negativeWords.some(w => text.startsWith(w)))) {
     // Check if already handled (avoid double apology)
     const alreadyTagged = db.prepare("SELECT 1 FROM lead_tags WHERE phone = ? AND tag = 'not_interested'").get(phone);
     if (alreadyTagged) return null;
