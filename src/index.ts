@@ -4,6 +4,7 @@ import { createTelegramAdapter } from './channels/telegram.js';
 import { createWhatsAppAdapter } from './channels/whatsapp.js';
 import { createWhatsAppCloudAdapter } from './channels/whatsapp-cloud.js';
 import { startAllCronJobs } from './cron/scheduler.js';
+import { runSalesManagerCheck } from './cron/sales-manager.js';
 import { config } from './utils/config.js';
 import { setupGitAuth } from './utils/git-auth.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
@@ -151,6 +152,14 @@ cron.schedule('0 21 * * *', async () => {
   } catch (e: any) {
     log.error({ err: e.message }, 'cost alert failed');
   }
+}, { timezone: 'Asia/Jerusalem' });
+
+// Sales Manager AI — analyze bot conversations every 2 hours (cloud only, 08:00-22:00)
+cron.schedule('7 8,10,12,14,16,18,20,22 * * *', async () => {
+  if (config.mode !== 'cloud') return;
+  runSalesManagerCheck().catch(e =>
+    log.error({ err: e.message }, 'sales manager cron failed')
+  );
 }, { timezone: 'Asia/Jerusalem' });
 
 // Scheduled messages check — every minute (cloud only)
