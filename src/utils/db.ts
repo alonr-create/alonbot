@@ -527,8 +527,8 @@ try {
 // Normalize legacy source values
 try {
   db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();
-  // Fix 9 dprisha leads incorrectly migrated to campaign (2026-03-29)
-  const dprishaFix = ['972507662120','972545644486','972526531100','972548623303','972522392119','972505958788','972523483254','972542253168','972506277348'];
+  // Fix 21 dprisha leads incorrectly tagged as campaign (2026-03-29)
+  const dprishaFix = ['972507662120','972545644486','972526531100','972548623303','972522392119','972505958788','972523483254','972542253168','972506277348','972525645930','972547792732','972524421507','972506891732','972542326840','972505290506','972585805500','972502006456','972546777220','972509400165','972504877889','972662840309'];
   for (const ph of dprishaFix) db.prepare("UPDATE leads SET source = 'voice_agent' WHERE phone = ? AND source = 'campaign'").run(ph);
 } catch { /* ok */ }
 
