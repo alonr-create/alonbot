@@ -14,6 +14,25 @@ import { LEAD_STATUS, PIPELINE_STAGES, TERMINAL_STATUSES } from '../utils/lead-s
 
 const log = createLogger('server');
 
+/** Hebrew transliteration for slug generation (matches lead-previews/generate.py) */
+const HEBREW_TRANSLIT: Record<string, string> = {
+  'א': 'a', 'ב': 'b', 'ג': 'g', 'ד': 'd', 'ה': 'h', 'ו': 'v',
+  'ז': 'z', 'ח': 'ch', 'ט': 't', 'י': 'y', 'כ': 'k', 'ך': 'k',
+  'ל': 'l', 'מ': 'm', 'ם': 'm', 'נ': 'n', 'ן': 'n', 'ס': 's',
+  'ע': 'a', 'פ': 'p', 'ף': 'p', 'צ': 'ts', 'ץ': 'ts', 'ק': 'k',
+  'ר': 'r', 'ש': 'sh', 'ת': 't', '״': '', '׳': '',
+};
+function slugifyForActivation(text: string): string {
+  text = text.trim().split(/[|•]/)[0].trim();
+  if (text.length > 40) text = text.slice(0, 40).replace(/\s+\S*$/, '');
+  let result = '';
+  for (const ch of text) result += HEBREW_TRANSLIT[ch] ?? ch;
+  result = result.replace(/[\s/\\:;,!?@#$%^&*()+=[\]{}|<>'"•·]+/g, '-');
+  result = result.replace(/[^a-zA-Z0-9-]/g, '');
+  result = result.replace(/^-+|-+$/g, '').replace(/-+/g, '-');
+  return result || 'business';
+}
+
 /** Return current Israel time as ISO string for SQLite (handles DST automatically) */
 function nowIsrael(): string {
   return new Date().toLocaleString('sv-SE', { timeZone: 'Asia/Jerusalem' }).replace(' ', 'T');
@@ -2158,7 +2177,7 @@ function combinedAuth(req: any, res: any, next: any) {
 }
 
 app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
-  const { phone, message, leadName, leadContext, template, templateParams } = req.body;
+  const { phone, message, leadName, leadContext, template, templateParams, source } = req.body;
   if (!phone || (!message && !template)) {
     res.status(400).json({ success: false, error: 'Missing phone or message/template' });
     return;
@@ -2182,7 +2201,7 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
         const ctx = leadContext || {};
         db.prepare(`
           INSERT INTO leads (phone, name, source, monday_item_id, last_call_summary, last_call_sentiment, last_call_duration_sec, was_booked, call_mode, lead_status, updated_at)
-          VALUES (?, ?, 'voice_agent', ?, ?, ?, ?, ?, ?, ?, ?)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(phone) DO UPDATE SET
             name = COALESCE(excluded.name, leads.name),
             last_call_summary = COALESCE(excluded.last_call_summary, leads.last_call_summary),
@@ -2194,7 +2213,7 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
             monday_item_id = COALESCE(excluded.monday_item_id, leads.monday_item_id),
             updated_at = ?
         `).run(
-          chatPhone, leadName || null, ctx.mondayItemId || null,
+          chatPhone, leadName || null, source || 'voice_agent', ctx.mondayItemId || null,
           ctx.callSummary || null, ctx.sentiment || null,
           ctx.callDurationSec || null, ctx.wasBooked ? 1 : 0,
           ctx.callMode || null, ctx.leadStatus || null,
@@ -2507,6 +2526,91 @@ app.post('/api/grow-webhook', (req, res) => {
               );
             }
           } catch (e: any) { log.warn({ err: e.message }, 'payment WA notification failed'); }
+        })();
+
+        // Move Monday.com lead to "סגירות" group + update payment status
+        (async () => {
+          try {
+            if (!config.mondayApiKey) return;
+            const lead = db.prepare('SELECT monday_item_id FROM leads WHERE phone = ?').get(normalizedPhone) as any;
+            if (!lead?.monday_item_id) {
+              log.debug({ phone: normalizedPhone }, 'No Monday item to move to סגירות');
+              return;
+            }
+            const mutation = `mutation {
+              move_item_to_group(item_id: ${lead.monday_item_id}, group_id: "group_mm1smn4q") { id }
+            }`;
+            await fetch('https://api.monday.com/v2', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+              body: JSON.stringify({ query: mutation }),
+            });
+            // Update payment status column to "Done"
+            const statusMutation = `mutation {
+              change_simple_column_value(
+                item_id: ${lead.monday_item_id},
+                board_id: 5092777389,
+                column_id: "color_mm1sn2c9",
+                value: "${JSON.stringify({ index: 1 }).replace(/"/g, '\\"')}"
+              ) { id }
+            }`;
+            await fetch('https://api.monday.com/v2', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+              body: JSON.stringify({ query: statusMutation }),
+            });
+            log.info({ phone: normalizedPhone, itemId: lead.monday_item_id }, 'Lead moved to סגירות + payment status updated');
+          } catch (e: any) { log.warn({ err: e.message }, 'Monday.com move to סגירות failed'); }
+        })();
+
+        // Activate site — remove popup, add "built by" footer via GitHub API
+        (async () => {
+          try {
+            const ghToken = process.env.GITHUB_TOKEN;
+            if (!ghToken) { log.debug('No GITHUB_TOKEN — skipping site activation'); return; }
+            // Find slug from lead data
+            const leadRow = db.prepare('SELECT name FROM leads WHERE phone = ?').get(normalizedPhone) as any;
+            if (!leadRow?.name) return;
+            const slug = slugifyForActivation(leadRow.name);
+            const repo = 'alonr-create/lead-previews';
+            const filePath = `${slug}/index.html`;
+
+            // GET current file
+            const getRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+              headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json' },
+            });
+            if (!getRes.ok) { log.warn({ slug, status: getRes.status }, 'GitHub GET failed for site activation'); return; }
+            const fileData = await getRes.json() as any;
+            let html = Buffer.from(fileData.content, 'base64').toString('utf-8');
+
+            // 1. Remove sales popup
+            html = html.replace(/<!-- Sales Popup -->[\s\S]*?<!-- End Sales Popup -->/g, '');
+            // 2. Remove banner CTA
+            html = html.replace(/<a[^>]*class="[^"]*lp-banner-cta[^"]*"[^>]*>[\s\S]*?<\/a>/g, '');
+            // 3. Remove existing built-by footer (prevent duplicates)
+            html = html.replace(/<!-- Built By Footer -->[\s\S]*?<!-- End Built By Footer -->/g, '');
+            // 4. Add "built by" footer
+            const builtBy = `<!-- Built By Footer -->\n<style>\n.built-by{text-align:center;padding:12px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;font-family:'Heebo',sans-serif;direction:rtl}\n.built-by a{color:#64748b;text-decoration:none;font-weight:600}\n.built-by a:hover{color:#3b82f6}\n</style>\n<div class="built-by">נבנה ע"י <a href="https://alondev.site" target="_blank">Alon.dev</a></div>\n<!-- End Built By Footer -->`;
+            if (html.includes('</body>')) {
+              html = html.replace('</body>', builtBy + '\n</body>');
+            }
+
+            // PUT updated file
+            const putRes = await fetch(`https://api.github.com/repos/${repo}/contents/${filePath}`, {
+              method: 'PUT',
+              headers: { Authorization: `token ${ghToken}`, Accept: 'application/vnd.github.v3+json', 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: `activate: ${slug} (paid)`,
+                content: Buffer.from(html).toString('base64'),
+                sha: fileData.sha,
+              }),
+            });
+            if (putRes.ok) {
+              log.info({ slug }, 'Site activated via GitHub API → Vercel will redeploy');
+            } else {
+              log.warn({ slug, status: putRes.status }, 'GitHub PUT failed for site activation');
+            }
+          } catch (e: any) { log.warn({ err: e.message }, 'site activation failed'); }
         })();
       }
     } else {

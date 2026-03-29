@@ -527,6 +527,8 @@ try {
 // Normalize legacy source values
 try {
   db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();
+  // Fix shaagat_haari campaign leads that were registered as voice_agent instead of campaign
+  db.prepare("UPDATE leads SET source = 'campaign' WHERE source = 'voice_agent' AND name IS NOT NULL AND updated_at >= '2026-03-29'").run();
 } catch { /* ok */ }
 
 // Migration: lead scoring + referral
