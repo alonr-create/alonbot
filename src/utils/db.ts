@@ -527,8 +527,9 @@ try {
 // Normalize legacy source values
 try {
   db.prepare("UPDATE leads SET source = 'alon_dev' WHERE source = 'alon_dev_whatsapp'").run();
-  // Fix shaagat_haari campaign leads that were registered as voice_agent instead of campaign
-  db.prepare("UPDATE leads SET source = 'campaign' WHERE source = 'voice_agent' AND name IS NOT NULL AND updated_at >= '2026-03-29'").run();
+  // Fix 9 dprisha leads incorrectly migrated to campaign (2026-03-29)
+  const dprishaFix = ['972507662120','972545644486','972526531100','972548623303','972522392119','972505958788','972523483254','972542253168','972506277348'];
+  for (const ph of dprishaFix) db.prepare("UPDATE leads SET source = 'voice_agent' WHERE phone = ? AND source = 'campaign'").run(ph);
 } catch { /* ok */ }
 
 // Migration: lead scoring + referral
