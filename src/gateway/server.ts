@@ -2400,8 +2400,8 @@ app.post('/api/create-payment', async (req, res) => {
     form.append('pageField[fullName]', name);
     form.append('pageField[phone]', phone.replace(/^\+/, ''));
     if (email) form.append('pageField[email]', email);
-    form.append('successUrl', 'https://checkout.alondev.site/?success=1');
-    form.append('cancelUrl', 'https://checkout.alondev.site/?cancelled=1');
+    form.append('successUrl', 'https://checkout-alondev-dh6yb4f2r-alonr-7280s-projects.vercel.app/?status=success');
+    form.append('cancelUrl', 'https://checkout-alondev-dh6yb4f2r-alonr-7280s-projects.vercel.app/?status=cancelled');
     form.append('notifyUrl', 'https://alonbot.onrender.com/api/grow-webhook');
     form.append('cField1', plan);
     form.append('cField2', discount ? 'discount' : 'regular');
