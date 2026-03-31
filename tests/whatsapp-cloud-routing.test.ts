@@ -1,10 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { parseWebhookPayload, sendCloudMessage } from '../src/whatsapp/cloud-api.js';
+import { parseWebhookPayload, sendCloudMessage, createCloudAdapter } from '../src/whatsapp/cloud-api.js';
 import express from 'express';
 import request from 'supertest';
 
-// Mock adapter + DB at module level for send-whatsapp route tests
+// Module-level mocks (hoisted by Vitest)
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockAddMessageToBatch = vi.fn();
+const mockHandleConversation = vi.fn().mockResolvedValue(undefined);
+const mockCancelFollowUps = vi.fn().mockReturnValue(0);
+const mockIsAdminPhone = vi.fn().mockReturnValue(false);
+
 vi.mock('../src/whatsapp/connection.js', () => ({
   getAdapter: () => ({ sendMessage: mockSendMessage }),
 }));
@@ -12,6 +17,20 @@ vi.mock('../src/db/index.js', () => ({
   getDb: () => ({
     prepare: () => ({ get: () => undefined, run: () => undefined }),
   }),
+}));
+vi.mock('../src/whatsapp/message-batcher.js', () => ({
+  addMessageToBatch: (...args: unknown[]) => mockAddMessageToBatch(...args),
+}));
+vi.mock('../src/ai/conversation.js', () => ({
+  handleConversation: (...args: unknown[]) => mockHandleConversation(...args),
+}));
+vi.mock('../src/follow-up/follow-up-db.js', () => ({
+  cancelFollowUps: (...args: unknown[]) => mockCancelFollowUps(...args),
+  scheduleFollowUp: vi.fn(),
+}));
+vi.mock('../src/db/tenant-config.js', () => ({
+  isAdminPhone: (...args: unknown[]) => mockIsAdminPhone(...args),
+  getConfig: vi.fn().mockReturnValue(''),
 }));
 
 import { sendWhatsappRouter } from '../src/http/routes/send-whatsapp.js';
@@ -480,5 +499,129 @@ describe('/api/send-whatsapp phone_number_id routing', () => {
     expect(res.status).toBe(200);
     expect(res.body.via).toBeUndefined();
     expect(mockSendMessage).toHaveBeenCalledOnce();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// createCloudAdapter tests (Task 1)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('createCloudAdapter', () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ messages: [{ id: 'wamid.ADAPTER1' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    process.env.WA_CLOUD_TOKEN = 'test-adapter-token';
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.WA_CLOUD_TOKEN;
+  });
+
+  it('sendMessage calls Graph API with the provided phoneNumberId in URL', async () => {
+    const adapter = createCloudAdapter('PHONE_ID_ADAPTER');
+    await adapter.sendMessage('972541234567', { text: 'Hello from adapter' });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [url] = fetchMock.mock.calls[0] as [string, ...unknown[]];
+    expect(url).toContain('/PHONE_ID_ADAPTER/messages');
+  });
+
+  it('sendMessage strips @suffix from jid before sending', async () => {
+    const adapter = createCloudAdapter('PHONE_ID_ADAPTER');
+    await adapter.sendMessage('972541234567@s.whatsapp.net', { text: 'Hello' });
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(options.body as string);
+    expect(body.to).toBe('972541234567');
+  });
+
+  it('sendPresenceUpdate is a no-op (does not call fetch)', async () => {
+    const adapter = createCloudAdapter('PHONE_ID_ADAPTER');
+    await adapter.sendPresenceUpdate('composing', '972541234567');
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sendAudio is a no-op (does not call fetch)', async () => {
+    const adapter = createCloudAdapter('PHONE_ID_ADAPTER');
+    await adapter.sendAudio('972541234567', Buffer.from('audio'));
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Cloud webhook → conversation routing tests (Task 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('Cloud webhook → conversation routing', () => {
+  let app: ReturnType<typeof express>;
+
+  beforeEach(async () => {
+    mockAddMessageToBatch.mockClear();
+    mockCancelFollowUps.mockClear();
+    mockIsAdminPhone.mockReturnValue(false);
+
+    process.env.WA_CLOUD_VERIFY_TOKEN = 'alonbot-verify-2026';
+    const { cloudWebhookRouter } = await import('../src/http/routes/whatsapp-cloud-webhook.js');
+    app = express();
+    app.use(express.json());
+    app.use('/', cloudWebhookRouter);
+  });
+
+  afterEach(() => {
+    delete process.env.WA_CLOUD_VERIFY_TOKEN;
+    vi.resetModules();
+  });
+
+  it('routes incoming text message to addMessageToBatch', async () => {
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockAddMessageToBatch).toHaveBeenCalledOnce();
+    const [phone, text] = mockAddMessageToBatch.mock.calls[0] as [string, string, unknown];
+    expect(phone).toBe('972541234567');
+    expect(text).toBe('Hello, I want to book a meeting');
+  });
+
+  it('cancels follow-ups when message arrives', async () => {
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockCancelFollowUps).toHaveBeenCalledWith('972541234567');
+  });
+
+  it('skips admin phone — does not route to addMessageToBatch', async () => {
+    mockIsAdminPhone.mockReturnValue(true);
+
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockAddMessageToBatch).not.toHaveBeenCalled();
+  });
+
+  it('still returns 200 even when isAdminPhone is true', async () => {
+    mockIsAdminPhone.mockReturnValue(true);
+
+    const res = await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('does not call addMessageToBatch for status-only webhooks', async () => {
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(STATUS_ONLY_WEBHOOK);
+
+    expect(mockAddMessageToBatch).not.toHaveBeenCalled();
   });
 });
