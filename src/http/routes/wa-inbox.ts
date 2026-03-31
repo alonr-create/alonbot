@@ -69,26 +69,30 @@ waInboxRouter.get('/wa-inbox/api/conversations', (req: Request, res: Response): 
 
     // Admin tab (tenant_id=-1): show admin phone conversations from messages table directly
     if (tenantId === -1) {
-      const adminPhone = process.env.ALON_PHONE || '';
+      const adminPhone = process.env.ALON_PHONE || process.env.ALLOWED_WHATSAPP || '';
       if (!adminPhone) {
         res.json([]);
         return;
       }
-      const msgCount = db.prepare('SELECT COUNT(*) as cnt FROM messages WHERE phone = ?').get(adminPhone) as any;
-      const lastMsg = db.prepare('SELECT content, created_at FROM messages WHERE phone = ? ORDER BY id DESC LIMIT 1').get(adminPhone) as any;
-      if (msgCount?.cnt > 0) {
-        res.json([{
-          phone: adminPhone,
-          name: 'אלון (בוס)',
-          status: 'admin',
-          interest: null,
-          updated_at: lastMsg?.created_at,
-          last_msg: lastMsg?.content,
-          last_msg_at: lastMsg?.created_at,
-        }]);
-      } else {
-        res.json([]);
+      // Find all unique phones that admin has messaged with (distinct phones in messages table for admin)
+      const adminPhones = [adminPhone];
+      const rows = [];
+      for (const phone of adminPhones) {
+        const msgCount = db.prepare('SELECT COUNT(*) as cnt FROM messages WHERE phone = ?').get(phone) as any;
+        const lastMsg = db.prepare('SELECT content, created_at FROM messages WHERE phone = ? ORDER BY id DESC LIMIT 1').get(phone) as any;
+        if (msgCount?.cnt > 0) {
+          rows.push({
+            phone,
+            name: 'אלון (בוס)',
+            status: 'admin',
+            interest: null,
+            updated_at: lastMsg?.created_at,
+            last_msg: lastMsg?.content,
+            last_msg_at: lastMsg?.created_at,
+          });
+        }
       }
+      res.json(rows);
       return;
     }
 
