@@ -146,7 +146,8 @@ waManagerRouter.get('/wa-manager', (req: Request, res: Response): void => {
     /* ── Message panel (left for RTL) ── */
     .msg-panel {
       flex: 1;
-      background: #e5ddd5;
+      background-color: #e5ddd5;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cdefs%3E%3Cstyle%3E.d%7Bfill:%23c9c2b7;opacity:0.15%7D%3C/style%3E%3C/defs%3E%3Ccircle class='d' cx='20' cy='20' r='3'/%3E%3Ccircle class='d' cx='80' cy='50' r='2.5'/%3E%3Ccircle class='d' cx='150' cy='30' r='2'/%3E%3Ccircle class='d' cx='40' cy='90' r='3'/%3E%3Ccircle class='d' cx='120' cy='80' r='2.5'/%3E%3Ccircle class='d' cx='180' cy='100' r='2'/%3E%3Ccircle class='d' cx='60' cy='140' r='3'/%3E%3Ccircle class='d' cx='100' cy='120' r='2'/%3E%3Ccircle class='d' cx='160' cy='160' r='2.5'/%3E%3Ccircle class='d' cx='30' cy='170' r='2'/%3E%3Ccircle class='d' cx='140' cy='190' r='3'/%3E%3Cpath class='d' d='M10 60l6-4-6-4zM170 70l-5 3 5 3zM90 170l4 6 4-6z'/%3E%3Cpath class='d' d='M50 45c3 0 5 2 5 4s-2 4-5 4-5-2-5-4 2-4 5-4zM130 130c3 0 5 2 5 4s-2 4-5 4-5-2-5-4 2-4 5-4z'/%3E%3Cpath class='d' d='M95 15h3v8h-3zM25 125h3v8h-3zM175 55h3v8h-3z'/%3E%3Cpath class='d' d='M70 95a5 5 0 010 10 5 5 0 010-10zm0 2a3 3 0 100 6 3 3 0 000-6z'/%3E%3Cpath class='d' d='M185 145l-4-2v4zM15 105l4 2v-4z'/%3E%3C/svg%3E");
       display: flex;
       flex-direction: column;
       overflow: hidden;
