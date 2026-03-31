@@ -96,7 +96,7 @@ Plans:
 **Goal**: Route each incoming Cloud API message through the correct tenant context so multiple businesses (דקל, Alon.dev) each get their own admin phone, service catalog, and personality
 **Depends on**: Phase 9
 **Requirements**: []
-**Plans:** 1/1 plans complete
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 10-02-PLAN.md — Wire tenant lookup into Cloud webhook, thread TenantRow through handleConversation and buildSystemPrompt
@@ -113,4 +113,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 9 -> 10
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
 | 4. Follow-up | 2/2 | Complete    | 2026-03-09 |
 | 9. WhatsApp Cloud API Infrastructure | 2/2 | Complete    | 2026-03-31 |
-| 10. AlonBot Multi-Tenant CRM Separation | 1/1 | Complete    | 2026-03-31 |
+| 10. AlonBot Multi-Tenant CRM Separation | 2/2 | Complete   | 2026-03-31 |
