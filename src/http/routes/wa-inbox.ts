@@ -849,3 +849,49 @@ waInboxRouter.get('/wa-inbox/api/messages', (req: Request, res: Response): void 
     res.status(500).json({ error: 'Internal server error' });
   }
 });
+
+// ── POST /wa-inbox/api/bulk-import — import leads + messages from another instance ──
+
+waInboxRouter.post('/wa-inbox/api/bulk-import', (req: Request, res: Response): void => {
+  const { leads, messages } = req.body;
+  if (!leads && !messages) {
+    res.status(400).json({ error: 'leads or messages required' });
+    return;
+  }
+
+  try {
+    const db = getDb();
+    let importedLeads = 0;
+    let importedMessages = 0;
+
+    if (leads?.length) {
+      const stmt = db.prepare(`
+        INSERT OR IGNORE INTO leads (phone, name, source, status, interest, tenant_id, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+      for (const l of leads) {
+        const result = stmt.run(l.phone, l.name, l.source, l.status, l.interest || '', l.tenant_id, l.created_at, l.updated_at);
+        if (result.changes > 0) importedLeads++;
+      }
+    }
+
+    if (messages?.length) {
+      const stmt = db.prepare(`
+        INSERT INTO messages (phone, direction, content, tenant_id, created_at)
+        VALUES (?, ?, ?, ?, ?)
+      `);
+      const checkStmt = db.prepare('SELECT 1 FROM messages WHERE phone=? AND content=? AND created_at=?');
+      for (const m of messages) {
+        if (checkStmt.get(m.phone, m.content, m.created_at)) continue;
+        stmt.run(m.phone, m.direction, m.content, m.tenant_id, m.created_at);
+        importedMessages++;
+      }
+    }
+
+    log.info({ importedLeads, importedMessages }, 'bulk-import complete');
+    res.json({ success: true, importedLeads, importedMessages });
+  } catch (err: any) {
+    log.error({ err }, 'POST /bulk-import: error');
+    res.status(500).json({ error: err.message });
+  }
+});
