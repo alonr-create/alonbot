@@ -3,6 +3,7 @@ import { getDb } from '../db/index.js';
 import { generateResponse, generateWithSearch } from './claude-client.js';
 import { buildSystemPrompt } from './system-prompt.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
+import type { TenantRow } from '../db/tenants.js';
 import {
   updateMondayStatus,
   addItemUpdate,
@@ -65,6 +66,7 @@ export async function handleConversation(
   phone: string,
   batchedMessages: string[],
   sock: BotAdapter,
+  tenant?: TenantRow,
 ): Promise<void> {
   const db = getDb();
 
@@ -80,7 +82,7 @@ export async function handleConversation(
   const batchedText = batchedMessages.join('\n');
 
   // Check escalation BEFORE calling Claude (skip for admin — never escalate the boss)
-  const escalationCheck = isAdminPhone(phone) ? { escalate: false, reason: null } : shouldEscalate(phone, batchedText);
+  const escalationCheck = isAdminPhone(phone, tenant) ? { escalate: false, reason: null } : shouldEscalate(phone, batchedText);
   if (escalationCheck.escalate) {
     const historyRows = db
       .prepare(
@@ -128,7 +130,7 @@ export async function handleConversation(
   }
 
   // Build system prompt (async — fetches calendar slots + boss context)
-  const systemPrompt = await buildSystemPrompt(leadName, leadInterest, phone);
+  const systemPrompt = await buildSystemPrompt(leadName, leadInterest, phone, undefined, tenant);
 
   // Fetch last 20 messages for context
   const historyRows = db
@@ -149,7 +151,7 @@ export async function handleConversation(
 
   // Call Claude — boss gets web search, leads get regular response
   let response: string;
-  if (isAdminPhone(phone)) {
+  if (isAdminPhone(phone, tenant)) {
     const result = await generateWithSearch(messages, systemPrompt);
     response = result.text;
     if (result.searchUsed) {
@@ -232,7 +234,7 @@ export async function handleConversation(
   }
 
   // ── Parse [ESCALATE] marker (never escalate admin) ──
-  if (response.includes('[ESCALATE]') && !isAdminPhone(phone)) {
+  if (response.includes('[ESCALATE]') && !isAdminPhone(phone, tenant)) {
     const cleanResponse = response.replace('[ESCALATE]', '').trim();
     await sendWithTyping(sock, jid, cleanResponse);
 
@@ -250,7 +252,7 @@ export async function handleConversation(
   }
 
   // ── Process boss-mode markers (only for admin) ──
-  const isBoss = isAdminPhone(phone);
+  const isBoss = isAdminPhone(phone, tenant);
   let finalResponse = response;
 
   if (isBoss) {
@@ -337,7 +339,7 @@ export async function handleConversation(
   }
 
   // Schedule follow-up (skip for admin)
-  if (!isAdminPhone(phone)) {
+  if (!isAdminPhone(phone, tenant)) {
     cancelFollowUps(phone);
     const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
     scheduleFollowUp(phone, 1, followUpTime);
