@@ -23,7 +23,8 @@ COPY src/ src/
 RUN npx tsc
 RUN npm prune --production
 
-# Create data directory (Railway volume mount)
+# Use persistent disk mount for DB
+ENV DATA_DIR=/data
 RUN mkdir -p /data
 
 COPY entrypoint.sh ./
