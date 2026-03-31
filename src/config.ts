@@ -25,4 +25,10 @@ export const config = {
   elevenLabsVoiceId: process.env.ELEVENLABS_VOICE_ID || 'jUBxo582xuRbgYNI6JJ2',
   voiceAgentUrl: process.env.VOICE_AGENT_URL || '',
   voiceAgentSecret: process.env.VOICE_AGENT_SECRET || '',
+  waCloudToken: process.env.WA_CLOUD_TOKEN || '',
+  waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
+  waCloudPhoneIdAlondev: process.env.WA_PHONE_ID_ALONDEV || '',
+  waCloudVerifyToken: process.env.WA_CLOUD_VERIFY_TOKEN || 'alonbot-verify-2026',
+  waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
+  waCloudWabaIdAlondev: process.env.WA_CLOUD_WABA_ID_ALONDEV || '',
 } as const;
