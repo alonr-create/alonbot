@@ -37,6 +37,12 @@ describe('conversation orchestrator', () => {
 
     vi.doMock('../../monday/api.js', () => ({
       updateMondayStatus: mockUpdateMondayStatus,
+      addItemUpdate: vi.fn().mockResolvedValue(undefined),
+      createBoardItem: vi.fn().mockResolvedValue(undefined),
+      syncChatToMonday: vi.fn().mockResolvedValue(undefined),
+      updateItemName: vi.fn().mockResolvedValue(undefined),
+      getAllBoardIds: vi.fn().mockReturnValue([]),
+      getAllBoardsStats: vi.fn().mockResolvedValue({}),
     }));
 
     vi.doMock('../../calendar/business-hours.js', () => ({
