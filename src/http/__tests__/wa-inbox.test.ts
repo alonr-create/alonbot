@@ -254,7 +254,7 @@ describe('wa-inbox API', () => {
     expect(callArgs.phoneNumberId).toBe('1080047101853955'); // דקל tenant phone_number_id
 
     // Verify message was stored in DB
-    const stored = testDb.prepare('SELECT * FROM messages WHERE phone = ? AND direction = ? ORDER BY created_at DESC LIMIT 1')
+    const stored = testDb.prepare('SELECT * FROM messages WHERE phone = ? AND direction = ? ORDER BY id DESC LIMIT 1')
       .get('972501111111', 'out') as any;
     expect(stored).toBeDefined();
     expect(stored.content).toBe('הי, אני כאן לעזור!');
