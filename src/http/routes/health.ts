@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import Database from 'better-sqlite3';
 import { getConnectionStatus } from '../../whatsapp/qr.js';
 import { getDb, checkDbHealth } from '../../db/index.js';
+import { config } from '../../config.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '../../../package.json'), 'utf8'));
@@ -79,6 +81,71 @@ healthRouter.post('/admin/purge-stale-leads', (req, res) => {
     purged,
     leads: stale.map((l) => `${l.name || l.phone} (${l.status})`),
   });
+});
+
+// Migrate data from old alonbot.db to new bot.db (one-time operation)
+healthRouter.post('/health/migrate-old-db', (req, res) => {
+  const token = req.query.token as string;
+  if (token !== process.env.API_SECRET) { res.status(401).json({ error: 'Unauthorized' }); return; }
+
+  const oldDbPath = join(config.dataDir, 'alonbot.db');
+  if (!existsSync(oldDbPath)) {
+    res.json({ success: false, error: 'alonbot.db not found at ' + oldDbPath });
+    return;
+  }
+
+  try {
+    const oldDb = new Database(oldDbPath, { readonly: true });
+    const newDb = getDb();
+
+    // Check old DB tables
+    const oldTables = oldDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map((r: any) => r.name);
+
+    let leadsImported = 0;
+    let messagesImported = 0;
+
+    // Import leads (skip duplicates by phone)
+    if (oldTables.includes('leads')) {
+      const oldLeads = oldDb.prepare('SELECT * FROM leads').all() as any[];
+      const insertLead = newDb.prepare(`
+        INSERT OR IGNORE INTO leads (phone, name, source, status, created_at, updated_at, monday_item_id, monday_board_id, interest, notes, score, tenant_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      `);
+      for (const l of oldLeads) {
+        const result = insertLead.run(
+          l.phone, l.name, l.source || 'whatsapp', l.status || 'new',
+          l.created_at, l.updated_at || l.created_at,
+          l.monday_item_id || null, l.monday_board_id || null,
+          l.interest || null, l.notes || null, l.score || 0
+        );
+        if (result.changes > 0) leadsImported++;
+      }
+    }
+
+    // Import messages (skip duplicates by checking phone+content+created_at)
+    if (oldTables.includes('messages')) {
+      const oldMsgs = oldDb.prepare('SELECT * FROM messages').all() as any[];
+      const insertMsg = newDb.prepare(`
+        INSERT INTO messages (phone, direction, content, created_at, tenant_id)
+        SELECT ?, ?, ?, ?, 1
+        WHERE NOT EXISTS (
+          SELECT 1 FROM messages WHERE phone = ? AND content = ? AND created_at = ?
+        )
+      `);
+      for (const m of oldMsgs) {
+        const result = insertMsg.run(
+          m.phone, m.direction || 'in', m.content, m.created_at || m.timestamp,
+          m.phone, m.content, m.created_at || m.timestamp
+        );
+        if (result.changes > 0) messagesImported++;
+      }
+    }
+
+    oldDb.close();
+    res.json({ success: true, leadsImported, messagesImported, oldTables });
+  } catch (err: any) {
+    res.json({ success: false, error: err.message });
+  }
 });
 
 healthRouter.get('/health/env-check', (req, res) => {
