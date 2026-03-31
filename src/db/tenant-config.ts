@@ -5,6 +5,7 @@
  */
 import { getDb } from './index.js';
 import { config as appConfig } from '../config.js';
+import type { TenantRow } from './tenants.js';
 
 const cache = new Map<string, string>();
 let cacheLoaded = false;
@@ -42,11 +43,18 @@ export function getConfigJSON<T>(key: string, fallback: T): T {
   }
 }
 
-/** Check if a phone number is the admin (boss). */
-export function isAdminPhone(phone: string): boolean {
+/** Check if a phone number is the admin (boss).
+ * If a tenant is provided, checks against tenant.admin_phone.
+ * If no tenant, falls back to global tenant_config or appConfig.alonPhone (backward compat).
+ */
+export function isAdminPhone(phone: string, tenant?: TenantRow): boolean {
+  if (tenant) {
+    const adminPhone = tenant.admin_phone;
+    return phone === adminPhone || phone.endsWith(adminPhone.slice(-9));
+  }
+  // Backward-compatible: use tenant_config table or env var fallback
   const adminPhone = getConfig('admin_phone');
   if (!adminPhone) {
-    // Fallback to config.alonPhone if tenant_config not set
     return phone === appConfig.alonPhone || phone.endsWith(appConfig.alonPhone.slice(-9));
   }
   return phone === adminPhone || phone.endsWith(adminPhone.slice(-9));
