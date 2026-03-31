@@ -101,7 +101,17 @@ function createAdapter(wwebClient: InstanceType<typeof Client>) {
   };
 }
 
-export type BotAdapter = ReturnType<typeof createAdapter>;
+/**
+ * BotAdapter interface — the public contract used by conversation, schedulers, etc.
+ * Implemented by whatsapp-web.js adapter (createAdapter) and CloudBotAdapter.
+ */
+export interface BotAdapter {
+  sendMessage(jid: string, content: { text: string }): Promise<void>;
+  sendPresenceUpdate(state: 'composing' | 'paused', jid: string): Promise<void>;
+  sendAudio(jid: string, audioBuffer: Buffer, ptt?: boolean): Promise<void>;
+  sendImage(jid: string, imageBuffer: Buffer, caption?: string): Promise<void>;
+  sendDocument(jid: string, buffer: Buffer, filename: string, caption?: string): Promise<void>;
+}
 
 let adapter: BotAdapter | null = null;
 
