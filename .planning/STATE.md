@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-stopped_at: Completed 09-02-PLAN.md (Cloud API webhook wired to conversation handler)
-last_updated: "2026-03-31T12:57:21.398Z"
+status: in_progress
+stopped_at: Completed 10-02-PLAN.md (Tenant context wired through Cloud webhook into conversation handler)
+last_updated: "2026-03-31T14:34:00Z"
 last_activity: 2026-03-09 -- Completed 04-02 (Follow-up wiring into message flow)
 progress:
   total_phases: 4
@@ -25,12 +25,11 @@ See: .planning/PROJECT.md (updated 2026-03-09)
 
 ## Current Position
 
-Phase: 4 of 4 (Follow-up) -- COMPLETE
-Plan: 2 of 2 in current phase -- ALL COMPLETE
-Status: All phases and plans complete
-Last activity: 2026-03-09 -- Completed 04-02 (Follow-up wiring into message flow)
+Phase: 10 (alonbot-multi-tenant-crm-separation) -- IN PROGRESS
+Plan: 10-02 (completed) -- tenant context wired into Cloud webhook
+Last activity: 2026-03-31 -- Completed 10-02 (Tenant context wired through Cloud webhook into conversation handler)
 
-Progress: [██████████] 100%
+Progress: [██████████] 100% (all original phases) + Phase 10 in progress
 
 ## Performance Metrics
 
@@ -56,6 +55,7 @@ Progress: [██████████] 100%
 | Phase 04 P01 | 5min | 2 tasks | 6 files |
 | Phase 04 P02 | 2min | 2 tasks | 3 files |
 | Phase 09-whatsapp-cloud-api-infrastructure P09-02 | 7min | 3 tasks | 4 files |
+| Phase 10-alonbot-multi-tenant-crm-separation P10-02 | 8min | 4 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -89,6 +89,9 @@ Recent decisions affecting current work:
 - [04-02]: Cancel-then-schedule pattern resets follow-up timer on each exchange
 - [Phase 09-whatsapp-cloud-api-infrastructure]: BotAdapter is now a proper interface in connection.ts (not ReturnType<createAdapter>) so CloudBotAdapter and wwebjs adapter both implement it
 - [Phase 09-whatsapp-cloud-api-infrastructure]: Cloud webhook routes messages through addMessageToBatch preserving 8-second debounce
+- [10-02]: TenantRow param is optional in handleConversation and buildSystemPrompt so existing callers remain backward-compatible
+- [10-02]: Cloud webhook logs warning (not error) when phoneNumberId has no matching tenant — global config fallback keeps bot running
+- [10-02]: createCloudAdapter accepts optional token param for per-tenant Cloud API tokens (falls back to WA_CLOUD_TOKEN env var)
 
 ### Pending Todos
 
@@ -102,6 +105,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T12:57:21.395Z
-Stopped at: Completed 09-02-PLAN.md (Cloud API webhook wired to conversation handler)
+Last session: 2026-03-31T14:34:00Z
+Stopped at: Completed 10-02-PLAN.md (Tenant context wired through Cloud webhook into conversation handler)
 Resume file: None

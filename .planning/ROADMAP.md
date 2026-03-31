@@ -92,10 +92,19 @@ Plans:
 - [x] 09-01-PLAN.md — Cloud API adapter module, webhook endpoint, send-whatsapp routing
 - [x] 09-02-PLAN.md — Wire Cloud API webhook to conversation handler, CloudBotAdapter, BotAdapter interface refactor
 
+### Phase 10: AlonBot Multi-Tenant CRM Separation
+**Goal**: Route each incoming Cloud API message through the correct tenant context so multiple businesses (דקל, Alon.dev) each get their own admin phone, service catalog, and personality
+**Depends on**: Phase 9
+**Requirements**: []
+**Plans:** 1/1 plans complete
+
+Plans:
+- [x] 10-02-PLAN.md — Wire tenant lookup into Cloud webhook, thread TenantRow through handleConversation and buildSystemPrompt
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 9
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 9 -> 10
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -104,3 +113,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 9
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
 | 4. Follow-up | 2/2 | Complete    | 2026-03-09 |
 | 9. WhatsApp Cloud API Infrastructure | 2/2 | Complete    | 2026-03-31 |
+| 10. AlonBot Multi-Tenant CRM Separation | 1/1 | Complete    | 2026-03-31 |
