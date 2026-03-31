@@ -9,6 +9,7 @@ const mockAddMessageToBatch = vi.fn();
 const mockHandleConversation = vi.fn().mockResolvedValue(undefined);
 const mockCancelFollowUps = vi.fn().mockReturnValue(0);
 const mockIsAdminPhone = vi.fn().mockReturnValue(false);
+const mockLookupTenantByPhoneNumberId = vi.fn().mockReturnValue(null);
 
 vi.mock('../src/whatsapp/connection.js', () => ({
   getAdapter: () => ({ sendMessage: mockSendMessage }),
@@ -31,6 +32,10 @@ vi.mock('../src/follow-up/follow-up-db.js', () => ({
 vi.mock('../src/db/tenant-config.js', () => ({
   isAdminPhone: (...args: unknown[]) => mockIsAdminPhone(...args),
   getConfig: vi.fn().mockReturnValue(''),
+}));
+vi.mock('../src/db/tenants.js', () => ({
+  lookupTenantByPhoneNumberId: (...args: unknown[]) => mockLookupTenantByPhoneNumberId(...args),
+  getTenants: vi.fn().mockReturnValue([]),
 }));
 
 import { sendWhatsappRouter } from '../src/http/routes/send-whatsapp.js';
@@ -623,5 +628,148 @@ describe('Cloud webhook → conversation routing', () => {
       .send(STATUS_ONLY_WEBHOOK);
 
     expect(mockAddMessageToBatch).not.toHaveBeenCalled();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Tenant-aware routing tests (10-02)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const DEKEL_TENANT = {
+  id: 1,
+  name: 'דקל',
+  wa_phone_number_id: '1080047101853955',
+  wa_number: '972559566148',
+  monday_board_id: 1443236269,
+  business_name: 'דקל לפרישה',
+  owner_name: 'דקל',
+  admin_phone: '972546300783',
+  personality: 'ידידותי',
+  timezone: 'Asia/Jerusalem',
+  payment_url: '',
+  service_catalog: '[]',
+  sales_faq: '[]',
+  sales_objections: '[]',
+  portfolio: '[]',
+  wa_cloud_token: null,
+  active: 1,
+};
+
+const ALONDEV_TENANT = {
+  id: 2,
+  name: 'alondev',
+  wa_phone_number_id: '967467269793135',
+  wa_number: '972559173249',
+  monday_board_id: 5092777389,
+  business_name: 'Alon.dev',
+  owner_name: 'אלון',
+  admin_phone: '972546300783',
+  personality: 'מכירות',
+  timezone: 'Asia/Jerusalem',
+  payment_url: '',
+  service_catalog: '[]',
+  sales_faq: '[]',
+  sales_objections: '[]',
+  portfolio: '[]',
+  wa_cloud_token: 'tenant-specific-token-xyz',
+  active: 1,
+};
+
+describe('Tenant-aware Cloud webhook routing (10-02)', () => {
+  let app: ReturnType<typeof express>;
+
+  beforeEach(async () => {
+    mockAddMessageToBatch.mockClear();
+    mockCancelFollowUps.mockClear();
+    mockHandleConversation.mockClear();
+    mockIsAdminPhone.mockReturnValue(false);
+    mockLookupTenantByPhoneNumberId.mockReturnValue(null);
+
+    process.env.WA_CLOUD_VERIFY_TOKEN = 'alonbot-verify-2026';
+    const { cloudWebhookRouter } = await import('../src/http/routes/whatsapp-cloud-webhook.js');
+    app = express();
+    app.use(express.json());
+    app.use('/', cloudWebhookRouter);
+  });
+
+  afterEach(() => {
+    delete process.env.WA_CLOUD_VERIFY_TOKEN;
+    vi.resetModules();
+  });
+
+  it('calls lookupTenantByPhoneNumberId with the incoming phoneNumberId', async () => {
+    mockLookupTenantByPhoneNumberId.mockReturnValue(DEKEL_TENANT);
+
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockLookupTenantByPhoneNumberId).toHaveBeenCalledWith('1080047101853955');
+  });
+
+  it('passes resolved tenant to handleConversation via batcher callback', async () => {
+    mockLookupTenantByPhoneNumberId.mockReturnValue(DEKEL_TENANT);
+
+    mockAddMessageToBatch.mockImplementation(
+      (_phone: string, _text: string, callback: (phone: string, msgs: string[]) => Promise<void>) => {
+        callback('972541234567', ['Hello, I want to book a meeting']).catch(() => {});
+      }
+    );
+
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockHandleConversation).toHaveBeenCalledOnce();
+    const [, , , tenant] = mockHandleConversation.mock.calls[0] as [string, string[], unknown, typeof DEKEL_TENANT];
+    expect(tenant).toEqual(DEKEL_TENANT);
+  });
+
+  it('passes undefined tenant to handleConversation when phoneNumberId is not recognized', async () => {
+    mockLookupTenantByPhoneNumberId.mockReturnValue(null);
+
+    mockAddMessageToBatch.mockImplementation(
+      (_phone: string, _text: string, callback: (phone: string, msgs: string[]) => Promise<void>) => {
+        callback('972541234567', ['Hello']).catch(() => {});
+      }
+    );
+
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockHandleConversation).toHaveBeenCalledOnce();
+    const [, , , tenant] = mockHandleConversation.mock.calls[0] as [string, string[], unknown, undefined];
+    expect(tenant).toBeUndefined();
+  });
+
+  it('uses tenant admin_phone for isAdminPhone check (calls with tenant arg)', async () => {
+    mockLookupTenantByPhoneNumberId.mockReturnValue(DEKEL_TENANT);
+    mockIsAdminPhone.mockReturnValue(true);
+
+    await request(app)
+      .post('/whatsapp-cloud-webhook')
+      .send(REALISTIC_WEBHOOK);
+
+    expect(mockIsAdminPhone).toHaveBeenCalledWith('972541234567', DEKEL_TENANT);
+    expect(mockAddMessageToBatch).not.toHaveBeenCalled();
+  });
+
+  it('createCloudAdapter uses per-tenant token when provided', async () => {
+    let fetchMock: ReturnType<typeof vi.fn>;
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ messages: [{ id: 'wamid.TENANT1' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const adapter = createCloudAdapter('967467269793135', 'tenant-specific-token-xyz');
+    await adapter.sendMessage('972541234567', { text: 'Hello' });
+
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const headers = options.headers as Record<string, string>;
+    expect(headers['Authorization']).toBe('Bearer tenant-specific-token-xyz');
+
+    vi.unstubAllGlobals();
   });
 });
