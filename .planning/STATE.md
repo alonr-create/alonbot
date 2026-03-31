@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 04-02-PLAN.md (ALL PLANS COMPLETE)
-last_updated: "2026-03-09T09:21:47.394Z"
+stopped_at: Completed 09-02-PLAN.md (Cloud API webhook wired to conversation handler)
+last_updated: "2026-03-31T12:57:21.398Z"
 last_activity: 2026-03-09 -- Completed 04-02 (Follow-up wiring into message flow)
 progress:
   total_phases: 4
@@ -55,6 +55,7 @@ Progress: [██████████] 100%
 *Updated after each plan completion*
 | Phase 04 P01 | 5min | 2 tasks | 6 files |
 | Phase 04 P02 | 2min | 2 tasks | 3 files |
+| Phase 09-whatsapp-cloud-api-infrastructure P09-02 | 7min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,8 @@ Recent decisions affecting current work:
 - [04-01]: Race condition guard: re-read cancellation status before sending follow-up
 - [04-02]: Cancel follow-ups before media check so even media messages reset the timer
 - [04-02]: Cancel-then-schedule pattern resets follow-up timer on each exchange
+- [Phase 09-whatsapp-cloud-api-infrastructure]: BotAdapter is now a proper interface in connection.ts (not ReturnType<createAdapter>) so CloudBotAdapter and wwebjs adapter both implement it
+- [Phase 09-whatsapp-cloud-api-infrastructure]: Cloud webhook routes messages through addMessageToBatch preserving 8-second debounce
 
 ### Pending Todos
 
@@ -99,6 +102,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-09T09:17:59Z
-Stopped at: Completed 04-02-PLAN.md (ALL PLANS COMPLETE)
+Last session: 2026-03-31T12:57:21.395Z
+Stopped at: Completed 09-02-PLAN.md (Cloud API webhook wired to conversation handler)
 Resume file: None

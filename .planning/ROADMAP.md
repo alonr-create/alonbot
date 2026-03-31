@@ -82,10 +82,20 @@ Plans:
 - [x] 04-01-PLAN.md — Follow-up module: DB schema, DB operations, AI message generation, 15-minute scheduler
 - [ ] 04-02-PLAN.md — Wire follow-up into message handler, conversation engine, and boot sequence
 
+### Phase 9: WhatsApp Cloud API Infrastructure
+**Goal**: Replace whatsapp-web.js (Puppeteer/QR-based) transport with Meta Cloud API for production reliability
+**Depends on**: Phase 4
+**Requirements**: []
+**Plans:** 2/2 plans complete
+
+Plans:
+- [x] 09-01-PLAN.md — Cloud API adapter module, webhook endpoint, send-whatsapp routing
+- [x] 09-02-PLAN.md — Wire Cloud API webhook to conversation handler, CloudBotAdapter, BotAdapter interface refactor
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 1 -> 2 -> 3 -> 4
+Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -93,3 +103,4 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4
 | 2. Sales Conversation | 2/2 | Complete    | 2026-03-09 |
 | 3. Closing Power | 2/2 | Complete    | 2026-03-09 |
 | 4. Follow-up | 2/2 | Complete    | 2026-03-09 |
+| 9. WhatsApp Cloud API Infrastructure | 2/2 | Complete    | 2026-03-31 |
