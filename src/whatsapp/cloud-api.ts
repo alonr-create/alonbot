@@ -87,6 +87,51 @@ function normalizePhone(phone: string): string {
   return normalized;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// CloudBotAdapter
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface CloudBotAdapter {
+  sendMessage(jid: string, content: { text: string }): Promise<void>;
+  sendPresenceUpdate(state: 'composing' | 'paused', jid: string): Promise<void>;
+  sendAudio(jid: string, audioBuffer: Buffer, ptt?: boolean): Promise<void>;
+  sendImage(jid: string, imageBuffer: Buffer, caption?: string): Promise<void>;
+  sendDocument(jid: string, buffer: Buffer, filename: string, caption?: string): Promise<void>;
+}
+
+/**
+ * Create a BotAdapter-compatible object that sends via the WhatsApp Cloud API.
+ * The phoneNumberId is the Meta phone number ID for the WhatsApp number to send from.
+ */
+export function createCloudAdapter(phoneNumberId: string): CloudBotAdapter {
+  return {
+    async sendMessage(jid: string, content: { text: string }) {
+      const phone = jid.split('@')[0];
+      await sendCloudMessage({ to: phone, message: content.text, phoneNumberId });
+    },
+
+    async sendPresenceUpdate(_state: 'composing' | 'paused', _jid: string) {
+      // Cloud API does not support typing indicators — no-op
+    },
+
+    async sendAudio(_jid: string, _audioBuffer: Buffer, _ptt = true) {
+      // Cloud API audio not implemented in phase 9 — no-op
+    },
+
+    async sendImage(_jid: string, _imageBuffer: Buffer, _caption?: string) {
+      // Cloud API image not implemented in phase 9 — no-op
+    },
+
+    async sendDocument(_jid: string, _buffer: Buffer, _filename: string, _caption?: string) {
+      // Cloud API document not implemented in phase 9 — no-op
+    },
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// sendCloudMessage
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function sendCloudMessage(params: {
   to: string;
   message: string;
