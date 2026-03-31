@@ -81,6 +81,21 @@ healthRouter.post('/admin/purge-stale-leads', (req, res) => {
   });
 });
 
+healthRouter.get('/health/env-check', (req, res) => {
+  const token = req.query.token as string;
+  if (token !== process.env.API_SECRET) { res.status(401).json({ error: 'Unauthorized' }); return; }
+  const check = (k: string) => ({ set: !!process.env[k], len: (process.env[k] || '').length });
+  res.json({
+    WA_CLOUD_TOKEN: check('WA_CLOUD_TOKEN'),
+    WA_CLOUD_PHONE_ID: check('WA_CLOUD_PHONE_ID'),
+    API_SECRET: check('API_SECRET'),
+    ANTHROPIC_API_KEY: check('ANTHROPIC_API_KEY'),
+    DATA_DIR: { set: !!process.env.DATA_DIR, value: process.env.DATA_DIR || '(not set)' },
+    SKIP_WWEBJS: { set: !!process.env.SKIP_WWEBJS, value: process.env.SKIP_WWEBJS || '(not set)' },
+    ALON_PHONE: check('ALON_PHONE'),
+  });
+});
+
 healthRouter.get('/health', (_req, res) => {
   const db = getDb();
   const waStatus = getConnectionStatus();
