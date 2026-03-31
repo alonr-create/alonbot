@@ -133,11 +133,15 @@ healthRouter.post('/health/migrate-old-db', (req, res) => {
         )
       `);
       for (const m of oldMsgs) {
-        const result = insertMsg.run(
-          m.phone, m.direction || 'in', m.content, m.created_at || m.timestamp,
-          m.phone, m.content, m.created_at || m.timestamp
-        );
-        if (result.changes > 0) messagesImported++;
+        if (!m.phone || !m.content) continue; // skip incomplete records
+        const ts = m.created_at || m.timestamp || new Date().toISOString();
+        try {
+          const result = insertMsg.run(
+            m.phone, m.direction || 'in', m.content, ts,
+            m.phone, m.content, ts
+          );
+          if (result.changes > 0) messagesImported++;
+        } catch { /* skip problematic records */ }
       }
     }
 
