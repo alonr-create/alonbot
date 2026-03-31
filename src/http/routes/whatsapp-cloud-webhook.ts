@@ -60,14 +60,13 @@ cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
         log.warn({ phoneNumberId: msg.phoneNumberId }, 'cloud-webhook: no tenant found for phoneNumberId — falling back to global config');
       }
 
-      // Skip admin phone — boss messages are not processed via Cloud API webhook
-      if (isAdminPhone(msg.senderPhone, tenant)) {
-        log.info({ phone: msg.senderPhone }, 'cloud-webhook: skipping admin phone');
-        continue;
+      const isAdmin = isAdminPhone(msg.senderPhone, tenant);
+      if (isAdmin) {
+        log.info({ phone: msg.senderPhone }, 'cloud-webhook: admin phone — boss mode');
       }
 
-      // Cancel any pending follow-ups when lead replies
-      const cancelled = cancelFollowUps(msg.senderPhone);
+      // Cancel any pending follow-ups when lead replies (not for admin)
+      const cancelled = isAdmin ? 0 : cancelFollowUps(msg.senderPhone);
       if (cancelled > 0) {
         log.info({ phone: msg.senderPhone, cancelled }, 'cloud-webhook: follow-ups cancelled on reply');
       }

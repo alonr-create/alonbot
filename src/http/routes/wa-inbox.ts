@@ -39,6 +39,8 @@ waInboxRouter.get('/wa-inbox/api/tenants', (_req: Request, res: Response): void 
       name: t.name,
       business_name: t.business_name,
     }));
+    // Add personal admin tab
+    result.push({ id: -1, name: 'admin', business_name: 'אלון (אישי)' });
     res.json(result);
   } catch (err: any) {
     log.error({ err }, 'GET /wa-inbox/api/tenants: error');
@@ -64,6 +66,32 @@ waInboxRouter.get('/wa-inbox/api/conversations', (req: Request, res: Response): 
 
   try {
     const db = getDb();
+
+    // Admin tab (tenant_id=-1): show admin phone conversations from messages table directly
+    if (tenantId === -1) {
+      const adminPhone = process.env.ALON_PHONE || '';
+      if (!adminPhone) {
+        res.json([]);
+        return;
+      }
+      const msgCount = db.prepare('SELECT COUNT(*) as cnt FROM messages WHERE phone = ?').get(adminPhone) as any;
+      const lastMsg = db.prepare('SELECT content, created_at FROM messages WHERE phone = ? ORDER BY id DESC LIMIT 1').get(adminPhone) as any;
+      if (msgCount?.cnt > 0) {
+        res.json([{
+          phone: adminPhone,
+          name: 'אלון (בוס)',
+          status: 'admin',
+          interest: null,
+          updated_at: lastMsg?.created_at,
+          last_msg: lastMsg?.content,
+          last_msg_at: lastMsg?.created_at,
+        }]);
+      } else {
+        res.json([]);
+      }
+      return;
+    }
+
     const rows = db.prepare(`
       SELECT
         l.phone,
