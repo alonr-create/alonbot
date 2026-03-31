@@ -102,12 +102,13 @@ export interface CloudBotAdapter {
 /**
  * Create a BotAdapter-compatible object that sends via the WhatsApp Cloud API.
  * The phoneNumberId is the Meta phone number ID for the WhatsApp number to send from.
+ * The optional token parameter allows per-tenant Cloud API tokens (falls back to global env vars).
  */
-export function createCloudAdapter(phoneNumberId: string): CloudBotAdapter {
+export function createCloudAdapter(phoneNumberId: string, token?: string): CloudBotAdapter {
   return {
     async sendMessage(jid: string, content: { text: string }) {
       const phone = jid.split('@')[0];
-      await sendCloudMessage({ to: phone, message: content.text, phoneNumberId });
+      await sendCloudMessage({ to: phone, message: content.text, phoneNumberId, token });
     },
 
     async sendPresenceUpdate(_state: 'composing' | 'paused', _jid: string) {
@@ -136,12 +137,13 @@ export async function sendCloudMessage(params: {
   to: string;
   message: string;
   phoneNumberId?: string;
+  token?: string;
 }): Promise<SendCloudResult> {
   const { message, phoneNumberId } = params;
   const to = normalizePhone(params.to);
   // Read env vars directly at call time so tests can override them
   const pid = phoneNumberId || process.env.WA_CLOUD_PHONE_ID || config.waCloudPhoneId;
-  const token = process.env.WA_CLOUD_TOKEN || config.waCloudToken;
+  const token = params.token || process.env.WA_CLOUD_TOKEN || config.waCloudToken;
 
   const url = `${GRAPH_API_BASE}/${pid}/messages`;
 

@@ -6,6 +6,7 @@ import { addMessageToBatch } from '../../whatsapp/message-batcher.js';
 import { handleConversation } from '../../ai/conversation.js';
 import { cancelFollowUps } from '../../follow-up/follow-up-db.js';
 import { isAdminPhone } from '../../db/tenant-config.js';
+import { lookupTenantByPhoneNumberId } from '../../db/tenants.js';
 
 const log = createLogger('cloud-webhook');
 
@@ -51,8 +52,16 @@ cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
         'cloud-webhook: incoming message'
       );
 
+      // Resolve tenant from phoneNumberId for multi-tenant routing
+      const tenant = lookupTenantByPhoneNumberId(msg.phoneNumberId) ?? undefined;
+      if (tenant) {
+        log.info({ phoneNumberId: msg.phoneNumberId, tenant: tenant.name }, 'cloud-webhook: tenant resolved');
+      } else {
+        log.warn({ phoneNumberId: msg.phoneNumberId }, 'cloud-webhook: no tenant found for phoneNumberId — falling back to global config');
+      }
+
       // Skip admin phone — boss messages are not processed via Cloud API webhook
-      if (isAdminPhone(msg.senderPhone)) {
+      if (isAdminPhone(msg.senderPhone, tenant)) {
         log.info({ phone: msg.senderPhone }, 'cloud-webhook: skipping admin phone');
         continue;
       }
@@ -63,17 +72,17 @@ cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
         log.info({ phone: msg.senderPhone, cancelled }, 'cloud-webhook: follow-ups cancelled on reply');
       }
 
-      // Build Cloud API adapter scoped to this message's phone number ID
-      const adapter = createCloudAdapter(msg.phoneNumberId);
+      // Build Cloud API adapter scoped to this message's phone number ID and tenant token
+      const adapter = createCloudAdapter(msg.phoneNumberId, tenant?.wa_cloud_token ?? undefined);
       const senderPhone = msg.senderPhone;
 
-      // Route through message batcher → AI conversation
+      // Route through message batcher → AI conversation (with tenant context)
       addMessageToBatch(
         senderPhone,
         msg.text,
         async (batchPhone: string, batchMessages: string[]) => {
           try {
-            await handleConversation(batchPhone, batchMessages, adapter);
+            await handleConversation(batchPhone, batchMessages, adapter, tenant);
           } catch (err: any) {
             log.error({ err, phone: batchPhone }, 'cloud-webhook: conversation handling failed');
           }
