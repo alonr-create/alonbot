@@ -48,7 +48,7 @@ AlonBot is Alon's personal assistant -- it runs on Alon's WhatsApp number and pr
 ### Flow 1: New Lead Arrives
 
 ```
-1. Lead fills form on alon-dev.vercel.app
+1. Lead fills form on alondev.site
 2. Form submits to Monday.com board (existing flow)
 3. Monday.com fires webhook to bot's /webhook/monday endpoint
 4. Webhook Server validates signature, extracts lead data (name, phone, interest)

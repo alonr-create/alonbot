@@ -20,7 +20,7 @@ A critical discovery: Monday.com's `create_item` webhook delivers **empty `colum
 - Monday.com webhook endpoint at POST /webhook/monday receives new lead notifications
 - Extract: lead name, phone number, service interest, Monday.com item ID
 - Store monday_item_id on leads table for bidirectional sync
-- Monday.com board: the existing Alon.dev leads board (leads come from alon-dev.vercel.app contact form)
+- Monday.com board: the existing Alon.dev leads board (leads come from alondev.site contact form)
 - Webhook challenge verification (Monday.com sends challenge on setup)
 - Update Monday.com status column via API when conversation progresses
 - Claude API (claude-sonnet-4-20250514) for Hebrew sales conversations
@@ -426,7 +426,7 @@ app.use('/webhook', mondayWebhookRouter);
 ## Open Questions
 
 1. **Monday.com Column IDs for Alon's Board**
-   - What we know: Board exists, leads come from alon-dev.vercel.app contact form
+   - What we know: Board exists, leads come from alondev.site contact form
    - What's unclear: Exact column IDs for phone, name, interest, status columns
    - Recommendation: Use Monday.com MCP server (available per CONTEXT.md) to inspect the board schema during implementation. Or hardcode based on inspection and make configurable via env vars.
 

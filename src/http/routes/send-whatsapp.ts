@@ -16,8 +16,8 @@ export const sendWhatsappRouter = Router();
  * Header: x-api-secret: <API_SECRET env var>
  */
 sendWhatsappRouter.post('/api/send-whatsapp', async (req, res) => {
-  // Auth check — fail-closed: reject if API_SECRET not configured
-  const secret = process.env.API_SECRET;
+  // Auth check — fail-closed: reject if no secret configured
+  const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
   if (!secret || req.headers['x-api-secret'] !== secret) {
     log.warn('unauthorized send-whatsapp attempt');
     return res.status(401).json({ error: 'Unauthorized' });

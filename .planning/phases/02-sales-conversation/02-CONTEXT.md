@@ -17,7 +17,7 @@ Monday.com webhook integration to detect new leads, Claude API-powered Hebrew sa
 - Webhook endpoint at POST /webhook/monday receives new lead notifications
 - Extract: lead name, phone number, service interest, Monday.com item ID
 - Store monday_item_id on leads table for bidirectional sync
-- Monday.com board: the existing Alon.dev leads board (leads come from alon-dev.vercel.app contact form)
+- Monday.com board: the existing Alon.dev leads board (leads come from alondev.site contact form)
 - Webhook challenge verification (Monday.com sends challenge on setup)
 - Update Monday.com status column via API when conversation progresses
 

@@ -24,7 +24,7 @@
 ## 📊 מה קורה כשליד חדש נכנס?
 
 ```
-אתר alon-dev.vercel.app
+אתר alondev.site
         ↓ (טופס)
     Monday.com Board
         ↓ (webhook)

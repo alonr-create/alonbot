@@ -41,7 +41,7 @@ Every lead that enters Monday.com gets a fast, personalized WhatsApp conversatio
 ## Context
 
 - Alon.dev is a tech services business: websites, apps, games, automation, CRM
-- Leads come from alon-dev.vercel.app contact form → Monday.com board
+- Leads come from alondev.site contact form → Monday.com board
 - Alon currently handles leads manually via WhatsApp
 - AlonBot (existing Telegram bot) already has Baileys WhatsApp integration as reference
 - Monday.com MCP server available for API interaction
