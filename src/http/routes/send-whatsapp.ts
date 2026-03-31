@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { getAdapter } from '../../whatsapp/connection.js';
 import { getDb } from '../../db/index.js';
 import { createLogger } from '../../utils/logger.js';
+import { sendCloudMessage } from '../../whatsapp/cloud-api.js';
 
 const log = createLogger('send-whatsapp');
 
@@ -23,15 +24,9 @@ sendWhatsappRouter.post('/api/send-whatsapp', async (req, res) => {
     return res.status(401).json({ error: 'Unauthorized' });
   }
 
-  const { phone, message, source, leadName } = req.body || {};
+  const { phone, message, source, leadName, phone_number_id } = req.body || {};
   if (!phone || !message) {
     return res.status(400).json({ error: 'phone and message required' });
-  }
-
-  const adapter = getAdapter();
-  if (!adapter) {
-    log.error('WhatsApp not connected');
-    return res.status(503).json({ error: 'WhatsApp not connected' });
   }
 
   try {
@@ -57,6 +52,25 @@ sendWhatsappRouter.post('/api/send-whatsapp', async (req, res) => {
       } catch (dbErr: any) {
         log.warn({ err: dbErr }, 'failed to tag lead source (non-fatal)');
       }
+    }
+
+    // Routing: if phone_number_id provided AND WA_CLOUD_TOKEN is set → use Cloud API
+    const cloudToken = process.env.WA_CLOUD_TOKEN;
+    if (phone_number_id && cloudToken) {
+      const result = await sendCloudMessage({ to: normalized, message, phoneNumberId: phone_number_id });
+      if (!result.success) {
+        log.error({ phone: normalized, phone_number_id, error: result.error }, 'Cloud API send failed');
+        return res.status(500).json({ error: result.error });
+      }
+      log.info({ phone: normalized, phone_number_id }, 'WhatsApp message sent via Cloud API');
+      return res.json({ success: true, phone: normalized, via: 'cloud-api' });
+    }
+
+    // Default path: whatsapp-web.js adapter (backward compatible)
+    const adapter = getAdapter();
+    if (!adapter) {
+      log.error('WhatsApp not connected');
+      return res.status(503).json({ error: 'WhatsApp not connected' });
     }
 
     const jid = `${normalized}@s.whatsapp.net`;

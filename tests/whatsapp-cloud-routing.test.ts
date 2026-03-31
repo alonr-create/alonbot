@@ -3,6 +3,19 @@ import { parseWebhookPayload, sendCloudMessage } from '../src/whatsapp/cloud-api
 import express from 'express';
 import request from 'supertest';
 
+// Mock adapter + DB at module level for send-whatsapp route tests
+const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+vi.mock('../src/whatsapp/connection.js', () => ({
+  getAdapter: () => ({ sendMessage: mockSendMessage }),
+}));
+vi.mock('../src/db/index.js', () => ({
+  getDb: () => ({
+    prepare: () => ({ get: () => undefined, run: () => undefined }),
+  }),
+}));
+
+import { sendWhatsappRouter } from '../src/http/routes/send-whatsapp.js';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Fixtures
 // ─────────────────────────────────────────────────────────────────────────────
@@ -396,5 +409,76 @@ describe('Cloud Webhook POST incoming messages', () => {
       .send({ garbage: true });
 
     expect(res.status).toBe(200);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// /api/send-whatsapp phone_number_id routing tests (Task 2)
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('/api/send-whatsapp phone_number_id routing', () => {
+  let app: ReturnType<typeof express>;
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    process.env.API_SECRET = 'test-api-secret';
+    process.env.WA_CLOUD_TOKEN = 'test-cloud-token';
+    process.env.WA_CLOUD_PHONE_ID = '1080047101853955';
+
+    fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ messages: [{ id: 'wamid.CLOUD1' }] }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    mockSendMessage.mockClear();
+
+    app = express();
+    app.use(express.json());
+    app.use('/', sendWhatsappRouter);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete process.env.API_SECRET;
+    delete process.env.WA_CLOUD_TOKEN;
+    delete process.env.WA_CLOUD_PHONE_ID;
+  });
+
+  it('calls sendCloudMessage (not adapter) when phone_number_id is provided', async () => {
+    const res = await request(app)
+      .post('/api/send-whatsapp')
+      .set('x-api-secret', 'test-api-secret')
+      .send({ phone: '972541234567', message: 'Hello via Cloud', phone_number_id: '1080047101853955' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.via).toBe('cloud-api');
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(mockSendMessage).not.toHaveBeenCalled();
+  });
+
+  it('uses whatsapp-web.js adapter when phone_number_id is NOT provided', async () => {
+    const res = await request(app)
+      .post('/api/send-whatsapp')
+      .set('x-api-secret', 'test-api-secret')
+      .send({ phone: '972541234567', message: 'Hello via WA' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.via).toBeUndefined();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(mockSendMessage).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to adapter when phone_number_id is provided but WA_CLOUD_TOKEN is empty', async () => {
+    delete process.env.WA_CLOUD_TOKEN;
+
+    const res = await request(app)
+      .post('/api/send-whatsapp')
+      .set('x-api-secret', 'test-api-secret')
+      .send({ phone: '972541234567', message: 'Hello', phone_number_id: '1080047101853955' });
+
+    // Should fall back to adapter since no cloud token
+    expect(res.status).toBe(200);
+    expect(res.body.via).toBeUndefined();
+    expect(mockSendMessage).toHaveBeenCalledOnce();
   });
 });
