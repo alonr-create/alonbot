@@ -42,24 +42,34 @@ async function main() {
   log.info({ port: config.port }, 'HTTP server started');
 
   // 3. Connect to WhatsApp (triggers QR display)
-  const sock = await connectWhatsApp();
-  log.info('WhatsApp connection initiated');
+  // Non-fatal: if whatsapp-web.js fails, HTTP server (Cloud API + CRM) keeps running
+  let sock: Awaited<ReturnType<typeof connectWhatsApp>> | null = null;
+  try {
+    sock = await connectWhatsApp();
+    log.info('WhatsApp connection initiated');
+  } catch (err) {
+    log.warn({ err }, 'whatsapp-web.js failed to connect — HTTP server continues (Cloud API + CRM still work)');
+  }
 
   // 4. Start follow-up scheduler (checks every 15 minutes)
-  startFollowUpScheduler(sock);
-  log.info('follow-up scheduler started');
+  if (sock) {
+    startFollowUpScheduler(sock);
+    log.info('follow-up scheduler started');
 
-  // 5. Start daily summary scheduler (sends Alon a morning recap)
-  startDailySummaryScheduler(sock);
-  log.info('daily summary scheduler started');
+    // 5. Start daily summary scheduler (sends Alon a morning recap)
+    startDailySummaryScheduler(sock);
+    log.info('daily summary scheduler started');
 
-  // 6. Start weekly report scheduler (sends Alon a Sunday recap)
-  startWeeklyReportScheduler(sock);
-  log.info('weekly report scheduler started');
+    // 6. Start weekly report scheduler (sends Alon a Sunday recap)
+    startWeeklyReportScheduler(sock);
+    log.info('weekly report scheduler started');
 
-  // 7. Start reminder scheduler (checks every minute for due reminders)
-  startReminderScheduler(sock);
-  log.info('reminder scheduler started');
+    // 7. Start reminder scheduler (checks every minute for due reminders)
+    startReminderScheduler(sock);
+    log.info('reminder scheduler started');
+  } else {
+    log.warn('schedulers skipped — no whatsapp-web.js connection (Cloud API path unaffected)');
+  }
 
   log.info({ port: config.port }, 'Bot ready (all schedulers active)');
 
