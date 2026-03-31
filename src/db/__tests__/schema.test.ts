@@ -3,6 +3,14 @@ import Database from 'better-sqlite3';
 import { initSchema } from '../schema.js';
 import { checkDbHealth } from '../index.js';
 
+// Helper: create an in-memory DB with schema initialized
+function makeDb(): Database.Database {
+  const db = new Database(':memory:');
+  db.pragma('journal_mode = WAL');
+  initSchema(db);
+  return db;
+}
+
 describe('Database Schema', () => {
   let db: Database.Database;
 
@@ -97,5 +105,67 @@ describe('Database Schema', () => {
       db.close();
       expect(checkDbHealth(db)).toBe(false);
     });
+  });
+});
+
+describe('Tenants table and migrations', () => {
+  it('initSchema creates tenants table with required columns', () => {
+    const db = makeDb();
+    const columns = db.pragma('table_info(tenants)') as Array<{ name: string }>;
+    const colNames = columns.map((c) => c.name);
+
+    expect(colNames).toContain('id');
+    expect(colNames).toContain('name');
+    expect(colNames).toContain('wa_phone_number_id');
+    expect(colNames).toContain('wa_number');
+    expect(colNames).toContain('monday_board_id');
+    expect(colNames).toContain('admin_phone');
+    expect(colNames).toContain('wa_cloud_token');
+    expect(colNames).toContain('active');
+  });
+
+  it('leads table has tenant_id column after migration', () => {
+    const db = makeDb();
+    const columns = db.pragma('table_info(leads)') as Array<{ name: string }>;
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toContain('tenant_id');
+  });
+
+  it('messages table has tenant_id column after migration', () => {
+    const db = makeDb();
+    const columns = db.pragma('table_info(messages)') as Array<{ name: string }>;
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toContain('tenant_id');
+  });
+
+  it('follow_ups table has tenant_id column after migration', () => {
+    const db = makeDb();
+    const columns = db.pragma('table_info(follow_ups)') as Array<{ name: string }>;
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toContain('tenant_id');
+  });
+
+  it('bot_rules table has tenant_id column after migration', () => {
+    const db = makeDb();
+    const columns = db.pragma('table_info(bot_rules)') as Array<{ name: string }>;
+    const colNames = columns.map((c) => c.name);
+    expect(colNames).toContain('tenant_id');
+  });
+
+  it('existing leads are backfilled with דקל tenant_id', () => {
+    // Insert a lead BEFORE initSchema so it has no tenant_id, then re-run
+    // Actually in a fresh DB with initSchema run, inserts default tenant_id = null
+    // The backfill should fill tenant_id for new leads with null
+    const db = new Database(':memory:');
+    db.pragma('journal_mode = WAL');
+    // First run: creates schema
+    initSchema(db);
+    // Insert a lead that could represent a pre-existing row (tenant_id should be set)
+    db.prepare("INSERT INTO leads (phone, tenant_id) VALUES ('99999', NULL)").run();
+    // Run initSchema again (idempotent) to trigger backfill
+    initSchema(db);
+    const lead = db.prepare("SELECT tenant_id FROM leads WHERE phone = '99999'").get() as { tenant_id: number | null };
+    // After backfill, tenant_id should be the דקל tenant id
+    expect(lead.tenant_id).not.toBeNull();
   });
 });

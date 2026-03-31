@@ -1,6 +1,39 @@
 import type Database from 'better-sqlite3';
 
 export function initSchema(db: Database.Database): void {
+  // ── Tenants table — must be created FIRST for FK references ──
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS tenants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE,
+      wa_phone_number_id TEXT NOT NULL UNIQUE,
+      wa_number TEXT NOT NULL,
+      monday_board_id INTEGER NOT NULL,
+      business_name TEXT NOT NULL,
+      owner_name TEXT NOT NULL,
+      admin_phone TEXT NOT NULL,
+      personality TEXT NOT NULL DEFAULT '',
+      timezone TEXT NOT NULL DEFAULT 'Asia/Jerusalem',
+      payment_url TEXT NOT NULL DEFAULT '',
+      service_catalog TEXT NOT NULL DEFAULT '[]',
+      sales_faq TEXT NOT NULL DEFAULT '[]',
+      sales_objections TEXT NOT NULL DEFAULT '[]',
+      portfolio TEXT NOT NULL DEFAULT '[]',
+      wa_cloud_token TEXT,
+      active INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+
+  // Seed tenants — idempotent via INSERT OR IGNORE
+  const seedTenant = db.prepare(`
+    INSERT OR IGNORE INTO tenants
+      (name, wa_phone_number_id, wa_number, monday_board_id, business_name, owner_name, admin_phone)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  seedTenant.run('דקל', '1080047101853955', '972559566148', 1443236269, 'דקל לפרישה', 'דקל', '972546300783');
+  seedTenant.run('alondev', '967467269793135', '972559173249', 5092777389, 'Alon.dev', 'אלון', '972546300783');
+
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -28,7 +61,7 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone);
   `);
 
-  // Idempotent migration: add Monday.com columns to leads
+  // Idempotent migration: add Monday.com columns to leads + tenant_id to leads/messages
   const migrations = [
     'ALTER TABLE leads ADD COLUMN monday_item_id INTEGER',
     'ALTER TABLE leads ADD COLUMN monday_board_id INTEGER',
@@ -37,6 +70,8 @@ export function initSchema(db: Database.Database): void {
     "ALTER TABLE leads ADD COLUMN notes TEXT DEFAULT ''",
     'ALTER TABLE leads ADD COLUMN score INTEGER DEFAULT 0',
     "ALTER TABLE leads ADD COLUMN source_detail TEXT DEFAULT ''",
+    'ALTER TABLE leads ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',
+    'ALTER TABLE messages ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',
   ];
 
   for (const sql of migrations) {
@@ -188,4 +223,34 @@ export function initSchema(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Idempotent migration: add tenant_id to tables created after the first migrations block
+  const lateTableMigrations = [
+    'ALTER TABLE follow_ups ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',
+    'ALTER TABLE bot_rules ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',
+  ];
+
+  for (const sql of lateTableMigrations) {
+    try {
+      db.exec(sql);
+    } catch {
+      // Column already exists — expected on subsequent runs
+    }
+  }
+
+  // Backfill existing rows with דקל tenant_id (the original single-tenant data)
+  const backfills = [
+    "UPDATE leads SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
+    "UPDATE messages SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
+    "UPDATE follow_ups SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
+    "UPDATE bot_rules SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
+  ];
+
+  for (const sql of backfills) {
+    try {
+      db.exec(sql);
+    } catch {
+      // Ignore — backfill is idempotent
+    }
+  }
 }
