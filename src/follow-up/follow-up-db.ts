@@ -9,6 +9,7 @@ export interface FollowUpRow {
   name: string;
   interest: string;
   status: string;
+  tenant_id: number | null;
 }
 
 const TERMINAL_STATUSES = ['escalated', 'meeting-scheduled', 'closed-won', 'closed-lost'];
@@ -16,14 +17,15 @@ const TERMINAL_STATUSES = ['escalated', 'meeting-scheduled', 'closed-won', 'clos
 /**
  * Schedule a follow-up message for a lead.
  * Skips Alon's own phone number.
+ * Accepts optional tenantId for multi-tenant routing.
  */
-export function scheduleFollowUp(phone: string, messageNumber: 1 | 2 | 3, scheduledAt: Date): void {
+export function scheduleFollowUp(phone: string, messageNumber: 1 | 2 | 3, scheduledAt: Date, tenantId?: number): void {
   if (isAdminPhone(phone)) return;
 
   const db = getDb();
   db.prepare(
-    'INSERT INTO follow_ups (phone, message_number, scheduled_at) VALUES (?, ?, ?)',
-  ).run(phone, messageNumber, scheduledAt.toISOString());
+    'INSERT INTO follow_ups (phone, message_number, scheduled_at, tenant_id) VALUES (?, ?, ?, ?)',
+  ).run(phone, messageNumber, scheduledAt.toISOString(), tenantId ?? null);
 }
 
 /**
@@ -35,7 +37,7 @@ export function getDueFollowUps(): FollowUpRow[] {
   const placeholders = TERMINAL_STATUSES.map(() => '?').join(', ');
 
   return db.prepare(`
-    SELECT f.id, f.phone, f.message_number, f.scheduled_at,
+    SELECT f.id, f.phone, f.message_number, f.scheduled_at, f.tenant_id,
            l.name, l.interest, l.status
     FROM follow_ups f
     JOIN leads l ON l.phone = f.phone

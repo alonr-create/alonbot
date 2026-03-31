@@ -49,3 +49,16 @@ export function getTenants(db?: Database.Database): TenantRow[] {
     .prepare('SELECT * FROM tenants WHERE active = 1')
     .all() as TenantRow[];
 }
+
+/**
+ * Lookup a tenant by their numeric ID.
+ * Returns null if not found or inactive.
+ * Accepts an optional db parameter for testing with in-memory databases.
+ */
+export function getTenantById(id: number, db?: Database.Database): TenantRow | null {
+  const database = db ?? getDb();
+  const row = database
+    .prepare('SELECT * FROM tenants WHERE id = ? AND active = 1')
+    .get(id) as TenantRow | undefined;
+  return row ?? null;
+}

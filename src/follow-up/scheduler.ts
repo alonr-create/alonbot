@@ -4,6 +4,8 @@ import { generateFollowUpMessage } from './follow-up-ai.js';
 import { sendWithTyping } from '../whatsapp/rate-limiter.js';
 import { isBusinessHours, getNextBusinessDay } from '../calendar/business-hours.js';
 import { getDb } from '../db/index.js';
+import { getTenantById } from '../db/tenants.js';
+import { createCloudAdapter } from '../whatsapp/cloud-api.js';
 
 const log = createLogger('follow-up-scheduler');
 
@@ -63,16 +65,30 @@ export async function processFollowUps(sock: any): Promise<void> {
         fu.phone,
       );
 
-      const jid = `${fu.phone}@s.whatsapp.net`;
-      await sendWithTyping(sock, jid, message);
+      if (fu.tenant_id) {
+        // Cloud API path: use tenant's adapter
+        const tenant = getTenantById(fu.tenant_id);
+        if (tenant) {
+          const adapter = createCloudAdapter(tenant.wa_phone_number_id, tenant.wa_cloud_token ?? undefined);
+          const jid = `${fu.phone}@s.whatsapp.net`;
+          await adapter.sendMessage(jid, { text: message });
+        } else {
+          log.warn({ followUpId: fu.id, tenantId: fu.tenant_id }, 'tenant not found for follow-up, skipping');
+          continue;
+        }
+      } else {
+        // Legacy whatsapp-web.js path: use sock
+        const jid = `${fu.phone}@s.whatsapp.net`;
+        await sendWithTyping(sock, jid, message);
+      }
 
       // Mark as sent
       markFollowUpSent(fu.id);
 
       // Store outgoing message
       db.prepare(
-        'INSERT INTO messages (phone, direction, content) VALUES (?, ?, ?)',
-      ).run(fu.phone, 'out', message);
+        'INSERT INTO messages (phone, direction, content, tenant_id) VALUES (?, ?, ?, ?)',
+      ).run(fu.phone, 'out', message, fu.tenant_id ?? null);
 
       log.info({ id: fu.id, phone: fu.phone, messageNumber: fu.message_number },
         'follow-up sent');
@@ -81,7 +97,7 @@ export async function processFollowUps(sock: any): Promise<void> {
       const nextConfig = NEXT_FOLLOW_UP_DAYS[fu.message_number];
       if (nextConfig) {
         const nextDate = new Date(Date.now() + nextConfig.days * 24 * 60 * 60 * 1000);
-        scheduleFollowUp(fu.phone, nextConfig.next as 1 | 2 | 3, nextDate);
+        scheduleFollowUp(fu.phone, nextConfig.next as 1 | 2 | 3, nextDate, fu.tenant_id ?? undefined);
         log.info({ phone: fu.phone, nextNumber: nextConfig.next, scheduledAt: nextDate.toISOString() },
           'next follow-up scheduled');
       }

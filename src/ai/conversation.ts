@@ -97,11 +97,11 @@ export async function handleConversation(
     messages.push({ role: 'user', content: batchedText });
 
     const insertMsg = db.prepare(
-      'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+      'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
     );
     const leadId = lead?.id || null;
     for (const text of batchedMessages) {
-      insertMsg.run(phone, leadId, 'in', text);
+      insertMsg.run(phone, leadId, 'in', text, tenant?.id ?? null);
     }
 
     log.info(
@@ -163,7 +163,7 @@ export async function handleConversation(
 
   const jid = phone + '@s.whatsapp.net';
   const insertMsg = db.prepare(
-    'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+    'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
   );
   const leadId = lead?.id || null;
 
@@ -238,7 +238,7 @@ export async function handleConversation(
       );
     }
 
-    storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse);
+    storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse, tenant?.id ?? null);
     updateLeadTimestamp(db, phone, lead, newStatus);
     log.info({ phone, date, time, success: bookResult.success, tenant: tenant?.name }, 'booking flow completed');
     return;
@@ -249,7 +249,7 @@ export async function handleConversation(
     const cleanResponse = response.replace('[ESCALATE]', '').trim();
     await sendWithTyping(sock, jid, cleanResponse);
 
-    storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse);
+    storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse, tenant?.id ?? null);
     updateLeadTimestamp(db, phone, lead, null);
 
     await triggerEscalation(
@@ -267,7 +267,7 @@ export async function handleConversation(
   let finalResponse = response;
 
   if (isBoss) {
-    finalResponse = await processBossMarkers(finalResponse, sock, jid);
+    finalResponse = await processBossMarkers(finalResponse, sock, jid, tenant);
   }
 
   // ── Parse [VOICE] marker — send voice note alongside text ──
@@ -295,7 +295,7 @@ export async function handleConversation(
     });
   }
 
-  storeMessages(insertMsg, batchedMessages, phone, leadId, finalResponse);
+  storeMessages(insertMsg, batchedMessages, phone, leadId, finalResponse, tenant?.id ?? null);
 
   // Update lead timestamp
   if (lead) {
@@ -353,7 +353,7 @@ export async function handleConversation(
   if (!isAdminPhone(phone, tenant)) {
     cancelFollowUps(phone);
     const followUpTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
-    scheduleFollowUp(phone, 1, followUpTime);
+    scheduleFollowUp(phone, 1, followUpTime, tenant?.id);
   }
 
   log.info(
@@ -370,6 +370,7 @@ async function processBossMarkers(
   response: string,
   sock: BotAdapter,
   jid: string,
+  tenant?: TenantRow,
 ): Promise<string> {
   let cleaned = response;
   const db = getDb();
@@ -432,9 +433,9 @@ async function processBossMarkers(
 
     try {
       db.prepare(
-        `INSERT OR IGNORE INTO leads (phone, name, source, status, interest)
-         VALUES (?, ?, 'manual', 'new', ?)`,
-      ).run(newPhone, newName, newInterest || null);
+        `INSERT OR IGNORE INTO leads (phone, name, source, status, interest, tenant_id)
+         VALUES (?, ?, 'manual', 'new', ?, ?)`,
+      ).run(newPhone, newName, newInterest || null, tenant?.id ?? null);
     } catch (err) {
       log.error({ err }, 'Failed to create lead in DB');
     }
@@ -550,13 +551,13 @@ async function processBossMarkers(
             await sendWithTyping(sock, jid, confirmMsg);
             // Store quote send in conversation history so the bot remembers it
             const insertQuoteMsg = db.prepare(
-              'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+              'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
             );
             const quoteRecord = `[שלחתי הצעת מחיר PDF ל${quoteName.trim()} — ${quoteService.trim()} — ₪${quotePrice.trim()}]`;
-            insertQuoteMsg.run(targetLead.phone, null, 'out', quoteRecord);
+            insertQuoteMsg.run(targetLead.phone, null, 'out', quoteRecord, null);
             // Also store confirmation in boss conversation
             const bossPhone = jid.split('@')[0];
-            insertQuoteMsg.run(bossPhone, null, 'out', confirmMsg);
+            insertQuoteMsg.run(bossPhone, null, 'out', confirmMsg, null);
             log.info({ name: quoteName, service: quoteService, price: quotePrice }, 'Quote sent');
           } catch (err) {
             log.error({ err, targetPhone: targetLead.phone }, 'Failed to send quote PDF to lead — trying to send to boss');
@@ -829,9 +830,9 @@ async function processBossMarkers(
         // Store in conversation history
         const bossPhone = jid.split('@')[0];
         const insertBrowse = db.prepare(
-          'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
+          'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
         );
-        insertBrowse.run(bossPhone, null, 'out', `[BROWSE completed: ${task}]\n${result.summary}`);
+        insertBrowse.run(bossPhone, null, 'out', `[BROWSE completed: ${task}]\n${result.summary}`, null);
 
         log.info({ task, steps: result.steps, tokens: result.tokensUsed }, 'browse task completed');
       }).catch(async (err) => {
@@ -883,11 +884,12 @@ function storeMessages(
   phone: string,
   leadId: number | null,
   outResponse: string,
+  tenantId: number | null = null,
 ): void {
   for (const text of batchedMessages) {
-    insertMsg.run(phone, leadId, 'in', text);
+    insertMsg.run(phone, leadId, 'in', text, tenantId);
   }
-  insertMsg.run(phone, leadId, 'out', outResponse);
+  insertMsg.run(phone, leadId, 'out', outResponse, tenantId);
 
   // Sync chat to Monday.com (fire-and-forget, non-blocking)
   if (!isAdminPhone(phone)) {
@@ -984,8 +986,8 @@ export async function sendFirstMessage(
     .get(phone) as { id: number } | undefined;
 
   db.prepare(
-    'INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)',
-  ).run(phone, lead?.id || null, 'out', response);
+    'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
+  ).run(phone, lead?.id || null, 'out', response, null);
 
   db.prepare(
     "UPDATE leads SET status = 'contacted', updated_at = datetime('now') WHERE phone = ?",

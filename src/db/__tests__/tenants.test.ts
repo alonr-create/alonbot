@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import Database from 'better-sqlite3';
 import { initSchema } from '../schema.js';
 import type { TenantRow } from '../tenants.js';
-import { lookupTenantByPhoneNumberId, getTenants } from '../tenants.js';
+import { lookupTenantByPhoneNumberId, getTenants, getTenantById } from '../tenants.js';
 
 // Helper: create an in-memory DB with schema initialized
 function makeDb(): Database.Database {
@@ -58,6 +58,33 @@ describe('Tenants', () => {
       const names = tenants.map((t: TenantRow) => t.name);
       expect(names).toContain('דקל');
       expect(names).toContain('alondev');
+    });
+  });
+
+  describe('getTenantById', () => {
+    it('returns correct tenant row by id', () => {
+      const db = makeDb();
+      // Get דקל tenant id first via lookup
+      const dekel = lookupTenantByPhoneNumberId('1080047101853955', db);
+      expect(dekel).not.toBeNull();
+      const found = getTenantById(dekel!.id, db);
+      expect(found).not.toBeNull();
+      expect(found!.name).toBe('דקל');
+      expect(found!.monday_board_id).toBe(1443236269);
+    });
+
+    it('returns null for nonexistent id', () => {
+      const db = makeDb();
+      const found = getTenantById(99999, db);
+      expect(found).toBeNull();
+    });
+
+    it('returns null for inactive tenant', () => {
+      const db = makeDb();
+      const dekel = lookupTenantByPhoneNumberId('1080047101853955', db);
+      db.prepare('UPDATE tenants SET active = 0 WHERE id = ?').run(dekel!.id);
+      const found = getTenantById(dekel!.id, db);
+      expect(found).toBeNull();
     });
   });
 
