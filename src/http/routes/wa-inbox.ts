@@ -156,7 +156,9 @@ waInboxRouter.post('/wa-inbox/api/reply', async (req: Request, res: Response): P
     return;
   }
 
-  const tenant = getTenantById(Number(tenant_id));
+  // Admin tab (tenant_id=-1): use tenant 1 (דקל) as default for sending
+  const effectiveTenantId = Number(tenant_id) === -1 ? 1 : Number(tenant_id);
+  const tenant = getTenantById(effectiveTenantId);
   if (!tenant) {
     res.status(400).json({ error: 'Invalid tenant_id' });
     return;
