@@ -41,14 +41,19 @@ async function main() {
   const server = createServer(config.port);
   log.info({ port: config.port }, 'HTTP server started');
 
-  // 3. Connect to WhatsApp (triggers QR display)
-  // Non-fatal: if whatsapp-web.js fails, HTTP server (Cloud API + CRM) keeps running
+  // 3. Connect to WhatsApp
+  // Skip whatsapp-web.js entirely when SKIP_WWEBJS=true (Render/Cloud API mode)
+  // Chromium consumes too much RAM on 512MB instances and blocks the event loop
   let sock: Awaited<ReturnType<typeof connectWhatsApp>> | null = null;
-  try {
-    sock = await connectWhatsApp();
-    log.info('WhatsApp connection initiated');
-  } catch (err) {
-    log.warn({ err }, 'whatsapp-web.js failed to connect — HTTP server continues (Cloud API + CRM still work)');
+  if (process.env.SKIP_WWEBJS === 'true') {
+    log.info('whatsapp-web.js skipped (SKIP_WWEBJS=true) — Cloud API + CRM mode');
+  } else {
+    try {
+      sock = await connectWhatsApp();
+      log.info('WhatsApp connection initiated');
+    } catch (err) {
+      log.warn({ err }, 'whatsapp-web.js failed to connect — HTTP server continues');
+    }
   }
 
   // 4. Start follow-up scheduler (checks every 15 minutes)

@@ -25,6 +25,8 @@ RUN npm prune --production
 
 # Use persistent disk mount for DB
 ENV DATA_DIR=/data
+# Skip whatsapp-web.js (Chromium eats all RAM on 512MB instances)
+ENV SKIP_WWEBJS=true
 RUN mkdir -p /data
 
 COPY entrypoint.sh ./
