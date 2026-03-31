@@ -224,6 +224,69 @@ export function initSchema(db: Database.Database): void {
     );
   `);
 
+  // ── CRM Tables for 360Shmikley UI ──
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS lead_tags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      tag TEXT NOT NULL,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(phone, tag, tenant_id)
+    );
+
+    CREATE TABLE IF NOT EXISTS lead_notes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      note TEXT NOT NULL,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS quick_replies (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      message TEXT NOT NULL,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS status_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      phone TEXT NOT NULL,
+      status TEXT NOT NULL,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS chatbot_flows (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      trigger_type TEXT NOT NULL DEFAULT 'keyword',
+      trigger_value TEXT NOT NULL DEFAULT '*',
+      steps TEXT NOT NULL DEFAULT '[]',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS api_usage (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model TEXT NOT NULL DEFAULT 'claude-sonnet-4-6',
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      cost_usd REAL NOT NULL DEFAULT 0,
+      tenant_id INTEGER REFERENCES tenants(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_lead_tags_phone ON lead_tags(phone, tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_lead_notes_phone ON lead_notes(phone, tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_status_history_phone ON status_history(phone, tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage(created_at, tenant_id);
+  `);
+
   // Idempotent migration: add tenant_id to tables created after the first migrations block
   const lateTableMigrations = [
     'ALTER TABLE follow_ups ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',

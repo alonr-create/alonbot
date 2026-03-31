@@ -1,0 +1,3492 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>360Shmikley — WA Manager</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="360Shmikley">
+<meta name="theme-color" content="#0088cc">
+<link rel="manifest" href="/manifest-wa.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon-wa-blue.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-blue-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/icon-wa-blue-192.png">
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Heebo:wght@300;400;500;600;700;900&display=swap');
+*{margin:0;padding:0;box-sizing:border-box;}
+:root{
+  --bg:#f0f2f5;--bg2:#ffffff;--bg3:#f5f6f8;
+  --border:#e0e0e0;--border-light:#eee;
+  --accent:#25D366;--accent2:#128C7E;--accent-light:#e7fce9;
+  --text:#1a1a1a;--text2:#667781;--text3:#8696a0;--text4:#b0b6ba;
+  --danger:#ea4335;--warning:#f59e0b;--success:#25D366;
+  --bubble-out:#d9fdd3;--bubble-in:#ffffff;
+  --chat-bg:#efeae2;
+  --sidebar-w:320px;--details-w:280px;
+}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;}
+
+/* ===== TENANT TABS ===== */
+.tenant-tab{
+  padding:6px 18px;border-radius:6px 6px 0 0;border:none;cursor:pointer;
+  font-family:inherit;font-size:13px;font-weight:500;color:#aab;
+  background:#0f3460;transition:all .15s;white-space:nowrap;
+}
+.tenant-tab:hover{background:#1a4a7a;color:#fff;}
+.tenant-tab.active{background:var(--bg);color:var(--text);font-weight:700;}
+
+/* ===== TOP BAR ===== */
+.topbar{
+  height:58px;background:linear-gradient(135deg,#ffffff 0%,#f0faf4 100%);border-bottom:2px solid var(--accent);
+  display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100;
+  box-shadow:0 1px 8px rgba(37,211,102,0.08);
+}
+.topbar-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--text);white-space:nowrap;}
+.topbar-logo .wa-circle{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;}
+.topbar-search{flex:1;max-width:400px;position:relative;}
+.topbar-search input{width:100%;padding:8px 14px 8px 36px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;color:var(--text);outline:none;transition:border .2s;}
+.topbar-search input:focus{border-color:var(--accent);}
+.topbar-search .search-icon{position:absolute;right:12px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:14px;pointer-events:none;}
+.topbar-channel{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-size:12px;color:var(--text2);cursor:default;white-space:nowrap;}
+.topbar-channel .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);}
+.topbar-spacer{flex:1;}
+.topbar-actions{display:flex;gap:8px;align-items:center;}
+.topbar-btn{width:36px;height:36px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;color:var(--text2);transition:all .15s;}
+.topbar-btn:hover{background:var(--bg3);color:var(--accent);}
+.nav-tab{
+  padding:6px 16px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);cursor:pointer;font-family:inherit;font-size:13px;
+  font-weight:500;color:var(--text2);transition:all .15s;display:flex;
+  align-items:center;gap:4px;white-space:nowrap;
+}
+.nav-tab:hover{border-color:var(--accent);color:var(--accent);}
+.nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
+
+/* ===== MAIN LAYOUT ===== */
+.app{display:flex;height:calc(100vh - 54px);overflow:hidden;}
+
+/* ===== LEFT: CONTACT LIST ===== */
+.contacts-panel{
+  width:var(--sidebar-w);min-width:260px;background:var(--bg2);
+  border-left:1px solid var(--border);display:flex;flex-direction:column;
+  overflow:hidden;flex-shrink:0;
+}
+.contacts-filters{display:flex;gap:4px;padding:10px 12px;border-bottom:1px solid var(--border-light);}
+.filter-tab{
+  padding:5px 12px;border-radius:16px;font-size:12px;font-weight:500;
+  cursor:pointer;background:var(--bg3);color:var(--text2);border:none;
+  transition:all .15s;white-space:nowrap;
+}
+.filter-tab:hover{background:var(--bg);color:var(--text);}
+.filter-tab.active{background:var(--accent);color:#fff;}
+.filter-tab .count{
+  display:inline-block;background:rgba(255,255,255,.3);padding:0 5px;
+  border-radius:8px;font-size:10px;margin-right:4px;font-weight:700;
+}
+.filter-tab.active .count{background:rgba(255,255,255,.25);}
+.biz-filter{padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;color:var(--text2);transition:all .15s;font-weight:500;}
+.biz-filter:hover{background:var(--bg3);}
+.biz-filter.active{background:var(--text);color:#fff;border-color:var(--text);}
+.biz-tag{display:inline-block;font-size:9px;font-weight:600;padding:1px 6px;border-radius:4px;margin-right:4px;flex-shrink:0;vertical-align:middle;}
+.biz-tag.dekel{background:#e0f2fe;color:#0369a1;}
+.biz-tag.voice_agent{background:#e0f2fe;color:#0369a1;}
+.biz-tag.alon_dev{background:#fef3c7;color:#92400e;}
+.biz-tag.campaign{background:#ede9fe;color:#6d28d9;}
+.biz-tag.whatsapp{background:#e7fce9;color:#15803d;}
+.contacts-list{flex:1;overflow-y:auto;overflow-x:hidden;}
+.contacts-list::-webkit-scrollbar{width:4px;}
+.contacts-list::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+
+.contact-item{
+  display:flex;gap:10px;padding:12px 14px;cursor:pointer;
+  border-bottom:1px solid var(--border-light);transition:background .12s;
+  align-items:center;position:relative;
+}
+.contact-item:hover{background:var(--bg3);}
+.contact-item.active{background:var(--accent-light);border-right:3px solid var(--accent);}
+.contact-avatar{
+  width:44px;height:44px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:16px;color:#fff;position:relative;
+}
+.contact-avatar .online-dot{
+  position:absolute;bottom:1px;left:1px;width:10px;height:10px;
+  border-radius:50%;background:var(--accent);border:2px solid var(--bg2);
+}
+.contact-body{flex:1;overflow:hidden;min-width:0;}
+.contact-row{display:flex;justify-content:space-between;align-items:center;}
+.contact-name{font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.contact-time{font-size:11px;color:var(--text3);white-space:nowrap;flex-shrink:0;}
+.contact-time.unread{color:var(--accent);font-weight:600;}
+.contact-preview{font-size:12px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px;}
+.contact-preview .check{color:var(--accent);font-size:11px;}
+.unread-badge{
+  background:var(--accent);color:#fff;font-size:10px;font-weight:700;
+  padding:1px 6px;border-radius:10px;min-width:18px;text-align:center;
+  flex-shrink:0;
+}
+
+/* ===== CENTER: CHAT AREA ===== */
+.chat-panel{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;}
+.chat-header{
+  height:56px;padding:0 20px;background:var(--bg2);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;
+}
+.chat-header-right{display:flex;align-items:center;gap:10px;}
+.chat-header-avatar{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;}
+.chat-header-info h3{font-size:15px;font-weight:600;color:var(--text);}
+.chat-header-info .status{font-size:11px;color:var(--accent);}
+.chat-header-left{display:flex;gap:6px;}
+.chat-header-btn{
+  width:34px;height:34px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:16px;color:var(--text2);transition:background .15s;
+}
+.chat-header-btn:hover{background:var(--bg3);}
+
+.chat-messages{
+  flex:1;overflow-y:auto;padding:16px 60px;
+  background-color:#e5ddd5;
+  background-image:url("https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png");
+  background-size:contain;
+  display:flex;flex-direction:column;gap:3px;
+}
+.chat-messages::-webkit-scrollbar{width:5px;}
+.chat-messages::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15);border-radius:4px;}
+
+.chat-empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--text3);gap:12px;
+}
+.chat-empty-state .empty-icon{font-size:60px;opacity:.4;}
+.chat-empty-state p{font-size:14px;}
+
+/* Day divider */
+.day-divider{
+  display:flex;align-items:center;justify-content:center;padding:12px 0;
+}
+.day-divider span{
+  background:rgba(225,218,208,.88);padding:4px 14px;border-radius:8px;
+  font-size:11px;color:var(--text2);font-weight:500;
+}
+
+/* Message bubbles */
+.msg-wrapper{display:flex;margin-bottom:1px;}
+.msg-wrapper.outgoing{justify-content:flex-end;}
+.msg-wrapper.incoming{justify-content:flex-start;}
+.msg-bubble{
+  max-width:65%;padding:6px 10px 2px;border-radius:8px;
+  font-size:13.5px;line-height:1.55;word-wrap:break-word;
+  position:relative;box-shadow:0 1px 1px rgba(0,0,0,.06);
+}
+.msg-bubble.incoming{background:var(--bubble-in);border-radius:0 8px 8px 8px;}
+.msg-bubble.outgoing{background:var(--bubble-out);border-radius:8px 0 8px 8px;}
+.msg-meta{display:flex;align-items:center;justify-content:flex-end;gap:4px;margin-top:1px;}
+.msg-time{font-size:10.5px;color:var(--text3);}
+.msg-check{font-size:12px;color:var(--text4);}
+.msg-check.read{color:#53bdeb;}
+.msg-text{white-space:pre-wrap;}
+
+/* Typing indicator */
+.typing-indicator{
+  display:none;align-self:flex-start;background:var(--bubble-in);
+  padding:10px 14px;border-radius:0 12px 12px 12px;
+  box-shadow:0 1px 1px rgba(0,0,0,.06);
+}
+.typing-indicator.show{display:flex;}
+.typing-dots{display:flex;gap:3px;}
+.typing-dots span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:typingBounce .8s infinite;}
+.typing-dots span:nth-child(2){animation-delay:.15s;}
+.typing-dots span:nth-child(3){animation-delay:.3s;}
+@keyframes typingBounce{0%,60%,100%{transform:translateY(0);}30%{transform:translateY(-4px);}}
+
+/* Chat input */
+.chat-input-area{
+  padding:10px 16px;background:var(--bg2);border-top:1px solid var(--border);
+  display:flex;gap:8px;align-items:flex-end;flex-shrink:0;
+}
+.input-btn{
+  width:38px;height:38px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  font-size:20px;color:var(--text2);transition:color .15s;flex-shrink:0;
+}
+.input-btn:hover{color:var(--accent);}
+.chat-textarea{
+  flex:1;padding:9px 14px;border-radius:10px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text);font-family:inherit;font-size:13.5px;
+  resize:none;outline:none;max-height:120px;min-height:38px;line-height:1.4;
+}
+.chat-textarea:focus{border-color:var(--accent);background:var(--bg2);}
+.send-btn{
+  width:38px;height:38px;border-radius:50%;background:var(--accent);
+  border:none;color:#fff;cursor:pointer;font-size:18px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  transition:background .15s;
+}
+.send-btn:hover{background:var(--accent2);}
+.send-btn:disabled{opacity:.4;cursor:not-allowed;}
+
+/* Quick replies bar */
+.quick-replies-bar{
+  padding:6px 16px;background:var(--bg2);border-top:1px solid var(--border-light);
+  display:flex;gap:6px;overflow-x:auto;flex-shrink:0;
+}
+.quick-replies-bar::-webkit-scrollbar{height:0;}
+.qr-chip{
+  padding:5px 12px;border-radius:16px;border:1px solid var(--border);
+  background:var(--bg3);font-size:11px;color:var(--text2);
+  cursor:pointer;white-space:nowrap;transition:all .15s;font-family:inherit;
+}
+.qr-chip:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-light);}
+
+/* ===== RIGHT: DETAILS PANEL ===== */
+.details-panel{
+  width:var(--details-w);min-width:240px;background:var(--bg2);
+  border-right:1px solid var(--border);display:flex;flex-direction:column;
+  overflow:hidden;flex-shrink:0;
+}
+.details-panel.hidden{display:none;}
+.details-header{
+  padding:14px 16px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.details-header h4{font-size:14px;font-weight:600;color:var(--text);}
+.details-close{
+  width:28px;height:28px;border-radius:50%;border:none;background:transparent;
+  cursor:pointer;font-size:16px;color:var(--text2);display:flex;align-items:center;
+  justify-content:center;transition:background .15s;
+}
+.details-close:hover{background:var(--bg3);}
+.details-body{flex:1;overflow-y:auto;padding:0;}
+.details-body::-webkit-scrollbar{width:4px;}
+.details-body::-webkit-scrollbar-thumb{background:#ccc;border-radius:4px;}
+
+.detail-profile{text-align:center;padding:24px 16px 16px;border-bottom:1px solid var(--border-light);}
+.detail-avatar{
+  width:72px;height:72px;border-radius:50%;margin:0 auto 10px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:26px;color:#fff;
+}
+.detail-name{font-size:16px;font-weight:700;color:var(--text);}
+.detail-phone{font-size:13px;color:var(--text2);margin-top:2px;direction:ltr;unicode-bidi:embed;}
+.detail-channel{
+  display:inline-flex;align-items:center;gap:4px;margin-top:8px;
+  padding:3px 10px;border-radius:12px;background:var(--accent-light);
+  font-size:11px;color:var(--accent2);font-weight:500;
+}
+
+.detail-section{padding:14px 16px;border-bottom:1px solid var(--border-light);}
+.detail-section-title{
+  font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;
+  justify-content:space-between;
+}
+.detail-section-title .add-btn{
+  font-size:18px;cursor:pointer;color:var(--accent);background:none;border:none;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;transition:background .15s;
+}
+.detail-section-title .add-btn:hover{background:var(--bg3);}
+
+/* Tags */
+.tags-container{display:flex;flex-wrap:wrap;gap:5px;}
+.tag-chip{
+  padding:3px 10px;border-radius:12px;font-size:11px;font-weight:500;
+  display:flex;align-items:center;gap:4px;cursor:default;
+}
+.tag-chip .remove-tag{cursor:pointer;font-size:13px;opacity:.6;transition:opacity .15s;}
+.tag-chip .remove-tag:hover{opacity:1;}
+.tag-hot{background:#fde8e8;color:#c0392b;}
+.tag-warm{background:#fef3cd;color:#856404;}
+.tag-cold{background:#d1ecf1;color:#0c5460;}
+.tag-vip{background:#e8daef;color:#6c3483;}
+.tag-new{background:#d4efdf;color:#1e8449;}
+.tag-default{background:var(--bg3);color:var(--text2);border:1px solid var(--border);}
+.tag-input{
+  display:none;padding:4px 8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-size:11px;font-family:inherit;outline:none;width:100%;
+  margin-top:6px;
+}
+.tag-input.show{display:block;}
+.tag-input:focus{border-color:var(--accent);}
+
+/* Notes */
+.notes-list{display:flex;flex-direction:column;gap:6px;}
+.note-item{
+  padding:8px 10px;background:var(--bg3);border-radius:8px;
+  font-size:12px;color:var(--text);line-height:1.4;position:relative;
+}
+.note-item .note-date{font-size:10px;color:var(--text3);margin-top:4px;display:block;}
+.note-input{
+  display:none;padding:6px 8px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-size:12px;font-family:inherit;outline:none;
+  width:100%;resize:none;min-height:50px;margin-top:6px;
+}
+.note-input.show{display:block;}
+.note-input:focus{border-color:var(--accent);}
+
+/* Status */
+.status-select{
+  width:100%;padding:6px 10px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg3);font-family:inherit;font-size:12px;color:var(--text);
+  cursor:pointer;outline:none;
+}
+.status-select:focus{border-color:var(--accent);}
+
+/* Status history */
+.status-history{display:flex;flex-direction:column;gap:4px;margin-top:8px;}
+.status-history-item{font-size:11px;color:var(--text3);display:flex;gap:6px;}
+.status-history-item .sh-status{font-weight:600;color:var(--text2);}
+
+/* ===== EMOJI PICKER ===== */
+.emoji-picker{
+  display:none;position:absolute;bottom:60px;right:60px;
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 4px 20px rgba(0,0,0,.12);padding:10px;z-index:50;
+  width:280px;
+}
+.emoji-picker.show{display:block;}
+.emoji-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-height:200px;overflow-y:auto;}
+.emoji-grid button{
+  width:32px;height:32px;border:none;background:transparent;cursor:pointer;
+  font-size:20px;border-radius:6px;transition:background .1s;display:flex;
+  align-items:center;justify-content:center;
+}
+.emoji-grid button:hover{background:var(--bg3);}
+
+/* ===== FLOW EDITOR ===== */
+.flow-card{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;transition:all .15s;}
+.flow-card:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(37,211,102,0.08);}
+.flow-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+.flow-info{flex:1;min-width:0;}
+.flow-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px;}
+.flow-meta{display:flex;gap:12px;font-size:11px;color:var(--text3);}
+.flow-meta strong{color:var(--text2);}
+.flow-actions{display:flex;gap:8px;align-items:center;}
+.flow-toggle{position:relative;width:38px;height:22px;display:inline-block;}
+.flow-toggle input{opacity:0;width:0;height:0;}
+.flow-toggle .slider{position:absolute;inset:0;background:#ccc;border-radius:22px;cursor:pointer;transition:.3s;}
+.flow-toggle .slider::before{content:'';position:absolute;width:16px;height:16px;right:3px;bottom:3px;background:#fff;border-radius:50%;transition:.3s;}
+.flow-toggle input:checked+.slider{background:var(--accent);}
+.flow-toggle input:checked+.slider::before{right:18px;}
+.flow-editor-overlay{display:none;position:fixed;inset:0;z-index:300;background:var(--bg);}
+.flow-editor-overlay.open{display:flex;flex-direction:column;}
+.fe-toolbar{height:52px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;}
+.fe-toolbar .fe-title{font-size:16px;font-weight:700;color:var(--accent);display:flex;align-items:center;gap:8px;}
+.fe-toolbar .fe-title input{background:transparent;border:none;border-bottom:2px solid transparent;font-size:16px;font-weight:700;color:var(--text);font-family:inherit;outline:none;padding:2px 4px;width:200px;}
+.fe-toolbar .fe-title input:focus{border-bottom-color:var(--accent);}
+.fe-toolbar-actions{display:flex;gap:8px;align-items:center;}
+.fe-body{flex:1;display:flex;overflow:hidden;}
+.fe-sidebar{width:220px;background:var(--bg2);border-left:1px solid var(--border);padding:16px;overflow-y:auto;flex-shrink:0;}
+.fe-sidebar h4{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;}
+.fe-node-type{padding:10px 12px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;cursor:grab;display:flex;align-items:center;gap:10px;transition:all .2s;background:var(--bg);font-size:13px;font-weight:500;}
+.fe-node-type:hover{border-color:var(--accent);transform:translateY(-1px);box-shadow:0 2px 8px rgba(0,0,0,0.06);}
+.fe-node-type .nt-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;}
+.fe-canvas-wrap{flex:1;position:relative;overflow:hidden;background:var(--bg);cursor:grab;}
+.fe-canvas-wrap.grabbing{cursor:grabbing;}
+.fe-canvas{position:absolute;top:0;left:0;right:auto;width:4000px;height:4000px;transform-origin:0 0;}
+.fe-canvas-grid{position:absolute;inset:0;background-image:radial-gradient(circle,var(--border) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;}
+.fe-canvas svg.fe-connections{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;}
+.fe-canvas svg.fe-connections path{stroke:var(--border);stroke-width:2;fill:none;}
+.fe-canvas svg.fe-connections path.active{stroke:var(--accent);stroke-width:2.5;}
+.fe-node{position:absolute;width:220px;background:var(--bg2);border:2px solid var(--border);border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.06);cursor:grab;z-index:10;transition:box-shadow .2s;user-select:none;}
+.fe-node:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1);}
+.fe-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,211,102,0.2);}
+.fe-node.dragging{z-index:100;opacity:0.9;cursor:grabbing;}
+.fe-node-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;border-radius:10px 10px 0 0;}
+.fe-node-header .nh-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
+.fe-node-header .nh-label{font-size:12px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.fe-node-header .nh-delete{cursor:pointer;color:var(--text3);font-size:14px;opacity:0;transition:opacity .2s;}
+.fe-node:hover .nh-delete{opacity:1;}
+.fe-node-header .nh-delete:hover{color:var(--danger);}
+.fe-node-body{padding:10px 14px;font-size:12px;color:var(--text2);min-height:36px;}
+.fe-node-body textarea,.fe-node-body input,.fe-node-body select{width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:11px;outline:none;background:var(--bg);color:var(--text);resize:vertical;}
+.fe-node-body textarea:focus,.fe-node-body input:focus,.fe-node-body select:focus{border-color:var(--accent);}
+.fe-node-body label{display:block;font-size:10px;color:var(--text3);margin-bottom:2px;margin-top:6px;}
+.fe-node-body label:first-child{margin-top:0;}
+.fe-port{position:absolute;width:14px;height:14px;border-radius:50%;background:var(--bg2);border:2px solid var(--border);cursor:crosshair;z-index:20;transition:all .15s;}
+.fe-port:hover{transform:scale(1.3);border-color:var(--accent);background:var(--accent);}
+.fe-port.port-in{top:50%;right:-7px;transform:translateY(-50%);}
+.fe-port.port-out{top:50%;left:-7px;transform:translateY(-50%);}
+.fe-port.port-in:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.port-out:hover{transform:translateY(-50%) scale(1.3);}
+.fe-port.connected{background:var(--accent);border-color:var(--accent);}
+.fe-node.trigger-node{border-color:#7b2ff7;}
+.fe-node.trigger-node .fe-node-header{background:linear-gradient(135deg,rgba(123,47,247,0.08),transparent);}
+.fe-zoom{position:absolute;bottom:16px;left:16px;display:flex;gap:4px;z-index:50;}
+.fe-zoom button{width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--text);transition:all .15s;}
+.fe-zoom button:hover{border-color:var(--accent);color:var(--accent);}
+.fe-zoom .zoom-level{padding:0 8px;line-height:32px;font-size:11px;color:var(--text2);}
+
+/* ===== RESPONSIVE ===== */
+@media(max-width:900px){
+  .details-panel{display:none!important;}
+  .chat-messages{padding:12px 16px;}
+}
+@media(max-width:700px){
+  .app{flex-direction:column;}
+  .contacts-panel{width:100%;height:100%;border-left:none;border-bottom:1px solid var(--border);}
+  .contacts-panel.hidden-mobile{display:none;}
+  .chat-panel{height:100%;}
+  .chat-panel.hidden-mobile{display:none;}
+  .topbar{height:auto;flex-wrap:wrap;padding:8px 12px;gap:8px;}
+  .topbar-logo span{font-size:13px!important;}
+  .topbar-search{max-width:100%;order:10;flex-basis:100%;}
+  .topbar-search input{font-size:14px;padding:10px 14px;}
+  .topbar-channel{display:none;}
+  .topbar-actions{flex-wrap:wrap;gap:4px;order:5;}
+  .nav-tab{font-size:11px;padding:5px 10px;}
+  .mobile-back{display:flex!important;}
+  .biz-filter{font-size:10px;padding:3px 8px;}
+  .contacts-filters{flex-wrap:wrap;}
+  .contact-name .biz-tag{font-size:8px;padding:1px 4px;}
+}
+.mobile-back{display:none!important;margin-left:8px;}
+
+/* ===== SCROLLBAR GLOBAL ===== */
+::-webkit-scrollbar{width:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px;}
+::-webkit-scrollbar-thumb:hover{background:#aaa;}
+
+/* ===== ANIMATIONS ===== */
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+.msg-wrapper{animation:fadeIn .2s ease;}
+.contact-item{animation:fadeIn .15s ease;}
+
+/* Notification badge pulse */
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5);}100%{box-shadow:0 0 0 8px rgba(37,211,102,0);}}
+.unread-badge{animation:pulse 1.5s infinite;}
+
+/* ===== TEMPLATES ===== */
+.tpl-card{
+  background:var(--bg2);border:1px solid var(--border);border-radius:12px;
+  padding:16px 20px;display:flex;gap:16px;align-items:flex-start;
+  transition:box-shadow .15s;
+}
+.tpl-card:hover{box-shadow:0 2px 12px rgba(0,0,0,.06);}
+.tpl-icon{
+  width:44px;height:44px;border-radius:10px;display:flex;align-items:center;
+  justify-content:center;font-size:20px;flex-shrink:0;
+}
+.tpl-icon.utility{background:#e8f4fd;color:#1976d2;}
+.tpl-icon.marketing{background:#fff3e0;color:#e65100;}
+.tpl-body{flex:1;min-width:0;}
+.tpl-header{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;}
+.tpl-name{font-size:14px;font-weight:600;color:var(--text);direction:ltr;unicode-bidi:embed;}
+.tpl-badge{
+  padding:3px 10px;border-radius:12px;font-size:11px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;
+}
+.tpl-badge.approved{background:#d4edda;color:#155724;}
+.tpl-badge.pending{background:#fff3cd;color:#856404;}
+.tpl-badge.rejected{background:#f8d7da;color:#721c24;}
+.tpl-text{
+  font-size:13px;color:var(--text2);line-height:1.5;
+  background:var(--bg3);border-radius:8px;padding:10px 14px;
+  margin-top:4px;white-space:pre-wrap;border:1px solid var(--border-light);
+}
+.tpl-meta{display:flex;gap:12px;margin-top:8px;font-size:11px;color:var(--text3);}
+.tpl-actions{display:flex;gap:6px;flex-shrink:0;align-self:center;}
+.tpl-btn{
+  padding:6px 14px;border-radius:8px;border:1px solid var(--border);
+  background:var(--bg2);cursor:pointer;font-family:inherit;font-size:12px;
+  color:var(--text2);transition:all .15s;
+}
+.tpl-btn:hover{border-color:var(--accent);color:var(--accent);}
+.tpl-btn.send{background:var(--accent);color:#fff;border-color:var(--accent);}
+.tpl-btn.send:hover{background:var(--accent2);}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo" style="cursor:pointer;" onclick="showView('overview')">
+    <img src="/icon-wa-blue-192.png" alt="360Shmikley" width="36" height="36" style="flex-shrink:0;border-radius:8px;">
+    <div style="display:flex;flex-direction:column;line-height:1.1;">
+      <span style="font-size:15px;font-weight:900;background:linear-gradient(135deg,#25D366,#128C7E);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px;">360Shmikley</span>
+      <span style="font-size:9px;font-weight:400;color:var(--text3);letter-spacing:0.5px;">WA Manager</span>
+    </div>
+  </div>
+  <div class="topbar-search">
+    <input type="text" id="globalSearch" placeholder="חיפוש אנשי קשר, הודעות..." oninput="handleSearch(this.value)">
+    <span class="search-icon">🔍</span>
+  </div>
+  <div class="topbar-channel">
+    <span class="dot"></span>
+    Meta Cloud API
+  </div>
+  <div class="topbar-spacer"></div>
+  <div class="topbar-actions">
+    <button class="nav-tab active" id="navInbox" onclick="showView('inbox')">💬 שיחות</button>
+    <button class="nav-tab" id="navOverview" onclick="showView('overview')">📊 סקירה</button>
+    <button class="nav-tab" id="navTemplates" onclick="showView('templates')">📋 תבניות</button>
+    <button class="nav-tab" id="navBroadcasts" onclick="showView('broadcasts')">📢 שידורים</button>
+    <button class="nav-tab" id="navAnalytics" onclick="showView('analytics')">📈 אנליטיקס</button>
+    <button class="nav-tab" id="navCosts" onclick="showView('costs')">💰 עלויות</button>
+    <button class="nav-tab" id="navCampaign" onclick="showView('campaign')">🚀 קמפיין</button>
+    <button class="nav-tab" id="navFlows" onclick="showView('flows')">⚡ פלואים</button>
+    <button class="topbar-btn" title="רענון" onclick="refreshAll()">🔄</button>
+    <button class="topbar-btn" title="דשבורד ראשי" onclick="window.location='/dashboard?token='+TOKEN">🏠</button>
+  </div>
+</div>
+<div id="tenantTabs" style="display:none;background:#16213e;padding:6px 16px;gap:4px;flex-shrink:0;overflow-x:auto;"></div>
+
+<!-- MAIN APP -->
+<div class="app">
+
+  <!-- LEFT: CONTACTS -->
+  <div class="contacts-panel" id="contactsPanel">
+    <div class="contacts-filters" style="display:none;">
+      <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+    </div>
+    <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
+      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">🔵 הכל</button>
+      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל</button>
+      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
+      <button class="biz-filter" data-biz="whatsapp" onclick="setBizFilter('whatsapp',this)">💬 אורגני</button>
+    </div>
+    <div class="contacts-list" id="contactsList">
+      <!-- dynamically populated -->
+    </div>
+  </div>
+
+  <!-- CENTER: CHAT -->
+  <div class="chat-panel" id="chatPanel">
+    <div class="chat-header" id="chatHeader" style="display:none;">
+      <div class="chat-header-right" style="display:flex;align-items:center;gap:10px;">
+        <button class="chat-header-btn mobile-back" onclick="showMobileContacts()">→</button>
+        <div class="chat-header-avatar" id="chatHeaderAvatar"></div>
+        <div class="chat-header-info">
+          <h3 id="chatHeaderName"></h3>
+          <div class="status" id="chatHeaderStatus">מקוון</div>
+        </div>
+      </div>
+      <div class="chat-header-left">
+        <button class="chat-header-btn" title="פרטים" onclick="toggleDetails()">ℹ️</button>
+      </div>
+    </div>
+    <div class="chat-messages" id="chatMessages">
+      <div class="chat-empty-state" id="emptyState">
+        <div class="empty-icon">💬</div>
+        <p>בחר שיחה מהרשימה כדי להתחיל</p>
+      </div>
+    </div>
+    <div class="typing-indicator" id="typingIndicator">
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    </div>
+    <div class="quick-replies-bar" id="quickRepliesBar" style="display:none;"></div>
+    <div class="chat-input-area" id="chatInputArea" style="display:none;">
+      <button class="input-btn" title="אמוג'י" onclick="toggleEmoji()">😊</button>
+      <button class="input-btn" title="קובץ מצורף" onclick="document.getElementById('fileInput').click()">📎</button>
+      <input type="file" id="fileInput" style="display:none" accept="image/*,.pdf,.doc,.docx,.xls,.xlsx" onchange="handleFileSelect(event)">
+      <textarea class="chat-textarea" id="chatInput" rows="1" placeholder="הקלד הודעה..." oninput="autoResize(this)" onkeydown="handleInputKey(event)"></textarea>
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()" disabled>➤</button>
+      <div class="emoji-picker" id="emojiPicker"></div>
+    </div>
+  </div>
+
+  <!-- RIGHT: DETAILS -->
+  <div class="details-panel hidden" id="detailsPanel">
+    <div class="details-header">
+      <h4>פרטי איש קשר</h4>
+      <button class="details-close" onclick="toggleDetails()">✕</button>
+    </div>
+    <div class="details-body">
+      <div class="detail-profile">
+        <div class="detail-avatar" id="detailAvatar"></div>
+        <div class="detail-name" id="detailName"></div>
+        <div class="detail-phone" id="detailPhone"></div>
+        <div class="detail-channel" id="detailBiz">
+          <span>📱</span> WhatsApp
+        </div>
+      </div>
+
+      <!-- Status -->
+      <div class="detail-section">
+        <div class="detail-section-title">סטטוס</div>
+        <select class="status-select" id="detailStatus" onchange="updateStatus(this.value)">
+          <option value="new">חדש</option>
+          <option value="lead">ליד</option>
+          <option value="qualified">מאומת</option>
+          <option value="meeting">פגישה</option>
+          <option value="proposal">הצעת מחיר</option>
+          <option value="won">זכייה</option>
+          <option value="lost">אבוד</option>
+        </select>
+        <div class="status-history" id="statusHistory"></div>
+      </div>
+
+      <!-- Tags -->
+      <div class="detail-section">
+        <div class="detail-section-title">
+          תגיות
+          <button class="add-btn" onclick="showTagInput()">+</button>
+        </div>
+        <div class="tags-container" id="tagsContainer"></div>
+        <input type="text" class="tag-input" id="tagInput" placeholder="הקלד תגית ולחץ Enter..." onkeydown="handleTagKey(event)">
+      </div>
+
+      <!-- Notes -->
+      <div class="detail-section">
+        <div class="detail-section-title">
+          הערות
+          <button class="add-btn" onclick="showNoteInput()">+</button>
+        </div>
+        <div class="notes-list" id="notesList"></div>
+        <textarea class="note-input" id="noteInput" placeholder="הוסף הערה..." onkeydown="handleNoteKey(event)"></textarea>
+      </div>
+
+      <!-- Assign -->
+      <div class="detail-section">
+        <div class="detail-section-title">שיוך</div>
+        <select class="status-select" id="detailAssign">
+          <option value="">לא משויך</option>
+          <option value="alon">אלון</option>
+          <option value="bot">בוט</option>
+          <option value="yael">יעל</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- TEMPLATES VIEW (hidden by default) -->
+<div id="templatesView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">📋 תבניות הודעה (Message Templates)</h2>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="openCreateTemplateModal()" style="padding:8px 16px;border-radius:8px;background:var(--bg2);color:var(--accent);border:2px solid var(--accent);cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='var(--accent)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg2)';this.style.color='var(--accent)'">
+          ➕ תבנית חדשה
+        </button>
+        <a href="https://business.facebook.com/latest/whatsapp_manager/message_templates/?business_id=296034178660107" target="_blank"
+           style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;font-size:13px;font-weight:500;">
+          ניהול ב-Meta →
+        </a>
+      </div>
+    </div>
+    <div id="templatesList" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="text-align:center;padding:40px;color:var(--text3);">טוען תבניות...</div>
+    </div>
+    <!-- Send template modal -->
+    <div id="templateModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);z-index:200;align-items:center;justify-content:center;">
+      <div style="background:var(--bg2);border-radius:16px;padding:24px;width:360px;box-shadow:0 8px 40px rgba(0,0,0,.2);">
+        <h3 style="font-size:16px;font-weight:600;margin-bottom:16px;">שליחת תבנית</h3>
+        <div style="margin-bottom:12px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">שם התבנית</label>
+          <input id="modalTemplateName" readonly style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">מספר טלפון (עם קידומת מדינה)</label>
+          <input id="modalPhone" placeholder="972546300783" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;direction:ltr;">
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-start;">
+          <button onclick="doSendTemplate()" style="padding:8px 20px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;">שלח</button>
+          <button onclick="closeTemplateModal()" style="padding:8px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
+        </div>
+        <div id="modalResult" style="margin-top:12px;font-size:12px;display:none;"></div>
+      </div>
+    </div>
+
+    <!-- Create template modal -->
+    <div id="createTemplateModal" onclick="if(event.target===this)closeCreateTemplateModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;align-items:flex-start;justify-content:center;overflow-y:auto;padding:40px 16px;">
+      <div style="background:var(--bg2);border-radius:16px;padding:28px;width:100%;max-width:780px;box-shadow:0 8px 40px rgba(0,0,0,.25);position:relative;display:flex;gap:24px;flex-wrap:wrap;">
+        <!-- Close button -->
+        <button onclick="closeCreateTemplateModal()" style="position:absolute;top:12px;left:14px;width:32px;height:32px;border-radius:50%;border:none;background:var(--bg3);cursor:pointer;font-size:18px;color:var(--text2);display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1;" onmouseover="this.style.background='var(--danger)';this.style.color='#fff'" onmouseout="this.style.background='var(--bg3)';this.style.color='var(--text2)'">✕</button>
+
+        <!-- Left: Form -->
+        <div style="flex:1;min-width:300px;">
+          <h3 style="font-size:18px;font-weight:700;margin-bottom:20px;color:var(--text);">➕ יצירת תבנית חדשה</h3>
+
+          <!-- Template Name -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">שם תבנית</label>
+            <input id="ctplName" placeholder="my_template_name" oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'');updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:monospace;font-size:13px;direction:ltr;">
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">אותיות קטנות באנגלית, מספרים וקו תחתון בלבד</div>
+          </div>
+
+          <!-- Category + Language row -->
+          <div style="display:flex;gap:12px;margin-bottom:14px;">
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">קטגוריה</label>
+              <select id="ctplCategory" onchange="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+                <option value="MARKETING">📢 שיווקית (Marketing)</option>
+                <option value="UTILITY">🔧 שירות (Utility)</option>
+              </select>
+            </div>
+            <div style="flex:1;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">שפה</label>
+              <select id="ctplLang" onchange="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+                <option value="he">🇮🇱 עברית (he)</option>
+                <option value="en">🇺🇸 English (en)</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Header Type -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">כותרת (Header)</label>
+            <select id="ctplHeaderType" onchange="toggleHeaderInput();updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+              <option value="NONE">ללא</option>
+              <option value="TEXT">טקסט</option>
+              <option value="IMAGE">תמונה</option>
+            </select>
+          </div>
+
+          <!-- Header Text (conditional) -->
+          <div id="ctplHeaderTextWrap" style="margin-bottom:14px;display:none;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">טקסט כותרת</label>
+            <input id="ctplHeaderText" placeholder="כותרת ההודעה" oninput="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+          </div>
+
+          <!-- Body -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">גוף ההודעה</label>
+            <textarea id="ctplBody" rows="5" placeholder="שלום {{1}}, תודה שפנית אלינו!&#10;נשמח לעזור לך עם {{2}}." oninput="updateCreatePreview()" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;resize:vertical;line-height:1.5;"></textarea>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;">השתמש ב-{{1}}, {{2}} וכו׳ למשתנים</div>
+          </div>
+
+          <!-- Footer -->
+          <div style="margin-bottom:14px;">
+            <label style="font-size:12px;font-weight:600;color:var(--text2);display:block;margin-bottom:4px;">כותרת תחתונה (Footer) — אופציונלי</label>
+            <input id="ctplFooter" placeholder="Alon.dev — בניית אתרים" oninput="updateCreatePreview()" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+          </div>
+
+          <!-- Buttons -->
+          <div style="margin-bottom:18px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+              <label style="font-size:12px;font-weight:600;color:var(--text2);">כפתורים (עד 3)</label>
+              <button onclick="addTemplateButton()" style="padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;color:var(--accent);font-weight:600;">+ הוסף כפתור</button>
+            </div>
+            <div id="ctplButtons" style="display:flex;flex-direction:column;gap:8px;"></div>
+          </div>
+
+          <!-- Actions -->
+          <div style="display:flex;gap:8px;align-items:center;">
+            <button onclick="createTemplate()" id="ctplSubmitBtn" style="padding:10px 24px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;transition:all .15s;">צור תבנית</button>
+            <button onclick="closeCreateTemplateModal()" style="padding:10px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
+          </div>
+          <div id="ctplResult" style="margin-top:12px;font-size:13px;display:none;padding:10px 14px;border-radius:8px;"></div>
+        </div>
+
+        <!-- Right: Live Preview -->
+        <div style="width:280px;flex-shrink:0;">
+          <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px;">תצוגה מקדימה</div>
+          <div style="background:var(--chat-bg);border-radius:12px;padding:16px;min-height:200px;border:1px solid var(--border);">
+            <div id="ctplPreview" style="direction:rtl;">
+              <div style="background:var(--bubble-out);border-radius:12px 12px 0 12px;padding:10px 12px;font-size:13px;line-height:1.6;color:var(--text);box-shadow:0 1px 2px rgba(0,0,0,.06);max-width:100%;">
+                <div id="ctplPreviewHeader" style="font-weight:700;font-size:14px;margin-bottom:6px;display:none;"></div>
+                <div id="ctplPreviewImagePlaceholder" style="display:none;background:var(--bg3);border-radius:8px;height:120px;margin-bottom:8px;display:none;align-items:center;justify-content:center;color:var(--text3);font-size:24px;">🖼️</div>
+                <div id="ctplPreviewBody" style="white-space:pre-wrap;word-break:break-word;">הקלד את גוף ההודעה...</div>
+                <div id="ctplPreviewFooter" style="font-size:11px;color:var(--text3);margin-top:6px;font-style:italic;display:none;"></div>
+                <div id="ctplPreviewButtons" style="margin-top:8px;display:none;border-top:1px solid rgba(0,0,0,.08);padding-top:8px;"></div>
+                <div style="text-align:left;font-size:10px;color:var(--text4);margin-top:4px;">12:00 ✓✓</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CAMPAIGN VIEW -->
+<div id="campaignView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">🚀 קמפיין לידים — Alon.dev</h2>
+      <button onclick="loadCampaign()" style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:13px;">🔄 רענן</button>
+    </div>
+    <!-- Summary cards -->
+    <div id="campaignCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;"></div>
+    <!-- Messages list -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:16px;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">📱 הודעות WhatsApp שנשלחו</div>
+      <div id="campaignMessages" style="max-height:400px;overflow-y:auto;"></div>
+    </div>
+    <!-- Calls list -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">📞 שיחות שבוצעו</div>
+      <div id="campaignCalls" style="max-height:400px;overflow-y:auto;"></div>
+    </div>
+  </div>
+</div>
+
+<!-- COSTS VIEW -->
+<div id="costsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">💰 מעקב עלויות</h2>
+      <select id="costsDaysFilter" onchange="loadCosts()" style="padding:6px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:13px;">
+        <option value="7">7 ימים</option>
+        <option value="14">14 ימים</option>
+        <option value="30" selected>30 ימים</option>
+      </select>
+    </div>
+    <!-- Today summary cards -->
+    <div id="costsTodayCards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:24px;"></div>
+    <!-- Chart area -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:20px;margin-bottom:24px;">
+      <h3 style="font-size:14px;font-weight:600;margin-bottom:16px;color:var(--text);">עלות יומית כוללת ($)</h3>
+      <div id="costsChart" style="height:200px;display:flex;align-items:flex-end;gap:4px;"></div>
+    </div>
+    <!-- WhatsApp costs table -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;margin-bottom:16px;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">📱 WhatsApp (Meta Cloud API)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg3);text-align:right;">
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">תאריך</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">שיחות</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">הודעות נכנסות</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">הודעות יוצאות</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">עלות משוערת</th>
+          </tr>
+        </thead>
+        <tbody id="waTableBody"></tbody>
+      </table>
+    </div>
+    <!-- Claude API costs table -->
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);overflow:hidden;">
+      <div style="padding:12px 14px;border-bottom:1px solid var(--border);font-weight:600;font-size:14px;color:var(--text);display:flex;align-items:center;gap:6px;">🤖 Claude API (Anthropic)</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--bg3);text-align:right;">
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">תאריך</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">מודל</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">קריאות</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">טוקנים נכנסים</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">טוקנים יוצאים</th>
+            <th style="padding:10px 14px;font-weight:600;color:var(--text2);">עלות</th>
+          </tr>
+        </thead>
+        <tbody id="costsTableBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- OVERVIEW VIEW -->
+<div id="overviewView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📊 סקירה כללית</h2>
+    <div id="overviewStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;"></div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;">
+      <button onclick="showView('broadcasts')" style="padding:8px 18px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;">📢 שידור חדש</button>
+      <button onclick="showView('inbox')" style="padding:8px 18px;border-radius:8px;background:var(--bg2);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">💬 שיחות</button>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;">
+      <h3 style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;">פעילות אחרונה</h3>
+      <div id="recentActivity" style="font-size:13px;">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<!-- BROADCASTS VIEW -->
+<div id="broadcastsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:800px;margin:0 auto;">
+    <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📢 שידורים</h2>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
+      <h3 style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:14px;">שידור חדש</h3>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;font-weight:500;">נמענים</label>
+        <select id="bcRecipientMode" onchange="updateBcPreview()" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:14px;">
+          <option value="all">כל הלידים</option>
+          <option value="status">לפי סטטוס</option>
+          <option value="source">לפי מקור</option>
+        </select>
+      </div>
+      <div id="bcStatusFilter" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">סנן לפי סטטוס</label>
+        <select id="bcStatusSelect" onchange="updateBcCount()" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:14px;">
+          <option value="new">חדש</option>
+          <option value="contacted">יצרנו קשר</option>
+          <option value="interested">מעוניין</option>
+          <option value="meeting_set">נקבע זום</option>
+        </select>
+      </div>
+      <div id="bcSourceFilter" style="display:none;margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">סנן לפי מקור</label>
+        <select id="bcSourceSelect" onchange="updateBcCount()" style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:14px;">
+          <option value="voice_agent">Voice Agent</option>
+          <option value="alon_dev">Alon.dev</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="dekel">דקל לפרישה</option>
+        </select>
+      </div>
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:12px;color:var(--text2);margin-bottom:4px;">הודעה</label>
+        <textarea id="bcMessage" placeholder="היי {name}, ..." style="width:100%;padding:10px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);font-family:inherit;font-size:14px;min-height:80px;resize:vertical;line-height:1.5;"></textarea>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px;">משתנים: {name} — שם הליד, {phone} — מספר טלפון</div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button onclick="sendBroadcast()" style="padding:8px 20px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;">🚀 שלח עכשיו</button>
+        <span id="bcCount" style="font-size:12px;color:var(--text2);"></span>
+      </div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;">
+      <h3 style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:12px;">היסטוריית שידורים</h3>
+      <div id="broadcastHistory" style="font-size:13px;color:var(--text3);">אין שידורים קודמים</div>
+    </div>
+  </div>
+</div>
+
+<!-- ANALYTICS VIEW -->
+<div id="analyticsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:1000px;margin:0 auto;">
+    <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📈 אנליטיקס</h2>
+    <!-- Phone health -->
+    <div id="phoneHealthCard" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;display:none;">
+      <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;">📞 בריאות הקו</h3>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;" id="phoneHealthGrid"></div>
+    </div>
+    <!-- Health cards -->
+    <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:20px;" id="analyticsHealthCards">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:var(--accent);" id="statTotalMessages">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">הודעות היום</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#25D366;" id="statButtons">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">כפתורים נשלחו</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#7b2ff7;" id="statLists">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">רשימות נשלחו</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#e68a00;" id="statVoice">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">הודעות קוליות</div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;text-align:center;">
+        <div style="font-size:24px;font-weight:800;color:#0099cc;" id="statAvgResponse">-</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px;">זמן תגובה (דק׳)</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px;">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">הודעות ליום (30 ימים)</h3>
+        <div id="analyticsChartMessages" style="height:180px;display:flex;align-items:flex-end;gap:2px;"></div>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">לידים חדשים ליום</h3>
+        <div id="analyticsChartLeads" style="height:180px;display:flex;align-items:flex-end;gap:2px;"></div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">פילוח לפי מקור</h3>
+        <table id="analyticsSourceTable" style="width:100%;border-collapse:collapse;font-size:13px;"><tbody></tbody></table>
+      </div>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;">
+        <h3 style="font-size:14px;font-weight:700;color:var(--accent);margin-bottom:12px;">משפך המרה</h3>
+        <table id="analyticsFunnelTable" style="width:100%;border-collapse:collapse;font-size:13px;"><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOWS VIEW -->
+<div id="flowsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+  <div style="max-width:900px;margin:0 auto;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);">⚡ אוטומציות (Chatbot Flows)</h2>
+      <button onclick="openFlowEditor(null)" style="padding:8px 16px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;">➕ פלו חדש</button>
+    </div>
+    <div id="flowsList" style="display:flex;flex-direction:column;gap:12px;">
+      <div style="text-align:center;padding:40px;color:var(--text3);">טוען...</div>
+    </div>
+  </div>
+</div>
+
+<!-- FLOW EDITOR OVERLAY -->
+<div class="flow-editor-overlay" id="flow-editor">
+  <div class="fe-toolbar">
+    <div class="fe-title">
+      <span style="font-size:20px;">⚡</span>
+      <input id="fe-name" placeholder="שם הפלו..." value="">
+    </div>
+    <div class="fe-toolbar-actions">
+      <button id="fe-delete-btn" style="display:none;padding:6px 14px;border-radius:8px;background:var(--danger);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:12px;" onclick="deleteFlow()">🗑 מחק</button>
+      <button style="padding:6px 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:12px;" onclick="closeFlowEditor()">ביטול</button>
+      <button style="padding:6px 14px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;" onclick="saveFlow()">💾 שמור</button>
+    </div>
+  </div>
+  <div class="fe-body">
+    <div class="fe-sidebar">
+      <h4>📦 נודים</h4>
+      <div class="fe-node-type" draggable="true" data-type="send_message" ondragstart="onNodeTypeDrag(event,'send_message')">
+        <div class="nt-icon" style="background:#dcf8c6;">💬</div>
+        <div>שלח הודעה</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="wait" ondragstart="onNodeTypeDrag(event,'wait')">
+        <div class="nt-icon" style="background:#fff3cd;">⏳</div>
+        <div>המתנה</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="condition" ondragstart="onNodeTypeDrag(event,'condition')">
+        <div class="nt-icon" style="background:#e8daff;">🔀</div>
+        <div>תנאי</div>
+      </div>
+      <div class="fe-node-type" draggable="true" data-type="webhook" ondragstart="onNodeTypeDrag(event,'webhook')">
+        <div class="nt-icon" style="background:#d4edff;">🌐</div>
+        <div>Webhook</div>
+      </div>
+      <h4 style="margin-top:20px;">⚙ הגדרות</h4>
+      <div style="margin-bottom:10px;">
+        <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;">טריגר</label>
+        <select id="fe-trigger-type" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;background:#fff;" onchange="updateFeTriggerUI()">
+          <option value="keyword">🔑 מילת מפתח</option>
+          <option value="new_lead">🆕 ליד חדש</option>
+          <option value="status_change">🔄 שינוי סטטוס</option>
+        </select>
+      </div>
+      <div id="fe-trigger-val-wrap">
+        <label style="display:block;font-size:11px;color:var(--text2);margin-bottom:3px;" id="fe-trigger-val-label">ערך</label>
+        <input id="fe-trigger-value" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:6px;font-family:inherit;font-size:12px;" placeholder="שלום">
+      </div>
+    </div>
+    <div class="fe-canvas-wrap" id="fe-canvas-wrap"
+      ondragover="event.preventDefault()" ondrop="onCanvasDrop(event)">
+      <div class="fe-canvas" id="fe-canvas"
+        ondragover="event.preventDefault()" ondrop="onCanvasDrop(event)">
+        <div class="fe-canvas-grid" style="pointer-events:auto;"
+          ondragover="event.preventDefault()" ondrop="onCanvasDrop(event)"></div>
+        <svg class="fe-connections" id="fe-connections"></svg>
+      </div>
+      <div class="fe-zoom">
+        <button onclick="feZoom(-0.1)">−</button>
+        <span class="zoom-level" id="fe-zoom-level">100%</span>
+        <button onclick="feZoom(0.1)">+</button>
+        <button onclick="feZoom(0)" title="איפוס">↺</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===== CONFIG =====
+const _urlToken = new URLSearchParams(window.location.search).get('token');
+if (_urlToken) localStorage.setItem('wa_token', _urlToken);
+const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
+const API = '/wa-inbox/api';
+const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
+let seenPhones = new Set(); // phones we've opened at least once
+let lastKnownMsgCount = {}; // phone → msg count for notification detection
+let titleFlashTimer = null;
+
+// ===== MULTI-TENANT =====
+let tenants = [];
+let activeTenantId = null;
+
+// Notification sound (subtle WhatsApp-like chime)
+const notifSound = new Audio('data:audio/wav;base64,UklGRl9vT19telefonAQBGTVQgEAABAAEARKwAAIhYAQACABAAZGF0YV' + 'AAAA==');
+notifSound.volume = 0.4;
+function playNotifSound() {
+  try {
+    // Use Web Audio API for a clean notification beep
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.frequency.value = 880;
+    osc.type = 'sine';
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime + 0.3);
+  } catch(e) { /* silent if blocked by browser */ }
+}
+
+function flashTitle(msg) {
+  if (titleFlashTimer) return;
+  const orig = document.title;
+  let on = true;
+  titleFlashTimer = setInterval(() => {
+    document.title = on ? `💬 ${msg}` : orig;
+    on = !on;
+  }, 1000);
+  // Stop flashing on focus
+  window.addEventListener('focus', () => {
+    if (titleFlashTimer) { clearInterval(titleFlashTimer); titleFlashTimer = null; document.title = orig; }
+  }, { once: true });
+}
+
+// ===== STATE =====
+let contacts = [];
+let activePhone = null;
+let activeMessages = [];
+let currentFilter = 'all';
+let searchQuery = '';
+let quickReplies = [];
+let allTags = [];
+let pollTimer = null;
+let lastMessageCount = 0;
+let campaignCache = {}; // phone -> {messages:[], calls:[], name, site_link}
+const CAMPAIGN_API = 'https://campaign-webhook-production.up.railway.app';
+
+// ===== AVATAR COLORS =====
+const AVATAR_COLORS = [
+  '#e17076','#7bc862','#e5a84e','#65aadd','#a695e7',
+  '#ee7aae','#6ec9cb','#faa774','#b48bf2','#85c18b'
+];
+function getAvatarColor(name) {
+  let hash = 0;
+  for (let i = 0; i < (name||'').length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+function getInitials(name) {
+  if (!name) return '?';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  return name.substring(0,2).toUpperCase();
+}
+
+// ===== API HELPERS =====
+async function api(path, opts = {}) {
+  let url = API + path;
+  const sep = url.includes('?') ? '&' : '?';
+  const params = [];
+  if (TOKEN) params.push('token=' + encodeURIComponent(TOKEN));
+  if (activeTenantId !== null) params.push('tenant_id=' + activeTenantId);
+  if (params.length) url += sep + params.join('&');
+  const res = await fetch(url, {
+    credentials: 'same-origin',
+    headers: {'Content-Type': 'application/json', ...opts.headers},
+    ...opts
+  });
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
+  return res.json();
+}
+
+// ===== TENANT TABS =====
+async function loadTenants() {
+  try {
+    const res = await fetch(API + '/tenants?token=' + encodeURIComponent(TOKEN));
+    if (!res.ok) return;
+    tenants = await res.json();
+    renderTenantTabs();
+    // Auto-select first tenant
+    if (tenants.length && activeTenantId === null) {
+      switchTenant(tenants[0].id);
+    }
+  } catch(e) { console.error('Failed to load tenants:', e); }
+}
+
+function renderTenantTabs() {
+  const bar = document.getElementById('tenantTabs');
+  if (!bar || tenants.length <= 1) { if (bar) bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = tenants.map(t =>
+    `<button class="tenant-tab ${t.id === activeTenantId ? 'active' : ''}" onclick="switchTenant(${t.id})">${esc(t.business_name || t.name)}</button>`
+  ).join('');
+}
+
+function switchTenant(id) {
+  activeTenantId = id;
+  renderTenantTabs();
+  // Reload everything for new tenant
+  activePhone = null;
+  contacts = [];
+  messageCache = {};
+  loadContacts();
+}
+
+// ===== BUSINESS FILTER =====
+let currentBizFilter = 'all';
+function setBizFilter(biz, btn) {
+  currentBizFilter = biz;
+  document.querySelectorAll('.biz-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderContacts();
+}
+function getBizLabel(source) {
+  if (!source) return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
+  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: 'דקל', cls: 'dekel' };
+  if (source.includes('alon_dev') || source === 'campaign') return { emoji: '💻', label: 'Alon.dev', cls: 'alon_dev' };
+  return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
+}
+
+// ===== FORMAT TIME =====
+// DB stores Israel-local time via nowIsrael() — parse as local (no 'Z' suffix)
+function parseTS(ts) {
+  if (!ts) return null;
+  const s = String(ts).trim();
+  // Already has timezone info — parse as-is
+  if (s.endsWith('Z') || s.includes('+') || (s.includes('T') && s.match(/[+-]\d{2}:/))) return new Date(s);
+  // Local Israel time from nowIsrael() — parse without 'Z' so browser treats as local
+  return new Date(s.replace(' ', 'T'));
+}
+function formatTime(ts) {
+  if (!ts) return '';
+  const d = parseTS(ts);
+  if (!d || isNaN(d)) return '';
+  const now = new Date();
+  const diffMs = now - d;
+  const diffDays = Math.floor(diffMs / 86400000);
+  const timeStr = d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+  if (diffDays === 0) return timeStr;
+  if (diffDays === 1) return 'אתמול';
+  if (diffDays < 7) return d.toLocaleDateString('he-IL', {weekday:'short'});
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'numeric'});
+}
+function formatFullTime(ts) {
+  if (!ts) return '';
+  const d = parseTS(ts);
+  if (!d || isNaN(d)) return '';
+  return d.toLocaleTimeString('he-IL', {hour:'2-digit', minute:'2-digit'});
+}
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = parseTS(ts);
+  if (!d || isNaN(d)) return '';
+  const now = new Date();
+  const dStr = d.toLocaleDateString('en-CA');   // YYYY-MM-DD
+  const nowStr = now.toLocaleDateString('en-CA');
+  if (dStr === nowStr) return 'היום';
+  const yesterday = new Date(now.getTime() - 86400000);
+  const yStr = yesterday.toLocaleDateString('en-CA');
+  if (dStr === yStr) return 'אתמול';
+  return d.toLocaleDateString('he-IL', {day:'numeric', month:'long', year:'numeric'});
+}
+
+// ===== LOAD CONTACTS =====
+async function loadContacts() {
+  try {
+    const data = await api('/leads');
+    contacts = (data.leads || data || []).map(c => ({
+      phone: c.phone || c.id,
+      name: c.name || c.pushName || c.phone || 'לא ידוע',
+      lastMessage: c.lastMessage || c.last_message || '',
+      lastTime: c.lastTime || c.last_time || c.last_message_at || c.updatedAt || c.updated_at || '',
+      unread: c.unread || 0,
+      isOutgoing: c.isOutgoing || c.is_outgoing || c.last_message_role === 'assistant' || false,
+      source: c.source || 'whatsapp',
+      status: c.status || c.lead_status || 'new',
+      messageCount: c.message_count || 0,
+      online: false,
+      profile_pic_url: c.profile_pic_url || null
+    }));
+    // Merge campaign leads
+    try {
+      const campRes = await fetch(CAMPAIGN_API + '/api/campaign-messages');
+      const campData = await campRes.json();
+      // Normalize phone: 972xxx → 0xxx for consistent matching
+      function normPhone(p) {
+        let d = (p || '').replace(/\D/g, '');
+        if (d.startsWith('972')) d = '0' + d.slice(3);
+        if (!d.startsWith('0') && d.length === 9) d = '0' + d;
+        return d;
+      }
+      // Build set of existing phones (normalized)
+      const existingPhonesNorm = new Set(contacts.map(c => normPhone(c.phone)));
+      campaignCache = {};
+
+      // Convert campaign UTC times to local (matching AalonBot format)
+      function utcToLocal(isoStr) {
+        if (!isoStr) return '';
+        const d = new Date(isoStr);
+        if (isNaN(d)) return isoStr;
+        return d.getFullYear() + '-' +
+          String(d.getMonth()+1).padStart(2,'0') + '-' +
+          String(d.getDate()).padStart(2,'0') + ' ' +
+          String(d.getHours()).padStart(2,'0') + ':' +
+          String(d.getMinutes()).padStart(2,'0') + ':' +
+          String(d.getSeconds()).padStart(2,'0');
+      }
+      // Normalize all campaign times to local
+      for (const m of (campData.messages || [])) { m.time = utcToLocal(m.time); }
+      for (const c of (campData.calls || [])) { c.time = utcToLocal(c.time); }
+
+      // Build item_id -> phone map from messages
+      const itemPhoneMap = {};
+      for (const m of (campData.messages || [])) {
+        if (m.item_id && m.phone) itemPhoneMap[m.item_id] = m.phone;
+      }
+
+      // Index campaign messages/calls by normalized phone
+      for (const m of (campData.messages || [])) {
+        const ph = normPhone(m.phone);
+        if (!ph) continue;
+        if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: m.name, site_link: m.site_link};
+        campaignCache[ph].messages.push(m);
+      }
+      for (const c of (campData.calls || [])) {
+        const ph = normPhone(c.phone || itemPhoneMap[c.item_id] || '');
+        if (!ph) continue;
+        if (!campaignCache[ph]) campaignCache[ph] = {messages:[], calls:[], name: c.name, site_link: ''};
+        campaignCache[ph].calls.push(c);
+      }
+
+      // Also index by 972-format so loadMessages can find by either format
+      for (const [ph, info] of Object.entries(campaignCache)) {
+        const intl = '972' + ph.slice(1);
+        if (!campaignCache[intl]) campaignCache[intl] = info;
+      }
+
+      // Add campaign-only contacts to the list (skip if already in AalonBot)
+      for (const [ph, info] of Object.entries(campaignCache)) {
+        // Skip 972-format duplicates (we only add 0-format)
+        if (ph.startsWith('972')) continue;
+        if (existingPhonesNorm.has(ph)) {
+          // Contact exists in AalonBot — just update campaign cache for message merge
+          continue;
+        }
+        // Use the FIRST WA message time (when lead was initially contacted)
+        const waTimes = (info.messages||[]).map(x => x.time).filter(Boolean)
+          .sort((a,b) => new Date(a) - new Date(b));
+        const firstWaTime = waTimes[0] || '';
+        const callCount = (info.calls||[]).length;
+        const waCount = (info.messages||[]).length;
+        const lastActivity = callCount > 0 ? `📞 ${callCount} שיחות, 📱 ${waCount} הודעות` : `📱 ${waCount} הודעות`;
+        contacts.push({
+          phone: ph,
+          name: info.name || ph,
+          lastMessage: '🚀 ' + lastActivity,
+          lastTime: firstWaTime,
+          unread: 0,
+          isOutgoing: true,
+          source: 'campaign',
+          status: 'campaign',
+          messageCount: info.messages.length + info.calls.length,
+          online: false,
+          isCampaign: true
+        });
+      }
+    } catch(e) {
+      console.error('Failed to load campaign data:', e);
+    }
+
+    // Sort by last message time desc (normalize to ms for consistent comparison)
+    lazyLoadProfilePics();
+    contacts.sort((a,b) => {
+      const ta = a.lastTime ? new Date(a.lastTime).getTime() : 0;
+      const tb = b.lastTime ? new Date(b.lastTime).getTime() : 0;
+      // Handle NaN from invalid dates
+      return (isNaN(tb) ? 0 : tb) - (isNaN(ta) ? 0 : ta);
+    });
+    renderContacts();
+  } catch(e) {
+    console.error('Failed to load contacts:', e);
+  }
+}
+
+let _picLoading = false;
+async function lazyLoadProfilePics() {
+  if (_picLoading) return;
+  const missing = contacts.filter(c => !c.profile_pic_url).slice(0, 20).map(c => c.phone);
+  if (!missing.length) return;
+  _picLoading = true;
+  try {
+    const data = await api('/profile-pics-batch', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ phones: missing }) });
+    if (data.success && data.results) {
+      let updated = false;
+      for (const c of contacts) {
+        if (data.results[c.phone]) { c.profile_pic_url = data.results[c.phone]; updated = true; }
+      }
+      if (updated) renderContacts();
+    }
+  } catch(e) { console.error('Profile pics error:', e); }
+  _picLoading = false;
+}
+
+// ===== RENDER CONTACTS =====
+function renderContacts() {
+  const list = document.getElementById('contactsList');
+  let filtered = [...contacts];
+
+  // Apply filter
+  if (currentFilter === 'unanswered') {
+    filtered = filtered.filter(c => !c.isOutgoing && c.lastMessage);
+  } else if (currentFilter === 'unread') {
+    filtered = filtered.filter(c => c.unread > 0);
+  }
+
+  // Apply business filter
+  if (currentBizFilter !== 'all') {
+    filtered = filtered.filter(c => {
+      const biz = getBizLabel(c.source);
+      if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
+      if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
+      if (currentBizFilter === 'whatsapp') return biz.cls === 'whatsapp';
+      return true;
+    });
+  }
+
+  // Apply search
+  if (searchQuery) {
+    const q = searchQuery.toLowerCase();
+    filtered = filtered.filter(c =>
+      (c.name||'').toLowerCase().includes(q) ||
+      (c.phone||'').includes(q)
+    );
+  }
+
+  // Update filter counts
+  const allCount = contacts.length;
+  const unansweredCount = contacts.filter(c => !c.isOutgoing && c.lastMessage).length;
+  const unreadCount = contacts.filter(c => c.unread > 0).length;
+  document.querySelectorAll('.filter-tab').forEach(tab => {
+    const f = tab.dataset.filter;
+    const countEl = tab.querySelector('.count');
+    if (f === 'unanswered' && unansweredCount > 0) {
+      if (!countEl) tab.innerHTML = `<span class="count">${unansweredCount}</span>` + tab.textContent;
+    }
+    if (f === 'unread' && unreadCount > 0) {
+      if (!countEl) tab.innerHTML = `<span class="count">${unreadCount}</span>` + tab.textContent;
+    }
+  });
+
+  if (filtered.length === 0) {
+    list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text3);font-size:13px;">אין שיחות</div>';
+    return;
+  }
+
+  list.innerHTML = filtered.map(c => {
+    const color = getAvatarColor(c.name);
+    const initials = getInitials(c.name);
+    const isActive = c.phone === activePhone;
+    const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
+    const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
+
+    const biz = getBizLabel(c.source);
+    const isNew = c.hasNew && !isActive;
+    const nameStyle = isNew ? 'font-weight:800;color:var(--text);' : '';
+    const previewStyle = isNew ? 'font-weight:600;color:var(--text);' : '';
+    const timeStyle = isNew ? 'color:var(--accent);font-weight:700;' : '';
+    return `
+      <div class="contact-item ${isActive ? 'active' : ''} ${isNew ? 'has-new' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
+        <div class="contact-avatar" style="${c.profile_pic_url ? '' : 'background:'+color+';'}pointer-events:none;position:relative;${c.profile_pic_url ? 'overflow:hidden;' : ''}">
+          ${c.profile_pic_url ? `<img src="${esc(c.profile_pic_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentElement.style.background='${color}';this.parentElement.insertAdjacentText('afterbegin','${initials}')">` : initials}
+          ${c.online ? '<div class="online-dot" style="pointer-events:none;"></div>' : ''}
+          ${isNew ? '<div style="position:absolute;top:-2px;right:-2px;width:12px;height:12px;border-radius:50%;background:#ea4335;border:2px solid #fff;pointer-events:none;"></div>' : ''}
+        </div>
+        <div class="contact-body" style="pointer-events:none;">
+          <div class="contact-row" style="pointer-events:none;">
+            <span class="contact-name" style="pointer-events:none;${nameStyle}"><span class="biz-tag ${biz.cls}">${biz.emoji} ${biz.label}</span>${esc(c.name)}</span>
+            <span class="${timeClass}" style="pointer-events:none;${timeStyle}">${formatTime(c.lastTime)}</span>
+          </div>
+          <div class="contact-preview" style="pointer-events:none;${previewStyle}">${preview}</div>
+        </div>
+        ${(c.unread > 0 || isNew) ? `<div class="unread-badge" style="pointer-events:none;">${c.unread || '!'}</div>` : ''}
+      </div>
+    `;
+  }).join('');
+}
+
+// Event delegation for contact clicks
+document.getElementById('contactsList').addEventListener('click', (e) => {
+  const item = e.target.closest('.contact-item');
+  if (item && item.dataset.phone) {
+    selectContact(item.dataset.phone);
+  }
+});
+
+function truncate(s, n) {
+  if (!s) return '';
+  return s.length > n ? s.substring(0, n) + '...' : s;
+}
+
+function esc(s) {
+  const d = document.createElement('div');
+  d.textContent = s || '';
+  return d.innerHTML;
+}
+
+function linkify(text) {
+  // Convert URLs to clickable links
+  const urlRegex = /(https?:\/\/[^\s<]+)/g;
+  return esc(text).replace(urlRegex, '<a href="$1" target="_blank" rel="noopener" style="color:#1a73e8;text-decoration:underline;word-break:break-all;">$1</a>');
+}
+
+// ===== FILTER =====
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  renderContacts();
+}
+
+// ===== SEARCH =====
+function handleSearch(val) {
+  searchQuery = val;
+  renderContacts();
+}
+
+// ===== SELECT CONTACT =====
+const messageCache = {};
+
+function selectContact(phone) {
+  activePhone = phone;
+  seenPhones.add(phone);
+  // Clear "new" flag
+  const c = contacts.find(c => c.phone === phone);
+  if (c) { c.hasNew = false; c.unread = 0; }
+  renderContacts();
+
+  // Update URL
+  try {
+    const u = new URL(window.location);
+    u.searchParams.set('chat', phone);
+    history.replaceState(null, '', u);
+  } catch(e) { console.error('URL update failed:', e); }
+
+  const contact = contacts.find(c => c.phone === phone);
+  if (!contact) return;
+
+  // Update header
+  const headerName = contact.name || contact.phone;
+  document.title = '360Shmikley | ' + headerName;
+
+  const color = getAvatarColor(headerName);
+  const initials = getInitials(headerName);
+
+  const chatHeader = document.getElementById('chatHeader');
+  const chatInputArea = document.getElementById('chatInputArea');
+  const emptyState = document.getElementById('emptyState');
+  const avatarEl = document.getElementById('chatHeaderAvatar');
+  const nameEl = document.getElementById('chatHeaderName');
+  const statusEl = document.getElementById('chatHeaderStatus');
+
+  if (chatHeader) chatHeader.style.display = 'flex';
+  if (chatInputArea) chatInputArea.style.display = 'flex';
+  if (emptyState) emptyState.style.display = 'none';
+  if (avatarEl) { avatarEl.style.background = color; avatarEl.textContent = initials; }
+  if (nameEl) nameEl.textContent = headerName;
+  if (statusEl) statusEl.textContent = contact.phone;
+
+  renderContacts();
+
+  // Show cached messages instantly, then refresh in background
+  if (messageCache[phone]) {
+    activeMessages = messageCache[phone];
+    renderMessages();
+  } else {
+    document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><div class="empty-icon">⏳</div><p>טוען...</p></div>';
+  }
+
+  // Load quick replies + messages + details in parallel
+  loadQuickReplies();
+  loadMessages(phone);
+  loadContactDetails(phone, contact);
+
+  // Mobile: show chat
+  document.getElementById('contactsPanel').classList.add('hidden-mobile');
+  document.getElementById('chatPanel').classList.remove('hidden-mobile');
+
+  // Mark read
+  contact.unread = 0;
+  renderContacts();
+}
+
+// ===== CAMPAIGN PHONE LOOKUP =====
+function getCampaignInfo(phone) {
+  // Try exact, then normalized, then 972-format
+  if (campaignCache[phone]) return campaignCache[phone];
+  let norm = phone.replace(/\D/g, '');
+  if (norm.startsWith('972')) norm = '0' + norm.slice(3);
+  if (!norm.startsWith('0') && norm.length === 9) norm = '0' + norm;
+  if (campaignCache[norm]) return campaignCache[norm];
+  const intl = '972' + norm.slice(1);
+  if (campaignCache[intl]) return campaignCache[intl];
+  return null;
+}
+
+// ===== LOAD MESSAGES =====
+let activeDeliveryStatus = 'sent';
+async function loadMessages(phone) {
+  const campInfo = getCampaignInfo(phone);
+  try {
+    const data = await api('/conversations/' + encodeURIComponent(phone));
+    activeMessages = data.messages || data || [];
+    activeDeliveryStatus = data.deliveryStatus || 'sent';
+    // Merge campaign messages if available
+    if (campInfo) {
+      const campMsgs = buildCampaignMessages(phone);
+      if (activeMessages.length === 0) {
+        activeMessages = campMsgs;
+      } else {
+        activeMessages = [...campMsgs, ...activeMessages];
+      }
+    }
+    messageCache[phone] = activeMessages;
+    if (activePhone === phone) renderMessages();
+  } catch(e) {
+    console.error('Failed to load messages:', e);
+    // Fallback to campaign messages
+    if (campInfo) {
+      activeMessages = buildCampaignMessages(phone);
+      messageCache[phone] = activeMessages;
+      if (activePhone === phone) renderMessages();
+    } else if (!messageCache[phone]) {
+      document.getElementById('chatMessages').innerHTML = '<div class="chat-empty-state"><p>שגיאה בטעינת השיחה</p></div>';
+    }
+  }
+}
+
+function buildCampaignMessages(phone) {
+  const info = getCampaignInfo(phone);
+  if (!info) return [];
+  const msgs = [];
+  let templateAdded = false;
+
+  // Sort messages by time (oldest first) and deduplicate
+  const sortedMsgs = [...(info.messages || [])].sort((a,b) => new Date(a.time) - new Date(b.time));
+  const sortedCalls = [...(info.calls || [])].sort((a,b) => new Date(a.time) - new Date(b.time));
+  const seenMsgIds = new Set();
+  const seenCallIds = new Set();
+
+  for (const m of sortedMsgs) {
+    if (m.id && seenMsgIds.has(m.id)) continue;
+    if (m.id) seenMsgIds.add(m.id);
+
+    const nameMatch = m.text?.match(/שם:\s*(.+)/);
+    const linkMatch = m.text?.match(/לינק:\s*(https?:\/\/\S+)/);
+    const leadName = nameMatch?.[1] || m.name || '';
+    const siteLink = linkMatch?.[1] || '';
+
+    // Show the actual template message only once (first time)
+    if (!templateAdded && (leadName || siteLink)) {
+      msgs.push({
+        role: 'assistant',
+        direction: 'outgoing',
+        fromMe: true,
+        body: `שלום ${leadName} 👋\nכאן יעל מ-alon dev.\nראיתי את העסק שלך בגוגל ובניתי לך אתר לדוגמא — בלי שום התחייבות.\n\n🔗 הנה הלינק:\n${siteLink}\n\n✅ תמונות מגוגל של העסק\n✅ ביקורות אמיתיות\n✅ כפתור וואטסאפ ישיר\n\nתסתכל ותגיד לי מה אתה חושב 😊`,
+        timestamp: m.time,
+        source: 'campaign'
+      });
+      templateAdded = true;
+    } else {
+      // Subsequent sends as log entries
+      msgs.push({
+        role: 'system', direction: 'outgoing', fromMe: true,
+        body: '📱 ' + (m.text || 'הודעת וואטסאפ נשלחה'),
+        timestamp: m.time, source: 'campaign-log'
+      });
+    }
+  }
+
+  for (const c of sortedCalls) {
+    if (c.id && seenCallIds.has(c.id)) continue;
+    if (c.id) seenCallIds.add(c.id);
+    msgs.push({
+      role: 'system', direction: 'outgoing', fromMe: true,
+      body: c.text || '📞 שיחה בוצעה',
+      timestamp: c.time, source: 'campaign-log'
+    });
+  }
+
+  // Already sorted chronologically
+  return msgs;
+}
+
+// ===== RENDER MESSAGES =====
+function renderMessages() {
+  const container = document.getElementById('chatMessages');
+  if (!activeMessages || activeMessages.length === 0) {
+    container.innerHTML = '<div class="chat-empty-state"><div class="empty-icon">💬</div><p>אין הודעות עדיין</p></div>';
+    return;
+  }
+
+  let html = '';
+  let lastDate = '';
+
+  // Find the last outbound message index for delivery status
+  let lastOutIdx = -1;
+  activeMessages.forEach((msg, i) => {
+    const out = msg.role === 'assistant' || msg.role === 'system' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    if (out && msg.source !== 'campaign-log') lastOutIdx = i;
+  });
+
+  activeMessages.forEach((msg, idx) => {
+    const msgDate = formatDate(msg.timestamp || msg.time || msg.created_at);
+    if (msgDate !== lastDate) {
+      html += `<div class="day-divider"><span>${msgDate}</span></div>`;
+      lastDate = msgDate;
+    }
+
+    const isOut = msg.role === 'assistant' || msg.role === 'system' || msg.direction === 'outgoing' || msg.fromMe || msg.from_me || msg.type === 'sent';
+    const dir = isOut ? 'outgoing' : 'incoming';
+    const time = formatFullTime(msg.timestamp || msg.time || msg.created_at);
+    let checks = '';
+    if (isOut) {
+      if (idx === lastOutIdx && activeDeliveryStatus === 'read') {
+        checks = '<span class="msg-check read">✓✓</span>';
+      } else {
+        checks = '<span class="msg-check">✓✓</span>';
+      }
+    }
+    const text = linkify(msg.body || msg.message || msg.text || msg.content || '');
+
+    // Campaign log entries as system notifications (like day dividers)
+    if (msg.source === 'campaign-log') {
+      html += `<div class="day-divider"><span style="background:#ede9fe;color:#6366f1;font-size:11px;">🚀 ${esc(msg.body || '')}</span></div>`;
+      return;
+    }
+
+    const sender = msg.source === 'campaign' ? '🚀 קמפיין' : (isOut ? '🤖 בוט' : '');
+
+    // Render media if present
+    let mediaHtml = '';
+    const rawText = msg.body || msg.message || msg.text || msg.content || '';
+    const imgMatch = rawText.match(/\[media:image:([^\]]+)\]/);
+    const fileMatch = rawText.match(/\[media:file:([^\]:]+):([^\]]+)\]/);
+    const screenshotMatch = rawText.match(/\[📸[^\]]*\]/);
+    let cleanText = text;
+    if (imgMatch) {
+      mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
+      cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
+    } else if (screenshotMatch) {
+      // Campaign image message — extract URL from text to show preview
+      const urlInText = rawText.match(/(https?:\/\/[^\s]+)/);
+      if (urlInText) {
+        mediaHtml = `<div style="background:#f0f4ff;border-radius:8px;padding:8px;margin-bottom:4px;text-align:center;">
+          <div style="font-size:11px;color:#6366f1;font-weight:600;">📸 צילום מסך של האתר</div>
+          <a href="${esc(urlInText[1])}" target="_blank" style="font-size:12px;color:#1a73e8;">לחץ לצפייה באתר →</a>
+        </div>`;
+      } else {
+        mediaHtml = `<div style="background:#f0f4ff;border-radius:8px;padding:6px;margin-bottom:4px;text-align:center;font-size:11px;color:#6366f1;">📸 נשלח צילום מסך</div>`;
+      }
+      cleanText = text.replace(/\[📸[^\]]*\]\s*/, '');
+    } else if (fileMatch) {
+      mediaHtml = `<a href="/media/${esc(fileMatch[1])}" target="_blank" style="display:flex;align-items:center;gap:6px;padding:8px;background:rgba(0,0,0,0.05);border-radius:6px;margin-bottom:4px;text-decoration:none;color:inherit;"><span style="font-size:20px;">📄</span><span style="font-size:12px;">${esc(fileMatch[2])}</span></a>`;
+      cleanText = text.replace(/\[media:file:[^\]]+\]\s*/, '');
+    }
+
+    // Render interactive buttons (WhatsApp style)
+    let buttonsHtml = '';
+    const btnMatch = rawText.match(/\[interactive:buttons:(\[.*?\])\]/);
+    const listMatch = rawText.match(/\[interactive:list:(\[.*?\])\]/);
+    const ctaMatch = rawText.match(/\[interactive:cta:([^:]+):([^\]]+)\]/);
+
+    if (btnMatch) {
+      try {
+        const titles = JSON.parse(btnMatch[1]);
+        buttonsHtml = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
+          titles.map(t => `<div onclick="simulateButtonClick('${esc(t).replace(/'/g, "\\'")}')" style="text-align:center;padding:10px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:14px;font-weight:600;cursor:pointer;-webkit-tap-highlight-color:rgba(37,211,102,.2);">${esc(t)}</div>`).join('') +
+          `</div>`;
+      } catch {}
+      cleanText = cleanText.replace(/\[interactive:buttons:[^\]]+\]\s*/, '');
+    }
+
+    if (listMatch) {
+      try {
+        const titles = JSON.parse(listMatch[1]);
+        buttonsHtml = `<div style="display:flex;flex-direction:column;gap:4px;margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">` +
+          titles.map(t => `<div onclick="simulateButtonClick('${esc(t).replace(/'/g, "\\'")}')" style="text-align:center;padding:10px;border:1px solid #25D366;border-radius:8px;color:#25D366;font-size:14px;font-weight:600;cursor:pointer;">${esc(t)}</div>`).join('') +
+          `</div>`;
+      } catch {}
+      cleanText = cleanText.replace(/\[interactive:list:[^\]]+\]\s*/, '');
+    }
+
+    if (ctaMatch) {
+      buttonsHtml = `<div style="margin-top:6px;border-top:1px solid rgba(0,0,0,0.1);padding-top:6px;">
+        <a href="${esc(ctaMatch[2])}" target="_blank" style="display:block;text-align:center;padding:8px;background:#25D366;border-radius:8px;color:white;font-size:13px;font-weight:600;text-decoration:none;">🔗 ${esc(ctaMatch[1])}</a>
+      </div>`;
+      cleanText = cleanText.replace(/\[interactive:cta:[^\]]+\]\s*/, '');
+    }
+
+    // Render inline link previews for URLs in messages
+    let linkPreviewHtml = '';
+    const urlMatch = cleanText.match(/(https?:\/\/[^\s<"]+)/);
+    if (urlMatch && !imgMatch && !screenshotMatch && !ctaMatch) {
+      const url = urlMatch[1].replace(/&amp;/g, '&');
+      const domain = url.replace(/https?:\/\//, '').split('/')[0];
+      linkPreviewHtml = `<a href="${esc(url)}" target="_blank" style="display:block;margin-top:4px;padding:6px 8px;background:rgba(0,0,0,0.04);border-radius:6px;border-right:3px solid #25D366;text-decoration:none;color:inherit;">
+        <div style="font-size:10px;color:#128C7E;font-weight:600;">${esc(domain)}</div>
+        <div style="font-size:11px;color:#1a73e8;word-break:break-all;">${esc(url.length > 60 ? url.slice(0, 60) + '...' : url)}</div>
+      </a>`;
+    }
+
+    html += `
+      <div class="msg-wrapper ${dir}">
+        <div class="msg-bubble ${dir}">
+          ${sender ? `<div style="font-size:10px;font-weight:600;color:${msg.source === 'campaign' ? '#6366f1' : (isOut ? '#128C7E' : '#e17076')};margin-bottom:2px;">${sender}</div>` : ''}
+          ${mediaHtml}
+          <div class="msg-text">${cleanText}</div>
+          ${linkPreviewHtml}
+          ${buttonsHtml}
+          <div class="msg-meta">
+            <span class="msg-time">${time}</span>
+            ${checks}
+          </div>
+        </div>
+      </div>
+    `;
+  });
+
+  container.innerHTML = html;
+  scrollToBottom();
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('chatMessages');
+  requestAnimationFrame(() => { el.scrollTop = el.scrollHeight; });
+}
+
+// ===== SEND MESSAGE =====
+function simulateButtonClick(text) {
+  if (!activePhone || !text) return;
+  const input = document.getElementById('chatInput');
+  input.value = text;
+  sendMessage();
+}
+
+async function sendMessage() {
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if (!text || !activePhone) return;
+
+  input.value = '';
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = true;
+
+  // Show typing
+  document.getElementById('typingIndicator').classList.add('show');
+
+  // Optimistic add
+  const now = new Date().toISOString();
+  activeMessages.push({
+    body: text,
+    direction: 'outgoing',
+    fromMe: true,
+    timestamp: now,
+    read: false
+  });
+  renderMessages();
+
+  try {
+    await api('/send', {
+      method: 'POST',
+      body: JSON.stringify({ phone: activePhone, message: text, tenant_id: activeTenantId })
+    });
+    // Update contact
+    const c = contacts.find(c => c.phone === activePhone);
+    if (c) {
+      c.lastMessage = text;
+      c.lastTime = now;
+      c.isOutgoing = true;
+    }
+    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    renderContacts();
+  } catch(e) {
+    console.error('Send failed:', e);
+    // Mark last message as failed
+    activeMessages[activeMessages.length - 1].failed = true;
+  }
+
+  document.getElementById('typingIndicator').classList.remove('show');
+  document.getElementById('sendBtn').disabled = false;
+  input.focus();
+}
+
+async function handleFileSelect(event) {
+  const file = event.target.files[0];
+  if (!file || !activePhone) return;
+  event.target.value = ''; // reset input
+
+  const maxSize = 10 * 1024 * 1024; // 10MB
+  if (file.size > maxSize) {
+    alert('הקובץ גדול מדי (מקסימום 10MB)');
+    return;
+  }
+
+  const caption = prompt('כיתוב (אופציונלי):', '') || '';
+
+  // Show sending indicator
+  const isImage = file.type.startsWith('image/');
+  activeMessages.push({
+    body: caption ? `${isImage ? '[תמונה]' : '[קובץ: ' + file.name + ']'} ${caption}` : (isImage ? '[תמונה]' : '[קובץ: ' + file.name + ']'),
+    direction: 'outgoing',
+    fromMe: true,
+    timestamp: new Date().toISOString(),
+    read: false
+  });
+  renderMessages();
+
+  try {
+    const reader = new FileReader();
+    const base64 = await new Promise((resolve, reject) => {
+      reader.onload = () => resolve(reader.result.split(',')[1]);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+
+    await api('/send-media', {
+      method: 'POST',
+      body: JSON.stringify({
+        phone: activePhone,
+        caption,
+        mediaBase64: base64,
+        mimeType: file.type,
+        filename: file.name
+      })
+    });
+  } catch(e) {
+    console.error('Media send failed:', e);
+    activeMessages[activeMessages.length - 1].failed = true;
+    renderMessages();
+  }
+}
+
+function handleInputKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendMessage();
+  }
+  // Enable/disable send button
+  setTimeout(() => {
+    document.getElementById('sendBtn').disabled = !document.getElementById('chatInput').value.trim();
+  }, 0);
+}
+
+function autoResize(el) {
+  el.style.height = 'auto';
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+}
+
+// ===== QUICK REPLIES =====
+async function loadQuickReplies() {
+  try {
+    const data = await api('/quick-replies');
+    quickReplies = data.replies || data || [];
+    renderQuickReplies();
+  } catch(e) {
+    quickReplies = [];
+  }
+}
+
+function renderQuickReplies() {
+  const bar = document.getElementById('quickRepliesBar');
+  if (!quickReplies.length) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  bar.innerHTML = quickReplies.map(qr => {
+    const label = qr.name || qr.label || qr.title || truncate(qr.message || qr.text || '', 25);
+    const msg = qr.message || qr.text || qr.content || '';
+    return `<button class="qr-chip" onclick="useQuickReply('${msg.replace(/'/g,"\\'")}')">⚡ ${esc(label)}</button>`;
+  }).join('');
+}
+
+function useQuickReply(text) {
+  const input = document.getElementById('chatInput');
+  input.value = text;
+  input.focus();
+  autoResize(input);
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// ===== DETAILS =====
+function toggleDetails() {
+  const panel = document.getElementById('detailsPanel');
+  panel.classList.toggle('hidden');
+}
+
+async function loadContactDetails(phone, contact) {
+  const color = getAvatarColor(contact.name);
+  const initials = getInitials(contact.name);
+  document.getElementById('detailAvatar').style.background = color;
+  document.getElementById('detailAvatar').textContent = initials;
+  document.getElementById('detailName').textContent = contact.name;
+  document.getElementById('detailPhone').textContent = phone;
+  const biz = getBizLabel(contact.source);
+  document.getElementById('detailBiz').innerHTML = `<span class="biz-tag ${biz.cls}" style="font-size:11px;padding:2px 8px;">${biz.emoji} ${biz.label}</span> <span style="color:var(--text3);font-size:12px;">📱 WhatsApp</span>`;
+  document.getElementById('detailStatus').value = contact.status || 'new';
+
+  // Load tags
+  loadTags(phone);
+  // Load notes
+  loadNotes(phone);
+  // Load status history
+  loadStatusHistory(phone);
+}
+
+// ===== TAGS =====
+async function loadTags(phone) {
+  try {
+    const data = await api('/tags/' + encodeURIComponent(phone));
+    const tags = data.tags || data || [];
+    renderTags(tags);
+  } catch(e) {
+    renderTags([]);
+  }
+}
+
+function renderTags(tags) {
+  const container = document.getElementById('tagsContainer');
+  if (!tags.length) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--text3);">אין תגיות</span>';
+    return;
+  }
+  const tagClasses = {
+    'חם': 'tag-hot', 'hot': 'tag-hot',
+    'חמים': 'tag-warm', 'warm': 'tag-warm',
+    'קר': 'tag-cold', 'cold': 'tag-cold',
+    'VIP': 'tag-vip', 'vip': 'tag-vip',
+    'חדש': 'tag-new', 'new': 'tag-new'
+  };
+  container.innerHTML = tags.map(t => {
+    const tagName = typeof t === 'string' ? t : t.tag || t.name || '';
+    const cls = tagClasses[tagName] || 'tag-default';
+    return `<span class="tag-chip ${cls}">${esc(tagName)}<span class="remove-tag" onclick="removeTag('${tagName.replace(/'/g,"\\'")}')">×</span></span>`;
+  }).join('');
+}
+
+function showTagInput() {
+  const input = document.getElementById('tagInput');
+  input.classList.toggle('show');
+  if (input.classList.contains('show')) input.focus();
+}
+
+async function handleTagKey(e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (!val || !activePhone) return;
+    try {
+      await api('/tags/' + encodeURIComponent(activePhone), {
+        method: 'POST',
+        body: JSON.stringify({ tag: val })
+      });
+      e.target.value = '';
+      e.target.classList.remove('show');
+      loadTags(activePhone);
+    } catch(err) { console.error('Add tag failed:', err); }
+  }
+  if (e.key === 'Escape') {
+    e.target.value = '';
+    e.target.classList.remove('show');
+  }
+}
+
+async function removeTag(tag) {
+  if (!activePhone) return;
+  try {
+    await api('/tags/' + encodeURIComponent(activePhone) + '/' + encodeURIComponent(tag), { method: 'DELETE' });
+    loadTags(activePhone);
+  } catch(e) { console.error('Remove tag failed:', e); }
+}
+
+// ===== NOTES =====
+async function loadNotes(phone) {
+  try {
+    const data = await api('/notes/' + encodeURIComponent(phone));
+    const notes = data.notes || data || [];
+    renderNotes(notes);
+  } catch(e) {
+    renderNotes([]);
+  }
+}
+
+function renderNotes(notes) {
+  const container = document.getElementById('notesList');
+  if (!notes.length) {
+    container.innerHTML = '<span style="font-size:12px;color:var(--text3);">אין הערות</span>';
+    return;
+  }
+  container.innerHTML = notes.map(n => {
+    const text = typeof n === 'string' ? n : n.note || n.text || n.content || '';
+    const date = n.created_at || n.date || '';
+    return `<div class="note-item">${esc(text)}${date ? `<span class="note-date">${formatTime(date)}</span>` : ''}</div>`;
+  }).join('');
+}
+
+function showNoteInput() {
+  const input = document.getElementById('noteInput');
+  input.classList.toggle('show');
+  if (input.classList.contains('show')) input.focus();
+}
+
+async function handleNoteKey(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    const val = e.target.value.trim();
+    if (!val || !activePhone) return;
+    try {
+      await api('/notes/' + encodeURIComponent(activePhone), {
+        method: 'POST',
+        body: JSON.stringify({ note: val })
+      });
+      e.target.value = '';
+      e.target.classList.remove('show');
+      loadNotes(activePhone);
+    } catch(err) { console.error('Add note failed:', err); }
+  }
+  if (e.key === 'Escape') {
+    e.target.value = '';
+    e.target.classList.remove('show');
+  }
+}
+
+// ===== STATUS HISTORY =====
+async function loadStatusHistory(phone) {
+  try {
+    const data = await api('/status-history/' + encodeURIComponent(phone));
+    const history = data.history || data || [];
+    const container = document.getElementById('statusHistory');
+    if (!history.length) { container.innerHTML = ''; return; }
+    container.innerHTML = history.slice(0,5).map(h => {
+      const status = h.status || h.to || '';
+      const time = formatTime(h.timestamp || h.date || h.created_at || '');
+      return `<div class="status-history-item"><span class="sh-status">${esc(status)}</span><span>${time}</span></div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('statusHistory').innerHTML = '';
+  }
+}
+
+async function updateStatus(val) {
+  if (!activePhone) return;
+  const c = contacts.find(c => c.phone === activePhone);
+  if (c) c.status = val;
+  try {
+    await api('/leads/' + encodeURIComponent(activePhone), {
+      method: 'PATCH',
+      body: JSON.stringify({ lead_status: val })
+    });
+    loadStatusHistory(activePhone);
+    renderContacts();
+  } catch(e) { console.error('Status update failed:', e); }
+}
+
+// ===== EMOJI PICKER =====
+const EMOJIS = ['😀','😂','❤️','👍','🙏','🔥','✅','💪','👏','🎉','😍','🤔','💯','⭐','🚀','💰','📞','📱','💬','✨','🎯','👋','😊','🤝','💡','📌','⏰','🏆','💎','🌟','❌','⚠️','📝','🔗','👀','💵','🎁','🛒','📊','🔔','💼','🏠','🎓','🙌','😎','🤩','💐','🥳'];
+
+function toggleEmoji() {
+  const picker = document.getElementById('emojiPicker');
+  picker.classList.toggle('show');
+  if (picker.classList.contains('show') && !picker.innerHTML) {
+    picker.innerHTML = '<div class="emoji-grid">' + EMOJIS.map(e =>
+      `<button onclick="insertEmoji('${e}')">${e}</button>`
+    ).join('') + '</div>';
+  }
+}
+
+function insertEmoji(emoji) {
+  const input = document.getElementById('chatInput');
+  input.value += emoji;
+  input.focus();
+  document.getElementById('emojiPicker').classList.remove('show');
+  document.getElementById('sendBtn').disabled = false;
+}
+
+// Close emoji on outside click
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.emoji-picker') && !e.target.closest('.input-btn[title="אמוג\'י"]')) {
+    document.getElementById('emojiPicker').classList.remove('show');
+  }
+});
+
+// ===== MOBILE =====
+function showMobileContacts() {
+  document.getElementById('contactsPanel').classList.remove('hidden-mobile');
+  document.getElementById('chatPanel').classList.add('hidden-mobile');
+}
+
+// ===== POLLING =====
+async function pollMessages() {
+  if (!activePhone) return;
+  try {
+    const data = await api('/conversations/' + encodeURIComponent(activePhone));
+    let msgs = data.messages || data || [];
+    // Merge campaign messages (same logic as loadMessages)
+    const campInfo = getCampaignInfo(activePhone);
+    if (campInfo) {
+      const campMsgs = buildCampaignMessages(activePhone);
+      if (msgs.length === 0) {
+        msgs = campMsgs;
+      } else {
+        msgs = [...campMsgs, ...msgs];
+      }
+    }
+    if (msgs.length !== activeMessages.length) {
+      activeMessages = msgs;
+      messageCache[activePhone] = activeMessages;
+      renderMessages();
+      // Update contact
+      const c = contacts.find(c => c.phone === activePhone);
+      if (c && msgs.length > 0) {
+        const last = msgs[msgs.length - 1];
+        c.lastMessage = last.body || last.message || last.text || '';
+        c.lastTime = last.timestamp || last.time || '';
+        c.isOutgoing = last.direction === 'outgoing' || last.fromMe || last.from_me;
+      }
+    }
+  } catch(e) { /* silent */ }
+
+  // Also refresh contacts list periodically and detect new incoming messages
+  try {
+    const data = await api('/leads');
+    const newContacts = (data.leads || data || []).map(c => ({
+      phone: c.phone || c.id,
+      name: c.name || c.pushName || c.phone || 'לא ידוע',
+      lastMessage: c.lastMessage || c.last_message || '',
+      lastTime: c.lastTime || c.last_time || c.last_message_at || c.updatedAt || c.updated_at || '',
+      unread: c.unread || 0,
+      isOutgoing: c.isOutgoing || c.is_outgoing || c.last_message_role === 'assistant' || false,
+      source: c.source || 'whatsapp',
+      status: c.status || c.lead_status || 'new',
+      messageCount: c.message_count || 0,
+    }));
+
+    // Detect new incoming messages
+    let hasNewIncoming = false;
+    for (const nc of newContacts) {
+      const old = contacts.find(c => c.phone === nc.phone);
+      const wasUnseen = !seenPhones.has(nc.phone);
+      // New message from someone we're not looking at
+      if (nc.phone !== activePhone && !nc.isOutgoing && nc.lastMessage) {
+        const oldTime = old ? old.lastTime : '';
+        if (nc.lastTime && nc.lastTime > oldTime) {
+          hasNewIncoming = true;
+          // Mark as having unseen messages
+          nc.hasNew = true;
+        }
+      }
+      // Preserve hasNew flag from previous state
+      if (old && old.hasNew && nc.phone !== activePhone) {
+        nc.hasNew = true;
+      }
+    }
+
+    if (hasNewIncoming) {
+      playNotifSound();
+      if (document.hidden) flashTitle('הודעה חדשה!');
+      // Request browser notification permission
+      if (Notification.permission === 'default') Notification.requestPermission();
+      if (Notification.permission === 'granted') {
+        new Notification('360Shmikley', { body: 'הודעה חדשה נכנסה', icon: '/icon-wa-blue-192.png' });
+      }
+    }
+
+    contacts = newContacts;
+    contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
+    renderContacts();
+  } catch(e) { /* silent */ }
+}
+
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer);
+  pollTimer = setInterval(pollMessages, POLL_INTERVAL);
+}
+
+// ===== REFRESH =====
+async function refreshAll() {
+  await loadContacts();
+  if (activePhone) {
+    await loadMessages(activePhone);
+    const contact = contacts.find(c => c.phone === activePhone);
+    if (contact) loadContactDetails(activePhone, contact);
+  }
+}
+
+// ===== INIT =====
+async function init() {
+  if (!TOKEN) {
+    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
+    return;
+  }
+  // Load tenants first — switchTenant will call loadContacts
+  await loadTenants();
+  // Auto-open chat from URL param ?chat=972...
+  const chatParam = new URLSearchParams(window.location.search).get('chat');
+  if (chatParam) selectContact(chatParam);
+  startPolling();
+}
+
+// ===== VIEW SWITCHING =====
+let currentView = 'inbox';
+
+function showView(view) {
+  currentView = view;
+  const appEl = document.querySelector('.app');
+  const views = {
+    inbox: appEl,
+    overview: document.getElementById('overviewView'),
+    templates: document.getElementById('templatesView'),
+    broadcasts: document.getElementById('broadcastsView'),
+    analytics: document.getElementById('analyticsView'),
+    costs: document.getElementById('costsView'),
+    campaign: document.getElementById('campaignView'),
+    flows: document.getElementById('flowsView'),
+  };
+  const navBtns = {
+    inbox: document.getElementById('navInbox'),
+    overview: document.getElementById('navOverview'),
+    templates: document.getElementById('navTemplates'),
+    broadcasts: document.getElementById('navBroadcasts'),
+    analytics: document.getElementById('navAnalytics'),
+    costs: document.getElementById('navCosts'),
+    campaign: document.getElementById('navCampaign'),
+    flows: document.getElementById('navFlows'),
+  };
+
+  // Hide all views and deactivate all nav buttons
+  for (const v of Object.values(views)) { if (v) v.style.display = 'none'; }
+  for (const b of Object.values(navBtns)) { if (b) b.classList.remove('active'); }
+
+  // Show selected view
+  if (views[view]) views[view].style.display = view === 'inbox' ? 'flex' : 'block';
+  if (navBtns[view]) navBtns[view].classList.add('active');
+
+  // Load data for the view
+  if (view === 'templates') loadTemplates();
+  else if (view === 'costs') loadCosts();
+  else if (view === 'overview') loadOverview();
+  else if (view === 'broadcasts') loadBroadcastData();
+  else if (view === 'analytics') loadAnalytics();
+  else if (view === 'campaign') loadCampaign();
+  else if (view === 'flows') loadFlows();
+}
+
+// ===== CAMPAIGN =====
+async function loadCampaign() {
+  const cardsEl = document.getElementById('campaignCards');
+  const msgsEl = document.getElementById('campaignMessages');
+  const callsEl = document.getElementById('campaignCalls');
+  cardsEl.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text2);">טוען...</div>';
+  msgsEl.innerHTML = '';
+  callsEl.innerHTML = '';
+
+  try {
+    const res = await fetch('https://campaign-webhook-production.up.railway.app/api/campaign-messages');
+    const data = await res.json();
+
+    // Summary cards
+    cardsEl.innerHTML = `
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--primary);">${data.total_wa || 0}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">הודעות WA</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:#f59e0b;">${data.total_calls || 0}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">שיחות</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:#10b981;">${(data.messages || []).length + (data.calls || []).length}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">סה״כ פעולות</div>
+      </div>
+      <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;text-align:center;">
+        <div style="font-size:24px;font-weight:700;color:var(--text);">${data.date || '—'}</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px;">תאריך</div>
+      </div>
+    `;
+
+    // WA messages
+    const msgs = data.messages || [];
+    if (!msgs.length) {
+      msgsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">אין הודעות היום</div>';
+    } else {
+      msgsEl.innerHTML = msgs.map(m => `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;">📱</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(m.name || 'ליד')}</div>
+            <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(m.phone || '')}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);flex-shrink:0;">${m.time ? new Date(m.time).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+          ${m.site_link ? `<a href="${esc(m.site_link.match(/https?:\/\/[^\s]+/)?.[0] || m.site_link)}" target="_blank" style="font-size:11px;color:var(--primary);text-decoration:none;">🔗 אתר</a>` : ''}
+        </div>
+      `).join('');
+    }
+
+    // Calls
+    const calls = data.calls || [];
+    if (!calls.length) {
+      callsEl.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text2);font-size:13px;">אין שיחות היום</div>';
+    } else {
+      callsEl.innerHTML = calls.map(c => `
+        <div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;">
+          <div style="width:36px;height:36px;border-radius:50%;background:#f59e0b;display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;flex-shrink:0;">📞</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:13px;font-weight:600;color:var(--text);">${esc(c.name || 'ליד')}</div>
+            <div style="font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${esc(c.text || '').slice(0, 60)}</div>
+          </div>
+          <div style="font-size:11px;color:var(--text2);flex-shrink:0;">${c.time ? new Date(c.time).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : ''}</div>
+        </div>
+      `).join('');
+    }
+  } catch(e) {
+    cardsEl.innerHTML = `<div style="padding:20px;text-align:center;color:var(--danger);">שגיאה בטעינת נתוני קמפיין: ${esc(e.message)}</div>`;
+  }
+}
+
+// ===== TEMPLATES =====
+let templates = [];
+
+async function loadTemplates() {
+  try {
+    const data = await api('/templates');
+    if (data.error) {
+      console.error('Templates API error:', data.error);
+      document.getElementById('templatesList').innerHTML = `<div style="text-align:center;padding:40px;color:var(--danger);">
+        <div style="font-size:16px;margin-bottom:8px;">שגיאה מ-Meta API</div>
+        <div style="font-size:13px;color:var(--text2);">${esc(data.error.message || JSON.stringify(data.error))}</div>
+      </div>`;
+      return;
+    }
+    templates = data.templates || [];
+    renderTemplates();
+  } catch(e) {
+    console.error('Failed to load templates:', e);
+    document.getElementById('templatesList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--danger);">שגיאה בטעינת תבניות</div>';
+  }
+}
+
+function renderTemplates() {
+  const container = document.getElementById('templatesList');
+  if (!templates.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">אין תבניות</div>';
+    return;
+  }
+
+  // Sort: approved first, then pending, then rejected
+  const order = { APPROVED: 0, PENDING: 1, REJECTED: 2 };
+  const sorted = [...templates].sort((a,b) => (order[a.status] || 9) - (order[b.status] || 9));
+
+  container.innerHTML = sorted.map(tpl => {
+    const status = (tpl.status || '').toLowerCase();
+    const category = (tpl.category || 'UTILITY').toLowerCase();
+    const categoryIcon = category === 'marketing' ? '📢' : '🔧';
+    const categoryLabel = category === 'marketing' ? 'שיווקית' : 'שירות';
+    const lang = tpl.language || 'he';
+
+    // Get template body text
+    const bodyComp = (tpl.components || []).find(c => c.type === 'BODY');
+    const headerComp = (tpl.components || []).find(c => c.type === 'HEADER');
+    const footerComp = (tpl.components || []).find(c => c.type === 'FOOTER');
+    const bodyText = bodyComp ? bodyComp.text : '';
+
+    const canSend = status === 'approved';
+
+    return `
+      <div class="tpl-card">
+        <div class="tpl-icon ${category}">${categoryIcon}</div>
+        <div class="tpl-body">
+          <div class="tpl-header">
+            <span class="tpl-name">${esc(tpl.name)}</span>
+            <span class="tpl-badge ${status}">${status === 'approved' ? '✅ מאושר' : status === 'pending' ? '⏳ ממתין' : '❌ נדחה'}</span>
+          </div>
+          ${headerComp ? `<div style="font-size:12px;font-weight:600;color:var(--text);margin-bottom:4px;">${esc(headerComp.text || '')}</div>` : ''}
+          <div class="tpl-text">${esc(bodyText)}</div>
+          ${footerComp ? `<div style="font-size:11px;color:var(--text3);margin-top:4px;font-style:italic;">${esc(footerComp.text || '')}</div>` : ''}
+          <div class="tpl-meta">
+            <span>📁 ${categoryLabel}</span>
+            <span>🌐 ${lang}</span>
+            <span>🆔 ${tpl.id || ''}</span>
+          </div>
+        </div>
+        <div class="tpl-actions">
+          ${canSend ? `<button class="tpl-btn send" onclick="openSendTemplate('${tpl.name}','${lang}')">📤 שלח</button>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function openSendTemplate(name, lang) {
+  document.getElementById('modalTemplateName').value = name;
+  document.getElementById('modalPhone').value = '';
+  document.getElementById('modalResult').style.display = 'none';
+  const modal = document.getElementById('templateModal');
+  modal.style.display = 'flex';
+}
+
+function closeTemplateModal() {
+  document.getElementById('templateModal').style.display = 'none';
+}
+
+async function doSendTemplate() {
+  const name = document.getElementById('modalTemplateName').value;
+  const phone = document.getElementById('modalPhone').value.trim();
+  const resultEl = document.getElementById('modalResult');
+
+  if (!phone) {
+    resultEl.style.display = 'block';
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = 'נא להזין מספר טלפון';
+    return;
+  }
+
+  resultEl.style.display = 'block';
+  resultEl.style.color = 'var(--text2)';
+  resultEl.textContent = 'שולח...';
+
+  try {
+    const data = await api('/send-template', {
+      method: 'POST',
+      body: JSON.stringify({ phone, templateName: name, language: 'he' })
+    });
+    if (data.success) {
+      resultEl.style.color = 'var(--success)';
+      resultEl.textContent = '✅ נשלח בהצלחה!';
+      setTimeout(closeTemplateModal, 1500);
+    } else {
+      resultEl.style.color = 'var(--danger)';
+      resultEl.textContent = '❌ ' + (data.error || JSON.stringify(data.data));
+    }
+  } catch(e) {
+    resultEl.style.color = 'var(--danger)';
+    resultEl.textContent = '❌ שגיאה: ' + e.message;
+  }
+}
+
+// ===== CREATE TEMPLATE =====
+let ctplButtonCount = 0;
+
+function openCreateTemplateModal() {
+  // Reset form
+  document.getElementById('ctplName').value = '';
+  document.getElementById('ctplCategory').value = 'MARKETING';
+  document.getElementById('ctplLang').value = 'he';
+  document.getElementById('ctplHeaderType').value = 'NONE';
+  document.getElementById('ctplHeaderText').value = '';
+  document.getElementById('ctplBody').value = '';
+  document.getElementById('ctplFooter').value = '';
+  document.getElementById('ctplButtons').innerHTML = '';
+  document.getElementById('ctplResult').style.display = 'none';
+  document.getElementById('ctplSubmitBtn').disabled = false;
+  ctplButtonCount = 0;
+  toggleHeaderInput();
+  updateCreatePreview();
+  const modal = document.getElementById('createTemplateModal');
+  modal.style.display = 'flex';
+}
+
+function closeCreateTemplateModal() {
+  document.getElementById('createTemplateModal').style.display = 'none';
+}
+
+function toggleHeaderInput() {
+  const type = document.getElementById('ctplHeaderType').value;
+  document.getElementById('ctplHeaderTextWrap').style.display = type === 'TEXT' ? 'block' : 'none';
+}
+
+function addTemplateButton() {
+  if (ctplButtonCount >= 3) return;
+  ctplButtonCount++;
+  const idx = ctplButtonCount;
+  const wrap = document.getElementById('ctplButtons');
+  const row = document.createElement('div');
+  row.id = 'ctplBtnRow' + idx;
+  row.style.cssText = 'display:flex;gap:6px;align-items:center;';
+  row.innerHTML = `
+    <select id="ctplBtnType${idx}" onchange="updateCreatePreview()" style="padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;width:120px;">
+      <option value="QUICK_REPLY">תגובה מהירה</option>
+      <option value="URL">קישור (URL)</option>
+      <option value="PHONE_NUMBER">מספר טלפון</option>
+    </select>
+    <input id="ctplBtnText${idx}" placeholder="טקסט כפתור" oninput="updateCreatePreview()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;">
+    <input id="ctplBtnValue${idx}" placeholder="URL / טלפון" oninput="updateCreatePreview()" style="width:140px;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:12px;direction:ltr;">
+    <button onclick="removeTemplateButton(${idx})" style="width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:var(--bg3);cursor:pointer;font-size:14px;color:var(--danger);display:flex;align-items:center;justify-content:center;">✕</button>
+  `;
+  wrap.appendChild(row);
+  updateCreatePreview();
+}
+
+function removeTemplateButton(idx) {
+  const row = document.getElementById('ctplBtnRow' + idx);
+  if (row) row.remove();
+  ctplButtonCount--;
+  // Re-index remaining buttons
+  const wrap = document.getElementById('ctplButtons');
+  const rows = wrap.children;
+  ctplButtonCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    ctplButtonCount++;
+    const n = ctplButtonCount;
+    rows[i].id = 'ctplBtnRow' + n;
+    rows[i].querySelector('select').id = 'ctplBtnType' + n;
+    rows[i].querySelector('input:nth-child(2)').id = 'ctplBtnText' + n;
+    rows[i].querySelector('input:nth-child(3)').id = 'ctplBtnValue' + n;
+    rows[i].querySelector('button').setAttribute('onclick', `removeTemplateButton(${n})`);
+  }
+  updateCreatePreview();
+}
+
+function updateCreatePreview() {
+  const headerType = document.getElementById('ctplHeaderType').value;
+  const headerText = document.getElementById('ctplHeaderText').value;
+  const body = document.getElementById('ctplBody').value;
+  const footer = document.getElementById('ctplFooter').value;
+
+  // Header
+  const previewHeader = document.getElementById('ctplPreviewHeader');
+  const previewImage = document.getElementById('ctplPreviewImagePlaceholder');
+  if (headerType === 'TEXT' && headerText) {
+    previewHeader.textContent = headerText;
+    previewHeader.style.display = 'block';
+    previewImage.style.display = 'none';
+  } else if (headerType === 'IMAGE') {
+    previewHeader.style.display = 'none';
+    previewImage.style.display = 'flex';
+  } else {
+    previewHeader.style.display = 'none';
+    previewImage.style.display = 'none';
+  }
+
+  // Body — highlight variables
+  const previewBody = document.getElementById('ctplPreviewBody');
+  if (body) {
+    previewBody.innerHTML = esc(body).replace(/\{\{(\d+)\}\}/g, '<span style="background:#c3e6f5;padding:0 3px;border-radius:3px;font-weight:600;color:#0c4a6e;">{{$1}}</span>');
+  } else {
+    previewBody.innerHTML = '<span style="color:var(--text3);">הקלד את גוף ההודעה...</span>';
+  }
+
+  // Footer
+  const previewFooter = document.getElementById('ctplPreviewFooter');
+  if (footer) {
+    previewFooter.textContent = footer;
+    previewFooter.style.display = 'block';
+  } else {
+    previewFooter.style.display = 'none';
+  }
+
+  // Buttons
+  const previewButtons = document.getElementById('ctplPreviewButtons');
+  let btnsHtml = '';
+  for (let i = 1; i <= ctplButtonCount; i++) {
+    const el = document.getElementById('ctplBtnText' + i);
+    if (!el) continue;
+    const txt = el.value || 'כפתור ' + i;
+    const typeEl = document.getElementById('ctplBtnType' + i);
+    const type = typeEl ? typeEl.value : 'QUICK_REPLY';
+    const icon = type === 'URL' ? '🔗' : type === 'PHONE_NUMBER' ? '📞' : '↩️';
+    btnsHtml += `<div style="text-align:center;padding:6px 0;color:#0c82df;font-size:12px;font-weight:500;${i > 1 ? 'border-top:1px solid rgba(0,0,0,.06);' : ''}">${icon} ${esc(txt)}</div>`;
+  }
+  if (btnsHtml) {
+    previewButtons.innerHTML = btnsHtml;
+    previewButtons.style.display = 'block';
+  } else {
+    previewButtons.style.display = 'none';
+  }
+}
+
+async function createTemplate() {
+  const name = document.getElementById('ctplName').value.trim();
+  const category = document.getElementById('ctplCategory').value;
+  const language = document.getElementById('ctplLang').value;
+  const headerType = document.getElementById('ctplHeaderType').value;
+  const headerText = document.getElementById('ctplHeaderText').value.trim();
+  const body = document.getElementById('ctplBody').value.trim();
+  const footer = document.getElementById('ctplFooter').value.trim();
+  const resultEl = document.getElementById('ctplResult');
+
+  // Validation
+  if (!name) { showCtplResult('error', 'נא להזין שם תבנית'); return; }
+  if (!/^[a-z0-9_]+$/.test(name)) { showCtplResult('error', 'שם תבנית: רק אותיות קטנות, מספרים וקו תחתון'); return; }
+  if (!body) { showCtplResult('error', 'נא להזין גוף הודעה'); return; }
+  if (headerType === 'TEXT' && !headerText) { showCtplResult('error', 'נא להזין טקסט כותרת'); return; }
+
+  // Build components
+  const components = [];
+
+  if (headerType === 'TEXT') {
+    components.push({ type: 'HEADER', format: 'TEXT', text: headerText });
+  } else if (headerType === 'IMAGE') {
+    components.push({ type: 'HEADER', format: 'IMAGE' });
+  }
+
+  components.push({ type: 'BODY', text: body });
+
+  if (footer) {
+    components.push({ type: 'FOOTER', text: footer });
+  }
+
+  // Buttons
+  const buttons = [];
+  for (let i = 1; i <= ctplButtonCount; i++) {
+    const typeEl = document.getElementById('ctplBtnType' + i);
+    const textEl = document.getElementById('ctplBtnText' + i);
+    const valueEl = document.getElementById('ctplBtnValue' + i);
+    if (!typeEl || !textEl) continue;
+    const btnType = typeEl.value;
+    const btnText = textEl.value.trim();
+    const btnValue = valueEl ? valueEl.value.trim() : '';
+    if (!btnText) { showCtplResult('error', `כפתור ${i}: נא להזין טקסט`); return; }
+    if (btnType === 'URL' && !btnValue) { showCtplResult('error', `כפתור ${i}: נא להזין URL`); return; }
+    if (btnType === 'PHONE_NUMBER' && !btnValue) { showCtplResult('error', `כפתור ${i}: נא להזין מספר טלפון`); return; }
+
+    const btn = { type: btnType, text: btnText };
+    if (btnType === 'URL') btn.url = btnValue;
+    if (btnType === 'PHONE_NUMBER') btn.phone_number = btnValue;
+    buttons.push(btn);
+  }
+  if (buttons.length) {
+    components.push({ type: 'BUTTONS', buttons });
+  }
+
+  // Submit
+  showCtplResult('info', 'שולח ל-Meta...');
+  document.getElementById('ctplSubmitBtn').disabled = true;
+
+  try {
+    const data = await api('/create-template', {
+      method: 'POST',
+      body: JSON.stringify({ name, category, language, components })
+    });
+    if (data.success || data.id) {
+      showCtplResult('success', '✅ התבנית נוצרה בהצלחה! ID: ' + (data.id || ''));
+      setTimeout(() => {
+        closeCreateTemplateModal();
+        loadTemplates();
+      }, 1500);
+    } else {
+      const errMsg = data.error?.message || data.error || JSON.stringify(data.data || data);
+      showCtplResult('error', '❌ ' + errMsg);
+      document.getElementById('ctplSubmitBtn').disabled = false;
+    }
+  } catch(e) {
+    showCtplResult('error', '❌ שגיאה: ' + e.message);
+    document.getElementById('ctplSubmitBtn').disabled = false;
+  }
+}
+
+function showCtplResult(type, msg) {
+  const el = document.getElementById('ctplResult');
+  el.style.display = 'block';
+  el.textContent = msg;
+  if (type === 'error') {
+    el.style.background = '#fef2f2'; el.style.color = 'var(--danger)'; el.style.border = '1px solid #fecaca';
+  } else if (type === 'success') {
+    el.style.background = '#f0fdf4'; el.style.color = '#15803d'; el.style.border = '1px solid #bbf7d0';
+  } else {
+    el.style.background = '#f0f9ff'; el.style.color = '#0369a1'; el.style.border = '1px solid #bae6fd';
+  }
+}
+
+// ===== COSTS =====
+// Meta WA pricing (Israel, USD per conversation)
+const WA_PRICE_SERVICE = 0.02;    // user-initiated
+const WA_PRICE_MARKETING = 0.065; // business-initiated template
+const WA_PRICE_AVG = 0.03;        // blended average estimate
+
+function estimateWaCost(conversations) { return conversations * WA_PRICE_AVG; }
+
+async function loadCosts() {
+  const days = document.getElementById('costsDaysFilter')?.value || 30;
+  try {
+    const data = await api('/costs?days=' + days);
+    renderCostCards(data.today || [], data.totals || {}, data.waToday || {}, data.waDaily || []);
+    renderCostChart(data.daily || [], data.waDaily || []);
+    renderWaTable(data.waDaily || []);
+    renderCostTable(data.daily || []);
+  } catch(e) {
+    document.getElementById('costsTodayCards').innerHTML = '<div style="color:var(--danger);padding:20px;">שגיאה: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderCostCards(today, totals, waToday, waDaily) {
+  const claudeToday = today.reduce((s,r) => s + (r.cost_usd || 0), 0);
+  const waConvsToday = waToday.conversations || 0;
+  const waCostToday = estimateWaCost(waConvsToday);
+  const totalToday = claudeToday + waCostToday;
+
+  const claudeTotal = totals.total_cost || 0;
+  const waConvsTotal = waDaily.reduce((s,r) => s + (r.conversations || 0), 0);
+  const waCostTotal = estimateWaCost(waConvsTotal);
+  const grandTotal = claudeTotal + waCostTotal;
+
+  const uniqueDays = new Set(waDaily.map(r => r.day).concat((today || []).map(() => new Date().toISOString().slice(0,10)))).size || 1;
+
+  const cards = document.getElementById('costsTodayCards');
+  cards.innerHTML = `
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">עלות היום (כולל)</div>
+      <div style="font-size:24px;font-weight:700;color:var(--text);direction:ltr;">$${totalToday.toFixed(3)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">₪${(totalToday * 3.6).toFixed(2)}</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">🤖 Claude היום</div>
+      <div style="font-size:24px;font-weight:700;color:#7c3aed;direction:ltr;">$${claudeToday.toFixed(3)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${totals.total_calls || 0} קריאות</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">📱 WhatsApp היום</div>
+      <div style="font-size:24px;font-weight:700;color:var(--accent);direction:ltr;">$${waCostToday.toFixed(3)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">${waConvsToday} שיחות | ${waToday.outgoing_msgs || 0} הודעות</div>
+    </div>
+    <div style="background:var(--bg2);border-radius:12px;border:1px solid var(--border);padding:16px;">
+      <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">סה״כ תקופה</div>
+      <div style="font-size:24px;font-weight:700;color:var(--text);direction:ltr;">$${grandTotal.toFixed(2)}</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:2px;">₪${(grandTotal * 3.6).toFixed(1)} | ממוצע $${(grandTotal / uniqueDays).toFixed(2)}/יום</div>
+    </div>
+  `;
+}
+
+function renderCostChart(claudeDaily, waDaily) {
+  // Aggregate both sources by day
+  const byDay = {};
+  for (const r of claudeDaily) {
+    if (!byDay[r.day]) byDay[r.day] = { claude: 0, wa: 0 };
+    byDay[r.day].claude += r.cost_usd;
+  }
+  for (const r of waDaily) {
+    if (!byDay[r.day]) byDay[r.day] = { claude: 0, wa: 0 };
+    byDay[r.day].wa += estimateWaCost(r.conversations);
+  }
+  const sortedDays = Object.keys(byDay).sort();
+  const maxCost = Math.max(...sortedDays.map(d => byDay[d].claude + byDay[d].wa), 0.01);
+  const chartEl = document.getElementById('costsChart');
+  if (sortedDays.length === 0) {
+    chartEl.innerHTML = '<div style="color:var(--text3);text-align:center;width:100%;padding:40px;">אין נתונים</div>';
+    return;
+  }
+  chartEl.innerHTML = sortedDays.map(day => {
+    const { claude, wa } = byDay[day];
+    const total = claude + wa;
+    const pctClaude = Math.max(1, (claude / maxCost) * 100);
+    const pctWa = Math.max(1, (wa / maxCost) * 100);
+    const label = day.slice(5);
+    return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0;">
+      <div style="font-size:10px;color:var(--text2);direction:ltr;">$${total.toFixed(2)}</div>
+      <div style="width:100%;max-width:32px;display:flex;flex-direction:column;gap:1px;">
+        <div style="height:${pctClaude}%;background:#7c3aed;border-radius:4px 4px 0 0;min-height:2px;" title="Claude: $${claude.toFixed(3)}"></div>
+        <div style="height:${pctWa}%;background:var(--accent);border-radius:0 0 4px 4px;min-height:2px;" title="WA: $${wa.toFixed(3)}"></div>
+      </div>
+      <div style="font-size:9px;color:var(--text3);white-space:nowrap;">${label}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderWaTable(waDaily) {
+  const tbody = document.getElementById('waTableBody');
+  if (waDaily.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--text3);">אין נתונים</td></tr>';
+    return;
+  }
+  let totalCost = 0;
+  tbody.innerHTML = waDaily.map(r => {
+    const cost = estimateWaCost(r.conversations);
+    totalCost += cost;
+    return `<tr style="border-top:1px solid var(--border-light);">
+      <td style="padding:8px 14px;direction:ltr;">${r.day}</td>
+      <td style="padding:8px 14px;font-weight:600;">${r.conversations}</td>
+      <td style="padding:8px 14px;direction:ltr;">${r.incoming_msgs}</td>
+      <td style="padding:8px 14px;direction:ltr;">${r.outgoing_msgs}</td>
+      <td style="padding:8px 14px;font-weight:600;direction:ltr;">$${cost.toFixed(3)}</td>
+    </tr>`;
+  }).join('') + `<tr style="border-top:2px solid var(--border);background:var(--bg3);">
+    <td colspan="4" style="padding:8px 14px;font-weight:700;">סה״כ</td>
+    <td style="padding:8px 14px;font-weight:700;direction:ltr;">$${totalCost.toFixed(2)}</td>
+  </tr>`;
+}
+
+function renderCostTable(daily) {
+  const tbody = document.getElementById('costsTableBody');
+  if (daily.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:20px;color:var(--text3);">אין נתונים</td></tr>';
+    return;
+  }
+  tbody.innerHTML = daily.map(r => `
+    <tr style="border-top:1px solid var(--border-light);">
+      <td style="padding:8px 14px;direction:ltr;">${r.day}</td>
+      <td style="padding:8px 14px;font-size:12px;color:var(--text2);">${esc(r.model)}</td>
+      <td style="padding:8px 14px;direction:ltr;">${r.calls}</td>
+      <td style="padding:8px 14px;direction:ltr;">${(r.input_tokens || 0).toLocaleString()}</td>
+      <td style="padding:8px 14px;direction:ltr;">${(r.output_tokens || 0).toLocaleString()}</td>
+      <td style="padding:8px 14px;font-weight:600;direction:ltr;color:${r.cost_usd > 0.5 ? 'var(--danger)' : 'var(--text)'};">$${r.cost_usd.toFixed(4)}</td>
+    </tr>
+  `).join('');
+}
+
+// ===== OVERVIEW =====
+let overviewStats = {};
+let overviewLeads = [];
+
+async function loadOverview() {
+  try {
+    const [statsData, leadsData] = await Promise.all([
+      api('/stats'),
+      api('/leads'),
+    ]);
+    overviewStats = statsData;
+    overviewLeads = leadsData.leads || [];
+    renderOverviewStats();
+    renderRecentActivity();
+  } catch(e) {
+    console.error('loadOverview failed:', e);
+  }
+}
+
+function renderOverviewStats() {
+  const s = overviewStats;
+  // Count leads by business
+  const dekelCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'dekel').length;
+  const alonCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'alon_dev').length;
+  const organicCount = overviewLeads.filter(l => getBizLabel(l.source).cls === 'whatsapp').length;
+  document.getElementById('overviewStats').innerHTML = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:var(--accent);">${s.totalLeads || 0}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">סה"כ לידים</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#e0f2fe,#f0f9ff);border:1px solid #7dd3fc;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#0369a1;">${dekelCount}</div>
+      <div style="font-size:12px;color:#0369a1;margin-top:4px;">🏡 דקל לפרישה</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#fef3c7,#fffbeb);border:1px solid #fcd34d;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#92400e;">${alonCount}</div>
+      <div style="font-size:12px;color:#92400e;margin-top:4px;">💻 Alon.dev</div>
+    </div>
+    <div style="background:linear-gradient(135deg,#e7fce9,#f0fdf4);border:1px solid #86efac;border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#15803d;">${organicCount}</div>
+      <div style="font-size:12px;color:#15803d;margin-top:4px;">💬 אורגני</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:#7b2ff7;">${s.messagesToday || 0}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">הודעות היום</div>
+    </div>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
+      <div style="font-size:32px;font-weight:900;color:var(--accent);">${s.bookedCount || 0}</div>
+      <div style="font-size:12px;color:var(--text2);margin-top:4px;">נקבעו פגישות</div>
+    </div>
+  `;
+}
+
+function renderRecentActivity() {
+  const recent = overviewLeads
+    .filter(l => l.last_message)
+    .sort((a, b) => (b.last_message_at || '').localeCompare(a.last_message_at || ''))
+    .slice(0, 20);
+  const container = document.getElementById('recentActivity');
+  if (!recent.length) {
+    container.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px;">אין פעילות אחרונה</div>';
+    return;
+  }
+  container.innerHTML = recent.map(l => {
+    const isOut = l.last_message_role === 'assistant';
+    const time = l.last_message_at ? formatTime(l.last_message_at) : '';
+    const preview = (l.last_message || '').slice(0, 80);
+    return `<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-light);font-size:13px;align-items:flex-start;cursor:pointer;" onclick="showView('inbox')">
+      <div style="width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0;background:${isOut ? 'var(--accent)' : '#0099cc'};"></div>
+      <span style="font-weight:700;color:var(--accent);min-width:80px;">${esc(l.name || l.phone)}</span>
+      <span style="color:var(--text2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${isOut ? '← ' : '→ '}${esc(preview)}</span>
+      <span style="color:var(--text3);font-size:11px;min-width:50px;text-align:left;">${time}</span>
+    </div>`;
+  }).join('');
+}
+
+// ===== BROADCASTS =====
+let broadcastLog = JSON.parse(localStorage.getItem('wa_broadcast_log') || '[]');
+
+function loadBroadcastData() {
+  updateBcCount();
+  renderBroadcastHistory();
+}
+
+function updateBcPreview() {
+  const mode = document.getElementById('bcRecipientMode').value;
+  document.getElementById('bcStatusFilter').style.display = mode === 'status' ? 'block' : 'none';
+  document.getElementById('bcSourceFilter').style.display = mode === 'source' ? 'block' : 'none';
+  updateBcCount();
+}
+
+function getBcRecipients() {
+  const mode = document.getElementById('bcRecipientMode').value;
+  if (mode === 'all') return contacts.map(l => l.phone);
+  if (mode === 'status') {
+    const status = document.getElementById('bcStatusSelect').value;
+    return contacts.filter(l => (l.lead_status || 'new') === status).map(l => l.phone);
+  }
+  if (mode === 'source') {
+    const source = document.getElementById('bcSourceSelect').value;
+    return contacts.filter(l => (l.source || '').includes(source)).map(l => l.phone);
+  }
+  return [];
+}
+
+function updateBcCount() {
+  const count = getBcRecipients().length;
+  const el = document.getElementById('bcCount');
+  if (el) el.textContent = `${count} נמענים נבחרו`;
+}
+
+async function sendBroadcast() {
+  const phones = getBcRecipients();
+  const message = document.getElementById('bcMessage').value.trim();
+  if (!message) { alert('יש להזין הודעה'); return; }
+  if (!phones.length) { alert('אין נמענים'); return; }
+  if (!confirm(`לשלוח הודעה ל-${phones.length} נמענים?`)) return;
+
+  try {
+    const data = await api('/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ phones, message })
+    });
+    const sent = (data.results || []).filter(r => r.success).length;
+    const failed = (data.results || []).filter(r => !r.success).length;
+    alert(`שידור הושלם: ${sent} נשלחו, ${failed} נכשלו`);
+
+    broadcastLog.unshift({
+      date: new Date().toISOString(),
+      message: message.slice(0, 100),
+      recipientCount: phones.length,
+      sent, failed,
+    });
+    if (broadcastLog.length > 50) broadcastLog = broadcastLog.slice(0, 50);
+    localStorage.setItem('wa_broadcast_log', JSON.stringify(broadcastLog));
+    renderBroadcastHistory();
+    document.getElementById('bcMessage').value = '';
+  } catch(e) {
+    alert('שגיאה: ' + e.message);
+  }
+}
+
+function renderBroadcastHistory() {
+  const container = document.getElementById('broadcastHistory');
+  if (!broadcastLog.length) {
+    container.innerHTML = '<div style="color:var(--text3);text-align:center;padding:20px;">אין שידורים קודמים</div>';
+    return;
+  }
+  let html = '<table style="width:100%;border-collapse:collapse;font-size:13px;"><thead><tr style="text-align:right;"><th style="padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);">תאריך</th><th style="padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);">הודעה</th><th style="padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);">נמענים</th><th style="padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);">נשלחו</th><th style="padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);">נכשלו</th></tr></thead><tbody>';
+  for (const b of broadcastLog) {
+    html += `<tr><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${formatTime(b.date)}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(b.message)}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${b.recipientCount}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);color:var(--accent);">${b.sent}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);color:${b.failed ? 'var(--danger)' : 'var(--text3)'};">${b.failed}</td></tr>`;
+  }
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// ===== ANALYTICS =====
+const STATUS_MAP = {
+  'new': 'חדש', 'contacted': 'יצרנו קשר', 'interested': 'מעוניין',
+  'meeting_set': 'נקבע זום', 'closed': 'סגור', '': 'לא הוגדר', null: 'לא הוגדר'
+};
+
+async function loadAnalytics() {
+  try {
+    const [data, meta] = await Promise.all([api('/stats'), api('/meta-health').catch(() => null)]);
+    // Phone health card
+    if (meta?.success && meta.phone) {
+      const p = meta.phone;
+      const qColor = p.quality_rating === 'GREEN' ? '#25D366' : p.quality_rating === 'YELLOW' ? '#e68a00' : '#e53e3e';
+      const limitMap = { TIER_1K: '1,000', TIER_10K: '10,000', TIER_100K: '100,000', TIER_UNLIMITED: 'ללא הגבלה' };
+      const card = document.getElementById('phoneHealthCard');
+      card.style.display = 'block';
+      document.getElementById('phoneHealthGrid').innerHTML = `
+        <div style="text-align:center;">
+          <div style="font-size:20px;font-weight:800;color:${qColor};">${p.quality_rating || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">איכות</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:15px;font-weight:700;color:var(--text);">${limitMap[p.messaging_limit_tier] || p.messaging_limit_tier || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">מגבלת הודעות</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:15px;font-weight:700;color:${p.name_status === 'APPROVED' ? '#25D366' : '#e68a00'};">${p.name_status || '?'}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">סטטוס שם</div>
+        </div>
+        <div style="text-align:center;">
+          <div style="font-size:14px;font-weight:600;color:var(--text);" dir="ltr">${esc(p.display_phone_number || '-')}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px;">${esc(p.verified_name || 'לא מאומת')}</div>
+        </div>
+      `;
+    }
+    // Stat cards
+    document.getElementById('statTotalMessages').textContent = data.messagesToday ?? '-';
+    document.getElementById('statButtons').textContent = data.buttonsCount ?? 0;
+    document.getElementById('statLists').textContent = data.listsCount ?? 0;
+    document.getElementById('statVoice').textContent = data.voiceCount ?? 0;
+    document.getElementById('statAvgResponse').textContent = data.avgResponseMin != null ? data.avgResponseMin + '′' : '—';
+    // Charts
+    renderAnalyticsBarChart('analyticsChartMessages', data.messagesPerDay || [], 'הודעות');
+    renderAnalyticsBarChart('analyticsChartLeads', data.leadsPerDay || [], 'לידים');
+    renderAnalyticsSourceTable(data.sourceBreakdown || []);
+    renderAnalyticsFunnelTable(data.statusBreakdown || []);
+  } catch(e) {
+    console.error('loadAnalytics failed:', e);
+  }
+}
+
+function renderAnalyticsBarChart(containerId, data, label) {
+  const container = document.getElementById(containerId);
+  if (!data.length) {
+    container.innerHTML = '<div style="color:var(--text3);text-align:center;height:100%;display:flex;align-items:center;justify-content:center;">אין נתונים</div>';
+    return;
+  }
+  const max = Math.max(...data.map(d => d.count), 1);
+  container.innerHTML = data.map(d => {
+    const pct = Math.max((d.count / max) * 100, 2);
+    const dayLabel = d.day ? d.day.slice(5) : '';
+    return `<div style="flex:1;min-width:6px;display:flex;flex-direction:column;align-items:center;gap:2px;">
+      <div style="width:100%;background:var(--accent);border-radius:3px 3px 0 0;height:${pct}%;min-height:2px;cursor:pointer;transition:background .15s;" title="${dayLabel}: ${d.count} ${label}" onmouseover="this.style.background='#0099cc'" onmouseout="this.style.background='var(--accent)'"></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAnalyticsSourceTable(data) {
+  const tbody = document.querySelector('#analyticsSourceTable tbody');
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="2" style="text-align:center;padding:20px;color:var(--text3);">אין נתונים</td></tr>'; return; }
+  let html = '<tr><th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;">מקור</th><th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;">לידים</th></tr>';
+  for (const s of data) {
+    html += `<tr><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${esc(s.source || 'לא ידוע')}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${s.count}</td></tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+function renderAnalyticsFunnelTable(data) {
+  const tbody = document.querySelector('#analyticsFunnelTable tbody');
+  if (!data.length) { tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;padding:20px;color:var(--text3);">אין נתונים</td></tr>'; return; }
+  const total = data.reduce((s, d) => s + d.count, 0) || 1;
+  let html = '<tr><th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;">שלב</th><th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;">לידים</th><th style="text-align:right;padding:8px 10px;border-bottom:2px solid var(--border);color:var(--text2);font-weight:500;">%</th></tr>';
+  for (const s of data) {
+    const pct = Math.round((s.count / total) * 100);
+    html += `<tr><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${STATUS_MAP[s.lead_status] || esc(s.lead_status || 'לא ידוע')}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${s.count}</td><td style="padding:8px 10px;border-bottom:1px solid var(--border-light);">${pct}%</td></tr>`;
+  }
+  tbody.innerHTML = html;
+}
+
+// ===== CHATBOT FLOWS =====
+let allFlows = [];
+let editingFlowId = null;
+let feNodes = [];
+let feConnections = [];
+let feScale = 1;
+let feOffsetX = 0, feOffsetY = 0;
+let feDragNode = null;
+let feDragStartX = 0, feDragStartY = 0;
+let feNodeStartX = 0, feNodeStartY = 0;
+let feSelectedNode = null;
+let fePanning = false;
+let fePanStartX = 0, fePanStartY = 0;
+let feNodeIdCounter = 1;
+let feConnecting = null;
+
+const NODE_META = {
+  trigger: { label: 'טריגר', icon: '⚡', color: '#7b2ff7', bg: '#e8daff' },
+  send_message: { label: 'שלח הודעה', icon: '💬', color: '#25D366', bg: '#dcf8c6' },
+  wait: { label: 'המתנה', icon: '⏳', color: '#e68a00', bg: '#fff3cd' },
+  condition: { label: 'תנאי', icon: '🔀', color: '#7b2ff7', bg: '#e8daff' },
+  webhook: { label: 'Webhook', icon: '🌐', color: '#0099cc', bg: '#d4edff' },
+};
+
+async function loadFlows() {
+  try {
+    const data = await api('/flows');
+    if (data.success) { allFlows = data.flows || []; renderFlowsList(); }
+  } catch(e) {
+    document.getElementById('flowsList').innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">שגיאה בטעינת פלואים</div>';
+  }
+}
+
+function renderFlowsList() {
+  const container = document.getElementById('flowsList');
+  if (!allFlows.length) {
+    container.innerHTML = '<div style="text-align:center;padding:40px;color:var(--text3);">אין אוטומציות מוגדרות. לחץ "➕ פלו חדש" ליצירת אוטומציה.</div>';
+    return;
+  }
+  const triggerLabels = { keyword: '🔑 מילת מפתח', new_lead: '🆕 ליד חדש', status_change: '🔄 שינוי סטטוס' };
+  const triggerColors = { keyword: '#0099cc', new_lead: 'var(--accent)', status_change: '#7b2ff7' };
+  container.innerHTML = allFlows.map(f => {
+    const steps = typeof f.steps === 'string' ? JSON.parse(f.steps || '[]') : (f.steps || []);
+    return `
+    <div class="flow-card">
+      <div class="flow-icon" style="background:${triggerColors[f.trigger_type] || 'var(--accent)'}20;color:${triggerColors[f.trigger_type] || 'var(--accent)'};">⚡</div>
+      <div class="flow-info">
+        <div class="flow-name">${esc(f.name)}</div>
+        <div class="flow-meta">
+          <span>${triggerLabels[f.trigger_type] || f.trigger_type}: <strong>${esc(f.trigger_value || '—')}</strong></span>
+          <span>${steps.length} צעדים</span>
+        </div>
+      </div>
+      <div class="flow-actions">
+        <label class="flow-toggle" title="${f.enabled ? 'פעיל' : 'כבוי'}">
+          <input type="checkbox" ${f.enabled ? 'checked' : ''} onchange="toggleFlow(${f.id}, this.checked)">
+          <span class="slider"></span>
+        </label>
+        <button style="padding:5px 12px;border-radius:6px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;font-family:inherit;font-size:11px;" onclick="openFlowEditor(${f.id})">✏ עריכה</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleFlow(id, enabled) {
+  try {
+    await api('/flows/' + id, { method: 'PATCH', body: JSON.stringify({ enabled: enabled ? 1 : 0 }) });
+    const f = allFlows.find(fl => fl.id === id);
+    if (f) f.enabled = enabled ? 1 : 0;
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+function openFlowEditor(id) {
+  const flow = id ? allFlows.find(f => f.id === id) : null;
+  editingFlowId = flow ? flow.id : null;
+  document.getElementById('fe-name').value = flow ? flow.name : '';
+  document.getElementById('fe-trigger-type').value = flow ? flow.trigger_type : 'keyword';
+  document.getElementById('fe-trigger-value').value = flow ? (flow.trigger_value || '') : '';
+  document.getElementById('fe-delete-btn').style.display = flow ? 'inline-block' : 'none';
+  updateFeTriggerUI();
+
+  feNodes = []; feConnections = []; feNodeIdCounter = 1;
+  feScale = 1; feOffsetX = 0; feOffsetY = 0; feSelectedNode = null;
+  const steps = flow ? (typeof flow.steps === 'string' ? JSON.parse(flow.steps || '[]') : (flow.steps || [])) : [];
+  const triggerNode = { id: feNodeIdCounter++, type: 'trigger', x: 300, y: 80, data: {} };
+  feNodes.push(triggerNode);
+  let prevId = triggerNode.id;
+  steps.forEach((step, i) => {
+    const node = { id: feNodeIdCounter++, type: step.type, x: 300, y: 80 + (i + 1) * 140, data: { ...step } };
+    feNodes.push(node);
+    feConnections.push({ from: prevId, to: node.id });
+    prevId = node.id;
+  });
+  document.getElementById('flow-editor').classList.add('open');
+  document.body.style.overflow = 'hidden';
+  renderFlowCanvas();
+  initFlowCanvasEvents();
+}
+
+function closeFlowEditor() {
+  document.getElementById('flow-editor').classList.remove('open');
+  document.body.style.overflow = '';
+  editingFlowId = null;
+  feNodes = []; feConnections = [];
+}
+
+function updateFeTriggerUI() {
+  const type = document.getElementById('fe-trigger-type').value;
+  const label = document.getElementById('fe-trigger-val-label');
+  const input = document.getElementById('fe-trigger-value');
+  const wrap = document.getElementById('fe-trigger-val-wrap');
+  if (type === 'keyword') { label.textContent = 'מילת מפתח'; input.placeholder = 'שלום'; wrap.style.display = 'block'; }
+  else if (type === 'new_lead') { wrap.style.display = 'none'; input.value = '*'; }
+  else if (type === 'status_change') { label.textContent = 'סטטוס יעד'; input.placeholder = 'interested'; wrap.style.display = 'block'; }
+}
+
+function renderFlowCanvas() {
+  const canvas = document.getElementById('fe-canvas');
+  canvas.style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+  canvas.querySelectorAll('.fe-node').forEach(n => n.remove());
+
+  for (const node of feNodes) {
+    const meta = NODE_META[node.type] || NODE_META.send_message;
+    const el = document.createElement('div');
+    el.className = 'fe-node' + (node.type === 'trigger' ? ' trigger-node' : '') + (feSelectedNode === node.id ? ' selected' : '');
+    el.dataset.nodeId = node.id;
+    el.style.left = node.x + 'px';
+    el.style.top = node.y + 'px';
+
+    let bodyHTML = '';
+    if (node.type === 'trigger') {
+      const tv = document.getElementById('fe-trigger-value')?.value || '';
+      bodyHTML = `<div style="font-size:11px;color:var(--text2);">${NODE_META.trigger.label}: ${tv || '*'}</div>`;
+    } else if (node.type === 'send_message') {
+      bodyHTML = `<label>הודעה</label><textarea rows="3" placeholder="היי {name}..." oninput="feUpdateData(${node.id},'content',this.value)">${esc(node.data.content || '')}</textarea><div style="font-size:9px;color:var(--text3);margin-top:2px;">משתנים: {name}, {phone}</div>`;
+    } else if (node.type === 'wait') {
+      bodyHTML = `<label>זמן המתנה</label><input value="${esc(node.data.duration || '1h')}" placeholder="1h / 24h / 7d" oninput="feUpdateData(${node.id},'duration',this.value)"><div style="font-size:9px;color:var(--text3);margin-top:2px;">m=דקות h=שעות d=ימים</div>`;
+    } else if (node.type === 'condition') {
+      bodyHTML = `<label>שדה</label><select onchange="feUpdateData(${node.id},'field',this.value)"><option value="lead_status" ${node.data.field === 'lead_status' ? 'selected' : ''}>סטטוס ליד</option><option value="was_booked" ${node.data.field === 'was_booked' ? 'selected' : ''}>נקבעה פגישה</option><option value="source" ${node.data.field === 'source' ? 'selected' : ''}>מקור</option></select><label>ערך</label><input value="${esc(node.data.value || '')}" placeholder="interested" oninput="feUpdateData(${node.id},'value',this.value)">`;
+    } else if (node.type === 'webhook') {
+      bodyHTML = `<label>URL</label><input value="${esc(node.data.url || '')}" placeholder="https://..." oninput="feUpdateData(${node.id},'url',this.value)">`;
+    }
+
+    el.innerHTML = `
+      <div class="fe-node-header" style="background:${meta.bg};">
+        <div class="nh-icon" style="background:${meta.color}22;color:${meta.color};">${meta.icon}</div>
+        <div class="nh-label">${meta.label}</div>
+        ${node.type !== 'trigger' ? `<span class="nh-delete" onclick="feDeleteNode(${node.id})" title="מחק">×</span>` : ''}
+      </div>
+      <div class="fe-node-body">${bodyHTML}</div>
+      ${node.type !== 'trigger' ? `<div class="fe-port port-in" data-node="${node.id}" data-dir="in"></div>` : ''}
+      <div class="fe-port port-out" data-node="${node.id}" data-dir="out"></div>
+    `;
+
+    const header = el.querySelector('.fe-node-header');
+    header.addEventListener('mousedown', (e) => {
+      if (e.target.classList.contains('nh-delete')) return;
+      e.stopPropagation();
+      feDragNode = node; feDragStartX = e.clientX; feDragStartY = e.clientY;
+      feNodeStartX = node.x; feNodeStartY = node.y;
+      el.classList.add('dragging'); feSelectedNode = node.id; renderFlowCanvas();
+    });
+    canvas.appendChild(el);
+  }
+  renderFlowConnections();
+}
+
+function renderFlowConnections() {
+  const svg = document.getElementById('fe-connections');
+  let paths = '';
+  for (const conn of feConnections) {
+    const fromNode = feNodes.find(n => n.id === conn.from);
+    const toNode = feNodes.find(n => n.id === conn.to);
+    if (!fromNode || !toNode) continue;
+    const x1 = fromNode.x + 110, y1 = fromNode.y + 90;
+    const x2 = toNode.x + 110, y2 = toNode.y;
+    const midY = (y1 + y2) / 2;
+    paths += `<path d="M ${x1} ${y1} C ${x1} ${midY}, ${x2} ${midY}, ${x2} ${y2}" class="active"/>`;
+  }
+  svg.innerHTML = paths;
+}
+
+function feUpdateData(nodeId, key, value) {
+  const node = feNodes.find(n => n.id === nodeId);
+  if (node) node.data[key] = value;
+}
+
+function feDeleteNode(nodeId) {
+  feNodes = feNodes.filter(n => n.id !== nodeId);
+  const incoming = feConnections.filter(c => c.to === nodeId);
+  const outgoing = feConnections.filter(c => c.from === nodeId);
+  feConnections = feConnections.filter(c => c.from !== nodeId && c.to !== nodeId);
+  for (const inc of incoming) {
+    for (const out of outgoing) {
+      feConnections.push({ from: inc.from, to: out.to });
+    }
+  }
+  renderFlowCanvas();
+}
+
+function initFlowCanvasEvents() {
+  const wrap = document.getElementById('fe-canvas-wrap');
+  const onMouseMove = (e) => {
+    if (feDragNode) {
+      const dx = (e.clientX - feDragStartX) / feScale;
+      const dy = (e.clientY - feDragStartY) / feScale;
+      feDragNode.x = Math.round((feNodeStartX + dx) / 12) * 12;
+      feDragNode.y = Math.round((feNodeStartY + dy) / 12) * 12;
+      const el = document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`);
+      if (el) { el.style.left = feDragNode.x + 'px'; el.style.top = feDragNode.y + 'px'; }
+      renderFlowConnections();
+    } else if (fePanning) {
+      feOffsetX += (e.clientX - fePanStartX) / feScale;
+      feOffsetY += (e.clientY - fePanStartY) / feScale;
+      fePanStartX = e.clientX; fePanStartY = e.clientY;
+      document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+      wrap.classList.add('grabbing');
+    }
+  };
+  const onMouseUp = () => {
+    if (feDragNode) {
+      document.querySelector(`.fe-node[data-node-id="${feDragNode.id}"]`)?.classList.remove('dragging');
+      feDragNode = null; renderFlowCanvas();
+    }
+    fePanning = false; wrap.classList.remove('grabbing');
+  };
+  wrap.onmousedown = (e) => {
+    if (e.target === wrap || e.target.classList.contains('fe-canvas-grid')) {
+      fePanning = true; fePanStartX = e.clientX; fePanStartY = e.clientY;
+      feSelectedNode = null; renderFlowCanvas();
+    }
+  };
+  wrap.addEventListener('mousedown', (e) => {
+    const port = e.target.closest('.fe-port');
+    if (port && port.dataset.dir === 'out') { e.stopPropagation(); feConnecting = { fromId: parseInt(port.dataset.node) }; }
+  });
+  wrap.addEventListener('mouseup', (e) => {
+    if (feConnecting) {
+      const port = e.target.closest('.fe-port');
+      if (port && port.dataset.dir === 'in') {
+        const toId = parseInt(port.dataset.node);
+        if (toId !== feConnecting.fromId && !feConnections.find(c => c.from === feConnecting.fromId && c.to === toId)) {
+          feConnections.push({ from: feConnecting.fromId, to: toId }); renderFlowConnections();
+        }
+      }
+      feConnecting = null;
+    }
+  });
+  document.addEventListener('mousemove', onMouseMove);
+  document.addEventListener('mouseup', onMouseUp);
+  wrap.onwheel = (e) => {
+    e.preventDefault();
+    feScale = Math.min(2, Math.max(0.3, feScale + (e.deltaY > 0 ? -0.05 : 0.05)));
+    document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+    document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+  };
+  document.getElementById('flow-editor').onkeydown = (e) => {
+    if ((e.key === 'Delete' || e.key === 'Backspace') && feSelectedNode && !['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) {
+      const node = feNodes.find(n => n.id === feSelectedNode);
+      if (node && node.type !== 'trigger') feDeleteNode(feSelectedNode);
+    }
+  };
+}
+
+function feZoom(delta) {
+  if (delta === 0) { feScale = 1; feOffsetX = 0; feOffsetY = 0; }
+  else feScale = Math.min(2, Math.max(0.3, feScale + delta));
+  document.getElementById('fe-canvas').style.transform = `scale(${feScale}) translate(${feOffsetX}px, ${feOffsetY}px)`;
+  document.getElementById('fe-zoom-level').textContent = Math.round(feScale * 100) + '%';
+}
+
+function onNodeTypeDrag(e, type) { e.dataTransfer.setData('text/plain', type); }
+
+function onCanvasDrop(e) {
+  e.preventDefault();
+  const type = e.dataTransfer.getData('text/plain');
+  if (!type || !NODE_META[type]) return;
+  const wrap = document.getElementById('fe-canvas-wrap');
+  const rect = wrap.getBoundingClientRect();
+  const x = Math.round(((e.clientX - rect.left) / feScale - feOffsetX) / 12) * 12;
+  const y = Math.round(((e.clientY - rect.top) / feScale - feOffsetY) / 12) * 12;
+  const data = {};
+  if (type === 'send_message') data.content = '';
+  else if (type === 'wait') data.duration = '1h';
+  else if (type === 'condition') { data.field = 'lead_status'; data.value = ''; }
+  else if (type === 'webhook') data.url = '';
+  const newNode = { id: feNodeIdCounter++, type, x, y, data };
+  feNodes.push(newNode);
+  const nodesAbove = feNodes.filter(n => n.id !== newNode.id && n.y < y).sort((a, b) => b.y - a.y);
+  for (const n of nodesAbove) {
+    if (!feConnections.find(c => c.from === n.id)) { feConnections.push({ from: n.id, to: newNode.id }); break; }
+  }
+  feSelectedNode = newNode.id;
+  renderFlowCanvas();
+}
+
+function nodesToSteps() {
+  const trigger = feNodes.find(n => n.type === 'trigger');
+  if (!trigger) return [];
+  const steps = []; const visited = new Set(); let currentId = trigger.id; visited.add(currentId);
+  while (true) {
+    const conn = feConnections.find(c => c.from === currentId);
+    if (!conn || visited.has(conn.to)) break;
+    visited.add(conn.to);
+    const node = feNodes.find(n => n.id === conn.to);
+    if (!node) break;
+    steps.push({ type: node.type, ...node.data });
+    currentId = node.id;
+  }
+  return steps;
+}
+
+async function saveFlow() {
+  const name = document.getElementById('fe-name').value.trim();
+  const trigger_type = document.getElementById('fe-trigger-type').value;
+  const trigger_value = document.getElementById('fe-trigger-value').value.trim() || '*';
+  if (!name) { alert('חובה למלא שם'); return; }
+  const steps = nodesToSteps();
+  const body = { name, trigger_type, trigger_value, steps: JSON.stringify(steps) };
+  try {
+    if (editingFlowId) {
+      await api('/flows/' + editingFlowId, { method: 'PATCH', body: JSON.stringify(body) });
+    } else {
+      await api('/flows', { method: 'POST', body: JSON.stringify(body) });
+    }
+    closeFlowEditor();
+    await loadFlows();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+async function deleteFlow() {
+  if (!editingFlowId) return;
+  if (!confirm('למחוק את הפלו?')) return;
+  try {
+    await api('/flows/' + editingFlowId, { method: 'DELETE' });
+    closeFlowEditor();
+    await loadFlows();
+  } catch(e) { alert('שגיאה: ' + e.message); }
+}
+
+init();
+
+// PWA Service Worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
