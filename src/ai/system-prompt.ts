@@ -6,6 +6,7 @@
 import { isBusinessHours, formatIsraelTime } from '../calendar/business-hours.js';
 import { config } from '../config.js';
 import { createLogger } from '../utils/logger.js';
+import type { TenantRow } from '../db/tenants.js';
 
 const promptLog = createLogger('system-prompt');
 import { getAvailableSlots } from '../calendar/api.js';
@@ -74,18 +75,28 @@ function formatObjections(items: ObjectionItem[]): string {
   return lines.join('\n');
 }
 
-export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string, isWebsite?: boolean): Promise<string> {
-  const isBoss = (!isWebsite && phone) ? isAdminPhone(phone) : false;
-  const ownerName = getOwnerName();
-  const businessName = getBusinessName();
+export async function buildSystemPrompt(leadName: string, leadInterest: string, phone?: string, isWebsite?: boolean, tenant?: TenantRow): Promise<string> {
+  const isBoss = (!isWebsite && phone) ? isAdminPhone(phone, tenant) : false;
+
+  // Use tenant fields when available, fall back to global config
+  const ownerName = tenant ? tenant.owner_name : getOwnerName();
+  const businessName = tenant ? tenant.business_name : getBusinessName();
   const businessDesc = getConfig('business_description', '');
   const businessWebsite = getConfig('business_website', '');
-  const personality = getConfig('bot_personality', 'ידידותי ומקצועי');
+  const personality = tenant ? tenant.personality : getConfig('bot_personality', 'ידידותי ומקצועי');
   const meetingType = getConfig('meeting_type', 'שיחת Zoom');
-  const catalog = getServiceCatalog();
-  const portfolio = getPortfolio();
-  const faq = getSalesFAQ();
-  const objections = getSalesObjections();
+  const catalog: ServiceCategory[] = tenant
+    ? (() => { try { return JSON.parse(tenant.service_catalog) as ServiceCategory[]; } catch { return []; } })()
+    : getServiceCatalog();
+  const portfolio: PortfolioItem[] = tenant
+    ? (() => { try { return JSON.parse(tenant.portfolio) as PortfolioItem[]; } catch { return []; } })()
+    : getPortfolio();
+  const faq: FAQItem[] = tenant
+    ? (() => { try { return JSON.parse(tenant.sales_faq) as FAQItem[]; } catch { return []; } })()
+    : getSalesFAQ();
+  const objections: ObjectionItem[] = tenant
+    ? (() => { try { return JSON.parse(tenant.sales_objections) as ObjectionItem[]; } catch { return []; } })()
+    : getSalesObjections();
 
   const name = isBoss ? `${ownerName} (הבוס)` : (leadName || 'לקוח');
   const interest = leadInterest || '';
