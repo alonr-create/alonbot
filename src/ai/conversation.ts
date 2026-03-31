@@ -177,12 +177,21 @@ export async function handleConversation(
 
     await sendWithTyping(sock, jid, cleanResponse);
 
-    // Check if this is a Dekel lead — route to Voice Agent for booking
-    const leadSource = lead ? (db.prepare('SELECT source_detail FROM leads WHERE phone = ?').get(phone) as { source_detail: string | null } | undefined)?.source_detail : null;
-    const isDekel = leadSource === 'dekel' || leadSource === 'dekel-voice-agent';
+    // Use tenant to determine booking strategy — falls back to legacy source_detail check
+    const useVoiceAgent = tenant
+      ? tenant.name === 'דקל' && !!config.voiceAgentUrl
+      : (() => {
+          const leadSource = lead
+            ? (db.prepare('SELECT source_detail FROM leads WHERE phone = ?').get(phone) as { source_detail: string | null } | undefined)?.source_detail
+            : null;
+          return (leadSource === 'dekel' || leadSource === 'dekel-voice-agent') && !!config.voiceAgentUrl;
+        })();
+
+    const ownerName = tenant ? tenant.owner_name : getOwnerName();
+    const tenantMondayBoardId = tenant ? tenant.monday_board_id : null;
 
     let bookResult: { success: boolean };
-    if (isDekel && config.voiceAgentUrl) {
+    if (useVoiceAgent) {
       // Book via Voice Agent (has Zoom + Google Calendar of Dekel)
       try {
         const vaRes = await fetch(`${config.voiceAgentUrl}/tools/book-meeting`, {
@@ -195,29 +204,31 @@ export async function handleConversation(
         });
         const vaData = await vaRes.text();
         bookResult = { success: !vaData.includes('Cannot') && !vaData.includes('Error') && !vaData.includes('error') };
-        log.info({ phone, date, time, result: vaData }, 'Dekel booking via Voice Agent');
+        log.info({ phone, date, time, result: vaData, tenant: tenant?.name }, 'Voice Agent booking');
       } catch (err) {
         log.error({ err }, 'Voice Agent booking failed');
         bookResult = { success: false };
       }
     } else {
-      // Regular booking via AalonBot calendar (Alon.dev)
+      // Regular booking via AalonBot calendar
       bookResult = await bookMeeting(date, time, leadName, phone, leadInterest, 'Discovery call');
     }
 
     if (bookResult.success) {
-      const ownerLabel = isDekel ? 'אלון מדקל לפרישה' : getOwnerName();
-      const meetingMsg = isDekel
-        ? `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${ownerLabel} יתקשר אליך ✅`
-        : `מעולה! שיחת הזום נקבעה ל-${date} בשעה ${time} 🎥 ${ownerLabel} ישלח לך לינק לפני הפגישה ✅`;
+      const meetingMsg = useVoiceAgent
+        ? `מעולה! הפגישה נקבעה ל-${date} בשעה ${time}. ${ownerName} יתקשר אליך ✅`
+        : `מעולה! שיחת הזום נקבעה ל-${date} בשעה ${time} 🎥 ${ownerName} ישלח לך לינק לפני הפגישה ✅`;
       await sendWithTyping(sock, jid, meetingMsg);
       newStatus = 'meeting-scheduled';
       cancelFollowUps(phone);
 
-      // Update Monday.com — use Dekel board for Dekel leads
-      if (isDekel && config.mondayBoardIdDprisha && lead?.monday_item_id) {
-        updateMondayStatus(lead.monday_item_id, parseInt(config.mondayBoardIdDprisha), 'meeting-scheduled').catch(
-          (err) => { log.error({ err, phone }, 'Dekel Monday status sync failed'); },
+      // Update Monday.com — use tenant board if available, fall back to stored board
+      const mondayBoardId = tenantMondayBoardId
+        ? tenantMondayBoardId
+        : (lead?.monday_board_id ? lead.monday_board_id : (config.mondayBoardIdDprisha ? parseInt(config.mondayBoardIdDprisha) : null));
+      if (mondayBoardId && lead?.monday_item_id) {
+        updateMondayStatus(lead.monday_item_id, mondayBoardId, 'meeting-scheduled').catch(
+          (err) => { log.error({ err, phone }, 'Monday status sync failed after booking'); },
         );
       }
     } else {
@@ -229,7 +240,7 @@ export async function handleConversation(
 
     storeMessages(insertMsg, batchedMessages, phone, leadId, cleanResponse);
     updateLeadTimestamp(db, phone, lead, newStatus);
-    log.info({ phone, date, time, success: bookResult.success, isDekel }, 'booking flow completed');
+    log.info({ phone, date, time, success: bookResult.success, tenant: tenant?.name }, 'booking flow completed');
     return;
   }
 
