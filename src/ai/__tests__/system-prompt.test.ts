@@ -83,3 +83,36 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('[BOOK:');
   });
 });
+
+describe('buildSystemPrompt with tenant override', () => {
+  it('uses tenant business_name instead of global config', async () => {
+    const mockTenant = {
+      id: 99,
+      name: 'test-tenant',
+      wa_phone_number_id: '999',
+      wa_number: '972999999999',
+      monday_board_id: 9999,
+      business_name: 'TestBizOverride',
+      owner_name: 'TestOwner',
+      admin_phone: '972111111111',
+      personality: 'You are a friendly test assistant.',
+      timezone: 'Asia/Jerusalem',
+      payment_url: '',
+      service_catalog: '[]',
+      sales_faq: '[]',
+      sales_objections: '[]',
+      portfolio: '[]',
+      wa_cloud_token: null,
+      active: 1,
+    } as any; // TenantRow
+
+    const prompt = await buildSystemPrompt('TestLead', 'testing', '972000000000', false, mockTenant);
+
+    // Tenant business name MUST appear
+    expect(prompt).toContain('TestBizOverride');
+    // Tenant owner name MUST appear
+    expect(prompt).toContain('TestOwner');
+    // Tenant personality MUST appear
+    expect(prompt).toContain('You are a friendly test assistant.');
+  });
+});
