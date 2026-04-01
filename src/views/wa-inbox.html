@@ -1461,9 +1461,16 @@ function renderContacts() {
     const isActive = c.phone === activePhone;
     const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
     const rawPreview = c.lastMessage || '';
-    const tplMatch = rawPreview.match(/^\[template:([^\]]+)\]/);
-    const TEMPLATE_LABELS = { dprisha_postcall_webinar: 'הזמנה לוובינר' };
-    const previewText = tplMatch ? '📋 ' + (TEMPLATE_LABELS[tplMatch[1]] || tplMatch[1].replace(/_/g, ' ')) : truncate(rawPreview, 40);
+    const tplMatch = rawPreview.match(/^\[template:([^\]]+)\]\s*(.*)/s);
+    let previewText;
+    if (tplMatch) {
+      const tKey = tplMatch[1], tVar = tplMatch[2].trim();
+      const bodyTpl = _templateBodies[tKey] || '';
+      const rendered = bodyTpl ? bodyTpl.replace(/\{\{1\}\}/g, tVar).replace(/\{\{(\d+)\}\}/g, tVar) : tVar;
+      previewText = truncate(rendered || tKey.replace(/_/g, ' '), 40);
+    } else {
+      previewText = truncate(rawPreview, 40);
+    }
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + esc(previewText) : 'אין הודעות';
 
     const biz = getBizLabel(c.source);
@@ -1764,18 +1771,26 @@ function renderMessages() {
     if (templateMatch) {
       const tKey = templateMatch[1];
       const tVars = templateMatch[2].trim();
-      const TEMPLATE_TITLES = { dprisha_postcall_webinar: 'הזמנה לוובינר' };
-      const tTitle = TEMPLATE_TITLES[tKey] || tKey.replace(/_/g, ' ');
-      cleanText = `<div style="border:1px solid rgba(0,0,0,0.12);border-radius:8px;overflow:hidden;min-width:180px;max-width:260px;">
-        <div style="background:rgba(26,115,232,0.08);padding:8px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(0,0,0,0.08);">
-          <span style="font-size:15px;">📋</span>
-          <span style="font-size:12px;font-weight:700;color:#1a73e8;">${esc(tTitle)}</span>
-        </div>
-        <div style="padding:8px 10px;">
-          <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">הודעת תבנית</div>
-          ${tVars ? `<div style="font-size:13px;font-weight:600;color:var(--text);">${esc(tVars)}</div>` : ''}
-        </div>
-      </div>`;
+      // Render full body text: substitute {{1}} with the variable value
+      const bodyTemplate = _templateBodies[tKey] || '';
+      let renderedBody = bodyTemplate
+        ? bodyTemplate.replace(/\{\{1\}\}/g, tVars).replace(/\{\{(\d+)\}\}/g, tVars)
+        : (tVars || null);
+      if (renderedBody) {
+        // Show as normal message text (no card wrapper — just the actual text)
+        cleanText = renderedBody.replace(/\n/g, '<br>');
+      } else {
+        // No body available yet — show a compact card with template name
+        const TEMPLATE_TITLES = { dprisha_postcall_webinar: 'הזמנה לוובינר' };
+        const tTitle = TEMPLATE_TITLES[tKey] || tKey.replace(/_/g, ' ');
+        cleanText = `<div style="border:1px solid rgba(0,0,0,0.12);border-radius:8px;overflow:hidden;min-width:180px;max-width:260px;">
+          <div style="background:rgba(26,115,232,0.08);padding:8px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(0,0,0,0.08);">
+            <span style="font-size:15px;">📋</span>
+            <span style="font-size:12px;font-weight:700;color:#1a73e8;">${esc(tTitle)}</span>
+          </div>
+          <div style="padding:8px 10px;font-size:11px;color:var(--text3);">טוען תבנית…</div>
+        </div>`;
+      }
     } else if (imgMatch) {
       mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
       cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
@@ -2364,10 +2379,27 @@ async function init() {
   }
   // Load tenants first — switchTenant will call loadContacts
   await loadTenants();
+  // Pre-fetch template bodies in background so message rendering has full text
+  prefetchTemplateBodies();
   // Auto-open chat from URL param ?chat=972...
   const chatParam = new URLSearchParams(window.location.search).get('chat');
   if (chatParam) selectContact(chatParam);
   startPolling();
+}
+
+// Silently fetch all template definitions and populate _templateBodies cache
+async function prefetchTemplateBodies() {
+  try {
+    const data = await api('/templates');
+    if (data.templates && data.templates.length) {
+      data.templates.forEach(tpl => {
+        const bodyComp = (tpl.components || []).find(c => c.type === 'BODY');
+        if (bodyComp?.text) _templateBodies[tpl.name] = bodyComp.text;
+      });
+    }
+  } catch(e) {
+    // Silently ignore — template bodies will fall back to variable value
+  }
 }
 
 // ===== VIEW SWITCHING =====

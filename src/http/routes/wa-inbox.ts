@@ -622,7 +622,7 @@ waInboxRouter.get('/wa-inbox/api/templates', async (req: Request, res: Response)
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WABA_ID;
+  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
 
   if (!token || !wabaId) {
     res.json({ templates: [], error: 'WABA not configured' });
@@ -705,7 +705,7 @@ waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Reques
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WABA_ID;
+  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
 
   try {
     // Fetch template body from Meta API
@@ -751,7 +751,7 @@ waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Reques
 waInboxRouter.post('/wa-inbox/api/create-template', async (req: Request, res: Response): Promise<void> => {
   const { name, category, language, components } = req.body;
   const token = process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WABA_ID;
+  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
 
   if (!name || !components) {
     res.status(400).json({ error: 'name and components required' });
