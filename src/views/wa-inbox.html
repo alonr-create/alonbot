@@ -542,7 +542,8 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   <!-- LEFT: CONTACTS -->
   <div class="contacts-panel" id="contactsPanel">
     <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
-      <button class="biz-filter active" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
+      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">הכל</button>
+      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
       <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל לפרישה</button>
       <button class="biz-filter" data-biz="personal" onclick="setBizFilter('personal',this)">👤 אישי</button>
     </div>
@@ -1195,7 +1196,7 @@ function switchTenant(id) {
 }
 
 // ===== BUSINESS FILTER =====
-let currentBizFilter = 'alon_dev';
+let currentBizFilter = 'all';
 function setBizFilter(biz, btn) {
   currentBizFilter = biz;
   document.querySelectorAll('.biz-filter').forEach(b => b.classList.remove('active'));
