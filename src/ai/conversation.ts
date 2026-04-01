@@ -96,14 +96,6 @@ export async function handleConversation(
     }));
     messages.push({ role: 'user', content: batchedText });
 
-    const insertMsg = db.prepare(
-      'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)',
-    );
-    const leadId = lead?.id || null;
-    for (const text of batchedMessages) {
-      insertMsg.run(phone, leadId, 'in', text, tenant?.id ?? null);
-    }
-
     log.info(
       { phone, reason: escalationCheck.reason },
       'escalation triggered before Claude call',
@@ -886,9 +878,8 @@ function storeMessages(
   outResponse: string,
   tenantId: number | null = null,
 ): void {
-  for (const text of batchedMessages) {
-    insertMsg.run(phone, leadId, 'in', text, tenantId);
-  }
+  // 'in' messages are now persisted immediately in whatsapp-cloud-webhook.ts
+  // Only save the outgoing response here to avoid duplicates
   insertMsg.run(phone, leadId, 'out', outResponse, tenantId);
 
   // Sync chat to Monday.com (fire-and-forget, non-blocking)
