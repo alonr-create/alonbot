@@ -22,6 +22,9 @@ async function main() {
   log.info('database initialized');
 
   // 1b. Admin phone records kept in DB — needed for personal tab in 360Shmikley
+  // Fix admin lead name (one-time: was created with tenant name instead of personal name)
+  const adminPhone = process.env.ALON_PHONE || '972546300783';
+  db.prepare(`UPDATE leads SET name = 'אלון רחמים' WHERE phone = ? AND (name IS NULL OR name = '' OR name = 'דקל')`).run(adminPhone);
 
   // 2. Start HTTP server (health + QR endpoints)
   const server = createServer(config.port);
