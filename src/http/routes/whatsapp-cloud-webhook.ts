@@ -8,6 +8,7 @@ import { handleConversation } from '../../ai/conversation.js';
 import { cancelFollowUps } from '../../follow-up/follow-up-db.js';
 import { isAdminPhone } from '../../db/tenant-config.js';
 import { lookupTenantByPhoneNumberId } from '../../db/tenants.js';
+import { getDb } from '../../db/index.js';
 
 const log = createLogger('cloud-webhook');
 
@@ -91,6 +92,22 @@ cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
       const isAdmin = isAdminPhone(msg.senderPhone, tenant);
       if (isAdmin) {
         log.info({ phone: msg.senderPhone }, 'cloud-webhook: admin phone — boss mode');
+      }
+
+      // Persist incoming message immediately — before batcher/AI, so it's never lost
+      try {
+        const db = getDb();
+        const lead = db.prepare('SELECT id FROM leads WHERE phone = ?').get(msg.senderPhone) as { id: number } | undefined;
+        db.prepare(
+          'INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)'
+        ).run(msg.senderPhone, lead?.id ?? null, 'in', msg.text, tenant?.id ?? null);
+        // Upsert lead record if not exists
+        db.prepare(`
+          INSERT OR IGNORE INTO leads (phone, source, status, tenant_id, created_at, updated_at)
+          VALUES (?, 'whatsapp-cloud', 'new', ?, datetime('now'), datetime('now'))
+        `).run(msg.senderPhone, tenant?.id ?? null);
+      } catch (dbErr: any) {
+        log.warn({ dbErr, phone: msg.senderPhone }, 'cloud-webhook: failed to persist incoming message');
       }
 
       // Cancel any pending follow-ups when lead replies (not for admin)
