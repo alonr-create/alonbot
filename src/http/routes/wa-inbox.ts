@@ -660,14 +660,36 @@ waInboxRouter.post('/wa-inbox/api/broadcast', async (req: Request, res: Response
 
 // ── Templates CRUD ──────────────────────────────────────────────────────────
 
+// Derive WABA_ID from phone_number_id if not explicitly set
+async function resolveWabaId(token: string, pid?: string): Promise<string> {
+  const explicit = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
+  if (explicit) return explicit;
+  if (!token || !pid) return '';
+  try {
+    const r = await fetch(`https://graph.facebook.com/v21.0/${pid}?fields=account_id`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const d = await r.json() as any;
+    return d.account_id || '';
+  } catch {
+    return '';
+  }
+}
+
 waInboxRouter.get('/wa-inbox/api/templates', async (req: Request, res: Response): Promise<void> => {
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
+  const pid = tenant?.wa_phone_number_id ?? process.env.WA_CLOUD_PHONE_ID;
 
-  if (!token || !wabaId) {
-    res.json({ templates: [], error: 'WABA not configured' });
+  if (!token) {
+    res.json({ templates: [], error: 'WA_CLOUD_TOKEN not configured' });
+    return;
+  }
+
+  const wabaId = await resolveWabaId(token, pid);
+  if (!wabaId) {
+    res.json({ templates: [], error: 'WABA not configured (set WA_CLOUD_WABA_ID or ensure WA_CLOUD_PHONE_ID is set)' });
     return;
   }
 
@@ -747,7 +769,8 @@ waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Reques
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
+  const pid = tenant?.wa_phone_number_id ?? process.env.WA_CLOUD_PHONE_ID;
+  const wabaId = await resolveWabaId(token || '', pid);
 
   try {
     // Fetch template body from Meta API
@@ -771,14 +794,16 @@ waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Reques
     let updated = 0;
     for (const row of rows) {
       const match = (row.content as string).match(/^\[template:[^\]]+\]\s*(.*)/s);
-      const varValue = match ? match[1].trim() : '';
+      const varStr = match ? match[1].trim() : '';
+      // Variables stored as comma-separated (e.g. "Name, 2026-04-01, 14:00, https://...")
+      const vars = varStr.split(', ');
       let newContent: string;
       if (templateBodyText) {
-        // Substitute {{1}} with the captured variable value
-        newContent = templateBodyText.replace(/\{\{1\}\}/g, varValue);
+        // Substitute {{1}}, {{2}}, ... with the captured variable values
+        newContent = templateBodyText.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => vars[parseInt(n) - 1] || vars[0] || '');
       } else {
         // Fallback: just use the variable value or keep as-is
-        newContent = varValue || row.content;
+        newContent = varStr || row.content;
       }
       db.prepare('UPDATE messages SET content = ? WHERE id = ?').run(newContent, row.id);
       updated++;
@@ -790,10 +815,75 @@ waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Reques
   }
 });
 
+// ── POST /wa-inbox/api/migrate-all-templates ─────────────────────────────────
+// Backfill ALL [template:name] var messages in the DB with their actual body text.
+waInboxRouter.post('/wa-inbox/api/migrate-all-templates', async (req: Request, res: Response): Promise<void> => {
+  const tenantId = getTenantId(req);
+  const tenant = tenantId ? getTenantById(tenantId) : null;
+  const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
+  const pid = tenant?.wa_phone_number_id ?? process.env.WA_CLOUD_PHONE_ID;
+  const wabaId = await resolveWabaId(token || '', pid);
+
+  try {
+    const db = getDb();
+    // Find all distinct template names that still have the [template:...] prefix
+    const distinctNames = db.prepare(
+      "SELECT DISTINCT substr(content, 11, instr(content, ']') - 11) as tname FROM messages WHERE content LIKE '[template:%'"
+    ).all() as any[];
+
+    if (!distinctNames.length) {
+      res.json({ results: [], message: 'No legacy template messages found' });
+      return;
+    }
+
+    // Fetch all templates at once from Meta API
+    const templateBodies: Record<string, string> = {};
+    if (token && wabaId) {
+      try {
+        const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates?limit=100&fields=name,components`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const d = await r.json() as any;
+        for (const tpl of (d.data || [])) {
+          const bodyComp = (tpl.components || []).find((c: any) => c.type === 'BODY');
+          if (bodyComp?.text) templateBodies[tpl.name] = bodyComp.text;
+        }
+      } catch {}
+    }
+
+    const results = [];
+    for (const { tname } of distinctNames) {
+      const pattern = `[template:${tname}]%`;
+      const rows = db.prepare('SELECT id, content FROM messages WHERE content LIKE ?').all(pattern) as any[];
+      const bodyTpl = templateBodies[tname] || '';
+      let updated = 0;
+      for (const row of rows) {
+        const match = (row.content as string).match(/^\[template:[^\]]+\]\s*(.*)/s);
+        const varStr = match ? match[1].trim() : '';
+        const vars = varStr.split(', ');
+        let newContent: string;
+        if (bodyTpl) {
+          newContent = bodyTpl.replace(/\{\{(\d+)\}\}/g, (_: string, n: string) => vars[parseInt(n) - 1] || vars[0] || '');
+        } else {
+          newContent = varStr || row.content;
+        }
+        db.prepare('UPDATE messages SET content = ? WHERE id = ?').run(newContent, row.id);
+        updated++;
+      }
+      results.push({ template: tname, updated, bodyFound: !!bodyTpl });
+    }
+
+    res.json({ results });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 waInboxRouter.post('/wa-inbox/api/create-template', async (req: Request, res: Response): Promise<void> => {
   const { name, category, language, components } = req.body;
   const token = process.env.WA_CLOUD_TOKEN;
-  const wabaId = process.env.WA_CLOUD_WABA_ID || process.env.WABA_ID;
+  const pid = process.env.WA_CLOUD_PHONE_ID;
+  const wabaId = await resolveWabaId(token || '', pid);
 
   if (!name || !components) {
     res.status(400).json({ error: 'name and components required' });
