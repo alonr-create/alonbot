@@ -82,7 +82,18 @@ waInboxRouter.use('/wa-inbox/api', requireToken);
 
 // ── GET /wa-inbox/api/config ──────────────────────────────────────────────
 
-waInboxRouter.get('/wa-inbox/api/config', (_req: Request, res: Response): void => {
+waInboxRouter.get('/wa-inbox/api/config', (req: Request, res: Response): void => {
+  const tenantId = getTenantId(req);
+  try {
+    if (tenantId !== null) {
+      const db = getDb();
+      const tenant = db.prepare('SELECT admin_phone FROM tenants WHERE id = ?').get(tenantId) as any;
+      if (tenant?.admin_phone) {
+        res.json({ admin_phone: tenant.admin_phone });
+        return;
+      }
+    }
+  } catch (_) { /* fall through */ }
   res.json({ admin_phone: process.env.ALON_PHONE || '972546300783' });
 });
 
@@ -141,6 +152,35 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
       last_message_role: r.last_message_role === 'out' ? 'assistant' : r.last_message_role,
       is_outgoing: r.last_message_role === 'out',
     }));
+
+    // Always include admin phone conversation even if no lead record exists
+    if (tenantId !== null) {
+      const tenant = db.prepare('SELECT admin_phone, owner_name FROM tenants WHERE id = ?').get(tenantId) as any;
+      if (tenant?.admin_phone) {
+        const alreadyIncluded = leads.some((r: any) => r.phone === tenant.admin_phone);
+        if (!alreadyIncluded) {
+          const lastMsg = db.prepare('SELECT content, created_at, direction FROM messages WHERE phone = ? ORDER BY id DESC LIMIT 1').get(tenant.admin_phone) as any;
+          if (lastMsg) {
+            const msgCount = (db.prepare('SELECT COUNT(*) as cnt FROM messages WHERE phone = ?').get(tenant.admin_phone) as any)?.cnt || 0;
+            leads.unshift({
+              phone: tenant.admin_phone,
+              name: tenant.owner_name || 'אדמין',
+              status: 'active',
+              interest: '',
+              source: 'whatsapp',
+              score: 0,
+              updated_at: lastMsg.created_at,
+              last_message: lastMsg.content,
+              last_message_at: lastMsg.created_at,
+              last_message_role: lastMsg.direction === 'out' ? 'assistant' : lastMsg.direction,
+              is_outgoing: lastMsg.direction === 'out',
+              message_count: msgCount,
+            });
+          }
+        }
+      }
+    }
+
     res.json({ leads });
   } catch (err: any) {
     log.error({ err }, 'GET /leads: error');
@@ -918,7 +958,7 @@ waInboxRouter.get('/wa-inbox/api/conversations', (req: Request, res: Response): 
       SELECT l.phone, l.name, l.status, l.interest, l.updated_at,
         (SELECT content FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_msg,
         (SELECT created_at FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_msg_at
-      FROM leads l WHERE l.tenant_id = ? ORDER BY l.updated_at DESC LIMIT 100
+      FROM leads l WHERE l.tenant_id = ? ORDER BY l.updated_at DESC LIMIT 500
     `).all(tenantId);
     res.json(rows);
   } catch (err: any) {
