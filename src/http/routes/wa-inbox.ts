@@ -110,9 +110,9 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
       ) mc ON mc.phone = l.phone
     `;
     if (tenantId !== null) {
-      rows = db.prepare(`${leadsQuery} WHERE l.tenant_id = ? ORDER BY l.updated_at DESC LIMIT 200`).all(tenantId);
+      rows = db.prepare(`${leadsQuery} WHERE l.tenant_id = ? ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 500`).all(tenantId);
     } else {
-      rows = db.prepare(`${leadsQuery} ORDER BY l.updated_at DESC LIMIT 200`).all();
+      rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 500`).all();
     }
     // Map role: 'out' → 'assistant' for frontend compatibility
     const leads = (rows as any[]).map(r => ({

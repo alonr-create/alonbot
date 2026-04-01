@@ -541,14 +541,10 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
   <!-- LEFT: CONTACTS -->
   <div class="contacts-panel" id="contactsPanel">
-    <div class="contacts-filters" style="display:none;">
-      <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
-    </div>
     <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
-      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">🔵 הכל</button>
-      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל</button>
-      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
-      <button class="biz-filter" data-biz="whatsapp" onclick="setBizFilter('whatsapp',this)">💬 אורגני</button>
+      <button class="biz-filter active" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
+      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל לפרישה</button>
+      <button class="biz-filter" data-biz="personal" onclick="setBizFilter('personal',this)">👤 אישי</button>
     </div>
     <div class="contacts-list" id="contactsList">
       <!-- dynamically populated -->
@@ -1185,11 +1181,7 @@ async function loadTenants() {
 
 function renderTenantTabs() {
   const bar = document.getElementById('tenantTabs');
-  if (!bar || tenants.length <= 1) { if (bar) bar.style.display = 'none'; return; }
-  bar.style.display = 'flex';
-  bar.innerHTML = tenants.map(t =>
-    `<button class="tenant-tab ${t.id === activeTenantId ? 'active' : ''}" onclick="switchTenant(${t.id})">${esc(t.business_name || t.name)}</button>`
-  ).join('');
+  if (bar) bar.style.display = 'none';
 }
 
 function switchTenant(id) {
@@ -1203,7 +1195,7 @@ function switchTenant(id) {
 }
 
 // ===== BUSINESS FILTER =====
-let currentBizFilter = 'all';
+let currentBizFilter = 'alon_dev';
 function setBizFilter(biz, btn) {
   currentBizFilter = biz;
   document.querySelectorAll('.biz-filter').forEach(b => b.classList.remove('active'));
@@ -1211,10 +1203,10 @@ function setBizFilter(biz, btn) {
   renderContacts();
 }
 function getBizLabel(source) {
-  if (!source) return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
-  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: 'דקל', cls: 'dekel' };
+  if (!source) return { emoji: '👤', label: 'אישי', cls: 'personal' };
+  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: 'דקל לפרישה', cls: 'dekel' };
   if (source.includes('alon_dev') || source === 'campaign') return { emoji: '💻', label: 'Alon.dev', cls: 'alon_dev' };
-  return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
+  return { emoji: '👤', label: 'אישי', cls: 'personal' };
 }
 
 // ===== FORMAT TIME =====
@@ -1413,15 +1405,13 @@ function renderContacts() {
   }
 
   // Apply business filter
-  if (currentBizFilter !== 'all') {
-    filtered = filtered.filter(c => {
-      const biz = getBizLabel(c.source);
-      if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
-      if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
-      if (currentBizFilter === 'whatsapp') return biz.cls === 'whatsapp';
-      return true;
-    });
-  }
+  filtered = filtered.filter(c => {
+    const biz = getBizLabel(c.source);
+    if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
+    if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
+    if (currentBizFilter === 'personal') return biz.cls === 'personal';
+    return true;
+  });
 
   // Apply search
   if (searchQuery) {
