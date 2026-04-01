@@ -65,6 +65,12 @@ waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
 // Apply auth middleware to all API routes
 waInboxRouter.use('/wa-inbox/api', requireToken);
 
+// ── GET /wa-inbox/api/config ──────────────────────────────────────────────
+
+waInboxRouter.get('/wa-inbox/api/config', (_req: Request, res: Response): void => {
+  res.json({ admin_phone: process.env.ALON_PHONE || '' });
+});
+
 // ── GET /wa-inbox/api/tenants ─────────────────────────────────────────────
 
 waInboxRouter.get('/wa-inbox/api/tenants', (_req: Request, res: Response): void => {
@@ -136,9 +142,11 @@ waInboxRouter.get('/wa-inbox/api/conversations/:phone', (req: Request, res: Resp
     const rows = db.prepare(`
       SELECT direction, content as body, created_at as timestamp FROM messages
       WHERE phone = ?
-      ORDER BY created_at ASC
+      ORDER BY created_at DESC
       LIMIT 500
     `).all(phone);
+    // Reverse to chronological order (we fetched newest-first)
+    (rows as any[]).reverse();
     // Map direction to frontend format
     const messages = (rows as any[]).map(r => ({
       ...r,

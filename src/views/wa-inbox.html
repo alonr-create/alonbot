@@ -1080,6 +1080,7 @@ const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
 let seenPhones = new Set(); // phones we've opened at least once
 let lastKnownMsgCount = {}; // phone → msg count for notification detection
 let titleFlashTimer = null;
+let adminPhone = ''; // loaded from /config — used for personal tab filter
 
 // ===== MULTI-TENANT =====
 let tenants = [];
@@ -1410,7 +1411,11 @@ function renderContacts() {
     const biz = getBizLabel(c.source);
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
-    if (currentBizFilter === 'personal') return biz.cls === 'personal';
+    if (currentBizFilter === 'personal') {
+      if (!adminPhone) return biz.cls === 'personal';
+      const norm = (p) => { let d = (p||'').replace(/\D/g,''); if (d.startsWith('972')) d = '0'+d.slice(3); return d; };
+      return norm(c.phone) === norm(adminPhone);
+    }
     return true;
   });
 
@@ -1738,8 +1743,13 @@ function renderMessages() {
     const imgMatch = rawText.match(/\[media:image:([^\]]+)\]/);
     const fileMatch = rawText.match(/\[media:file:([^\]:]+):([^\]]+)\]/);
     const screenshotMatch = rawText.match(/\[📸[^\]]*\]/);
+    const templateMatch = rawText.match(/^\[template:([^\]]+)\]\s*(.*)/s);
     let cleanText = text;
-    if (imgMatch) {
+    if (templateMatch) {
+      const tName = templateMatch[1].replace(/_/g, ' ');
+      const tVars = templateMatch[2].trim();
+      cleanText = `📋 תבנית: ${esc(tName)}` + (tVars ? `\n${esc(tVars)}` : '');
+    } else if (imgMatch) {
       mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
       cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
     } else if (screenshotMatch) {
@@ -1862,10 +1872,11 @@ async function sendMessage() {
   renderMessages();
 
   try {
-    await api('/send', {
+    const result = await api('/send', {
       method: 'POST',
       body: JSON.stringify({ phone: activePhone, message: text, tenant_id: activeTenantId })
     });
+    if (!result.success) throw new Error(result.error || 'Send failed');
     // Update contact
     const c = contacts.find(c => c.phone === activePhone);
     if (c) {
@@ -1877,8 +1888,10 @@ async function sendMessage() {
     renderContacts();
   } catch(e) {
     console.error('Send failed:', e);
-    // Mark last message as failed
+    // Mark last message as failed and show error
     activeMessages[activeMessages.length - 1].failed = true;
+    renderMessages();
+    alert('שליחה נכשלה: ' + (e.message || e));
   }
 
   document.getElementById('typingIndicator').classList.remove('show');
@@ -2304,6 +2317,8 @@ async function init() {
     document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
     return;
   }
+  // Load admin phone for personal tab filter
+  try { const cfg = await api('/config'); adminPhone = cfg.admin_phone || ''; } catch(e) {}
   // Load tenants first — switchTenant will call loadContacts
   await loadTenants();
   // Auto-open chat from URL param ?chat=972...
