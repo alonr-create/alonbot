@@ -1076,9 +1076,12 @@ if (_urlToken) {
 }
 const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
 const API = '/wa-inbox/api';
-const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
+const POLL_INTERVAL = 4000;  // 4s for live message updates
+const CONTACTS_POLL_EVERY = 4; // refresh contacts every 4th poll (~16s)
+let pollCount = 0;
 let seenPhones = new Set(); // phones we've opened at least once
 let lastKnownMsgCount = {}; // phone → msg count for notification detection
+let lastMsgTimestamp = {}; // phone → timestamp of last known message (for incremental polling)
 let titleFlashTimer = null;
 let adminPhone = ''; // loaded from /config — used for personal tab filter
 
@@ -1611,6 +1614,11 @@ async function loadMessages(phone) {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
     activeDeliveryStatus = data.deliveryStatus || 'sent';
+    // Track last timestamp for incremental polling
+    if (activeMessages.length > 0) {
+      const last = activeMessages[activeMessages.length - 1];
+      lastMsgTimestamp[phone] = last.timestamp || last.time || last.created_at || '';
+    }
     // Merge campaign messages if available
     if (campInfo) {
       const campMsgs = buildCampaignMessages(phone);
@@ -2211,36 +2219,43 @@ function showMobileContacts() {
 
 // ===== POLLING =====
 async function pollMessages() {
-  if (!activePhone) return;
-  try {
-    const data = await api('/conversations/' + encodeURIComponent(activePhone));
-    let msgs = data.messages || data || [];
-    // Merge campaign messages (same logic as loadMessages)
-    const campInfo = getCampaignInfo(activePhone);
-    if (campInfo) {
-      const campMsgs = buildCampaignMessages(activePhone);
-      if (msgs.length === 0) {
-        msgs = campMsgs;
-      } else {
-        msgs = [...campMsgs, ...msgs];
-      }
-    }
-    if (msgs.length !== activeMessages.length) {
-      activeMessages = msgs;
-      messageCache[activePhone] = activeMessages;
-      renderMessages();
-      // Update contact
-      const c = contacts.find(c => c.phone === activePhone);
-      if (c && msgs.length > 0) {
-        const last = msgs[msgs.length - 1];
-        c.lastMessage = last.body || last.message || last.text || '';
-        c.lastTime = last.timestamp || last.time || '';
-        c.isOutgoing = last.direction === 'outgoing' || last.fromMe || last.from_me;
-      }
-    }
-  } catch(e) { /* silent */ }
+  pollCount++;
 
-  // Also refresh contacts list periodically and detect new incoming messages
+  // ── Incremental conversation poll (every tick = 4s) ──
+  if (activePhone) {
+    try {
+      const since = lastMsgTimestamp[activePhone];
+      const path = '/conversations/' + encodeURIComponent(activePhone) + (since ? '?since=' + encodeURIComponent(since) : '');
+      const data = await api(path);
+      const newMsgs = data.messages || [];
+      if (newMsgs.length > 0) {
+        // Update last-known timestamp to the newest message
+        lastMsgTimestamp[activePhone] = newMsgs[newMsgs.length - 1].timestamp;
+        // Append to existing messages (avoid duplicates by timestamp+body key)
+        const existingKeys = new Set(activeMessages.map(m => (m.timestamp||'') + '|' + (m.body||m.content||'')));
+        const toAdd = newMsgs.filter(m => !existingKeys.has((m.timestamp||'') + '|' + (m.body||m.content||'')));
+        if (toAdd.length > 0) {
+          activeMessages = [...activeMessages, ...toAdd];
+          messageCache[activePhone] = activeMessages;
+          renderMessages();
+          // Scroll to bottom on new incoming message
+          const chatEl = document.getElementById('chatMessages');
+          if (chatEl) chatEl.scrollTop = chatEl.scrollHeight;
+          // Update contact preview
+          const c = contacts.find(c => c.phone === activePhone);
+          if (c) {
+            const last = toAdd[toAdd.length - 1];
+            c.lastMessage = last.body || last.message || last.text || '';
+            c.lastTime = last.timestamp || last.time || '';
+            c.isOutgoing = last.direction === 'outgoing' || last.fromMe || last.from_me;
+          }
+        }
+      }
+    } catch(e) { /* silent */ }
+  }
+
+  // ── Contacts refresh (every CONTACTS_POLL_EVERY ticks) ──
+  if (pollCount % CONTACTS_POLL_EVERY !== 0) return;
   try {
     const data = await api('/leads');
     const newContacts = (data.leads || data || []).map(c => ({
@@ -2253,6 +2268,8 @@ async function pollMessages() {
       source: c.source || 'whatsapp',
       status: c.status || c.lead_status || 'new',
       messageCount: c.message_count || 0,
+      // Preserve profile pic from existing contact or from API response
+      profile_pic_url: c.profile_pic_url || contacts.find(x => x.phone === (c.phone || c.id))?.profile_pic_url || null,
     }));
 
     // Detect new incoming messages
