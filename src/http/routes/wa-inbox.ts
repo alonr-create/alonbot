@@ -137,16 +137,20 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
 
 waInboxRouter.get('/wa-inbox/api/conversations/:phone', (req: Request, res: Response): void => {
   const phone = req.params.phone;
+  const since = req.query.since as string | undefined;
   try {
     const db = getDb();
-    const rows = db.prepare(`
-      SELECT direction, content as body, created_at as timestamp FROM messages
-      WHERE phone = ?
-      ORDER BY created_at DESC
-      LIMIT 500
-    `).all(phone);
-    // Reverse to chronological order (we fetched newest-first)
-    (rows as any[]).reverse();
+    const rows = since
+      ? db.prepare(`
+          SELECT direction, content as body, created_at as timestamp FROM messages
+          WHERE phone = ? AND created_at > ?
+          ORDER BY created_at ASC
+        `).all(phone, since)
+      : db.prepare(`
+          SELECT direction, content as body, created_at as timestamp FROM messages
+          WHERE phone = ?
+          ORDER BY created_at ASC
+        `).all(phone);
     // Map direction to frontend format
     const messages = (rows as any[]).map(r => ({
       ...r,

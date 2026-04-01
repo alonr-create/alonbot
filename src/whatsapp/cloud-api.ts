@@ -145,9 +145,18 @@ export async function sendCloudMessage(params: {
   const pid = phoneNumberId || process.env.WA_CLOUD_PHONE_ID || config.waCloudPhoneId;
   const token = params.token || process.env.WA_CLOUD_TOKEN || config.waCloudToken;
 
+  if (!pid) {
+    log.error('sendCloudMessage: WA_CLOUD_PHONE_ID not set');
+    return { success: false, error: 'WA_CLOUD_PHONE_ID not configured' };
+  }
+  if (!token) {
+    log.error('sendCloudMessage: WA_CLOUD_TOKEN not set');
+    return { success: false, error: 'WA_CLOUD_TOKEN not configured' };
+  }
+
   const url = `${GRAPH_API_BASE}/${pid}/messages`;
 
-  log.info({ to, pid }, 'sendCloudMessage: sending');
+  log.info({ to, pid: pid.slice(0, 6) + '…' }, 'sendCloudMessage: sending');
 
   try {
     const response = await fetch(url, {
@@ -166,17 +175,19 @@ export async function sendCloudMessage(params: {
 
     const data = await response.json() as any;
 
-    if (!response.ok) {
+    if (!response.ok || data?.error) {
       const errorMsg = data?.error?.message ?? `HTTP ${response.status}`;
-      log.warn({ to, pid, error: errorMsg }, 'sendCloudMessage: API error');
-      return { success: false, error: errorMsg };
+      const errorCode = data?.error?.code;
+      const errorDetails = data?.error?.error_data?.details ?? data?.error?.fbtrace_id ?? '';
+      log.warn({ to, pid: pid.slice(0, 6) + '…', status: response.status, errorCode, errorMsg, errorDetails }, 'sendCloudMessage: API error');
+      return { success: false, error: `[${errorCode ?? response.status}] ${errorMsg}${errorDetails ? ' — ' + errorDetails : ''}` };
     }
 
     const messageId: string = data?.messages?.[0]?.id ?? '';
-    log.info({ to, pid, messageId }, 'sendCloudMessage: sent successfully');
+    log.info({ to, messageId }, 'sendCloudMessage: sent successfully');
     return { success: true, messageId };
   } catch (err: any) {
-    log.error({ to, pid, err }, 'sendCloudMessage: fetch error');
+    log.error({ to, err }, 'sendCloudMessage: fetch error');
     return { success: false, error: err.message ?? String(err) };
   }
 }
