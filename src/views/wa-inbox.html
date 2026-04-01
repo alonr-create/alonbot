@@ -506,7 +506,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-logo" style="cursor:pointer;" onclick="showView('overview')">
-    <img src="/icon-wa-blue-192.png" alt="360Shmikley" style="width:36px;height:36px;border-radius:8px;flex-shrink:0;object-fit:cover;">
+    <img src="/icon-wa-blue-192.png" alt="360Shmikley" style="width:40px;height:40px;border-radius:8px;flex-shrink:0;object-fit:cover;">
     <div style="display:flex;flex-direction:column;line-height:1.1;">
       <span style="font-size:15px;font-weight:900;background:linear-gradient(135deg,#1a73e8,#0d47a1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px;">360Shmikley</span>
       <span style="font-size:9px;font-weight:400;color:var(--text3);letter-spacing:0.5px;">WA Manager</span>
@@ -1415,7 +1415,7 @@ function renderContacts() {
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
     if (currentBizFilter === 'personal') {
-      if (!adminPhone) return biz.cls === 'personal';
+      if (!adminPhone) return false;
       const norm = (p) => { let d = (p||'').replace(/\D/g,''); if (d.startsWith('972')) d = '0'+d.slice(3); return d; };
       return norm(c.phone) === norm(adminPhone);
     }
@@ -1458,7 +1458,8 @@ function renderContacts() {
     const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
     const rawPreview = c.lastMessage || '';
     const tplMatch = rawPreview.match(/^\[template:([^\]]+)\]/);
-    const previewText = tplMatch ? '📋 תבנית: ' + tplMatch[1].replace(/_/g, ' ') : truncate(rawPreview, 40);
+    const TEMPLATE_LABELS = { dprisha_postcall_webinar: 'הזמנה לוובינר' };
+    const previewText = tplMatch ? '📋 ' + (TEMPLATE_LABELS[tplMatch[1]] || tplMatch[1].replace(/_/g, ' ')) : truncate(rawPreview, 40);
     const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + esc(previewText) : 'אין הודעות';
 
     const biz = getBizLabel(c.source);
@@ -1757,9 +1758,20 @@ function renderMessages() {
     const templateMatch = rawText.match(/^\[template:([^\]]+)\]\s*(.*)/s);
     let cleanText = text;
     if (templateMatch) {
-      const tName = templateMatch[1].replace(/_/g, ' ');
+      const tKey = templateMatch[1];
       const tVars = templateMatch[2].trim();
-      cleanText = `📋 תבנית: ${esc(tName)}` + (tVars ? `\n${esc(tVars)}` : '');
+      const TEMPLATE_TITLES = { dprisha_postcall_webinar: 'הזמנה לוובינר' };
+      const tTitle = TEMPLATE_TITLES[tKey] || tKey.replace(/_/g, ' ');
+      cleanText = `<div style="border:1px solid rgba(0,0,0,0.12);border-radius:8px;overflow:hidden;min-width:180px;max-width:260px;">
+        <div style="background:rgba(26,115,232,0.08);padding:8px 10px;display:flex;align-items:center;gap:6px;border-bottom:1px solid rgba(0,0,0,0.08);">
+          <span style="font-size:15px;">📋</span>
+          <span style="font-size:12px;font-weight:700;color:#1a73e8;">${esc(tTitle)}</span>
+        </div>
+        <div style="padding:8px 10px;">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">הודעת תבנית</div>
+          ${tVars ? `<div style="font-size:13px;font-weight:600;color:var(--text);">${esc(tVars)}</div>` : ''}
+        </div>
+      </div>`;
     } else if (imgMatch) {
       mediaHtml = `<img src="/media/${esc(imgMatch[1])}" style="max-width:240px;border-radius:6px;margin-bottom:4px;cursor:pointer;" onclick="window.open('/media/${esc(imgMatch[1])}','_blank')">`;
       cleanText = text.replace(/\[media:image:[^\]]+\]\s*/, '');
