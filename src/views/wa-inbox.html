@@ -2,7 +2,7 @@
 <html lang="he" dir="rtl">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>360Shmikley — WA Manager</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -26,7 +26,7 @@
   --chat-bg:#efeae2;
   --sidebar-w:320px;--details-w:280px;
 }
-body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0);}
 
 /* ===== TENANT TABS ===== */
 .tenant-tab{
@@ -65,7 +65,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
 /* ===== MAIN LAYOUT ===== */
-.app{display:flex;height:calc(100vh - 54px);overflow:hidden;}
+.app{display:flex;height:calc(100vh - 54px);height:calc(100dvh - 54px);overflow:hidden;}
 
 /* ===== LEFT: CONTACT LIST ===== */
 .contacts-panel{
@@ -205,7 +205,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 /* Chat input */
 .chat-input-area{
-  padding:10px 16px;background:var(--bg2);border-top:1px solid var(--border);
+  padding:10px 16px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0));background:var(--bg2);border-top:1px solid var(--border);
   display:flex;gap:8px;align-items:flex-end;flex-shrink:0;
 }
 .input-btn{
@@ -445,6 +445,12 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   .contact-name .biz-tag{font-size:8px;padding:1px 4px;}
 }
 .mobile-back{display:none!important;margin-left:8px;}
+
+/* ===== PWA STANDALONE (iOS) ===== */
+@media(display-mode:standalone){
+  body{height:100vh;height:100dvh;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);}
+  .app{height:calc(100dvh - 54px - env(safe-area-inset-top,0) - env(safe-area-inset-bottom,0));}
+}
 
 /* ===== SCROLLBAR GLOBAL ===== */
 ::-webkit-scrollbar{width:6px;}
@@ -1417,7 +1423,14 @@ function renderContacts() {
     const biz = getBizLabel(c.source);
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
-    if (currentBizFilter === 'personal') return biz.cls === 'personal';
+    if (currentBizFilter === 'personal') {
+      if (!adminPhone) return false;
+      const norm = (p) => (p||'').replace(/\D/g,'');
+      const cp = norm(c.phone), ap = norm(adminPhone);
+      // Show admin phone + adjacent numbers (family)
+      const base = ap.slice(0, -1);
+      return cp.startsWith(base) || cp === ap || cp.endsWith(ap) || ap.endsWith(cp);
+    }
     return true;
   });
 
