@@ -68,7 +68,7 @@ waInboxRouter.use('/wa-inbox/api', requireToken);
 // ── GET /wa-inbox/api/config ──────────────────────────────────────────────
 
 waInboxRouter.get('/wa-inbox/api/config', (_req: Request, res: Response): void => {
-  res.json({ admin_phone: process.env.ALON_PHONE || '' });
+  res.json({ admin_phone: process.env.ALON_PHONE || '31495095873775' });
 });
 
 // ── GET /wa-inbox/api/tenants ─────────────────────────────────────────────

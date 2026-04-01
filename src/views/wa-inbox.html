@@ -1419,8 +1419,9 @@ function renderContacts() {
     if (currentBizFilter === 'personal') {
       if (!adminPhone) return false;
       if (/^[a-z]/i.test(c.phone)) return false; // reject bab: and similar prefixes
-      const norm = (p) => { let d = (p||'').replace(/\D/g,''); if (d.startsWith('972')) d = '0'+d.slice(3); return d; };
-      return norm(c.phone) === norm(adminPhone);
+      const norm = (p) => (p||'').replace(/\D/g,'');
+      const cp = norm(c.phone), ap = norm(adminPhone);
+      return cp === ap || cp.endsWith(ap) || ap.endsWith(cp);
     }
     return true;
   });
