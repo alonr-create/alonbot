@@ -506,7 +506,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <!-- TOP BAR -->
 <div class="topbar">
   <div class="topbar-logo" style="cursor:pointer;" onclick="showView('overview')">
-    <img src="/icon-wa-blue-192.png" alt="360Shmikley" style="width:36px;height:36px;border-radius:8px;flex-shrink:0;object-fit:cover;">
+    <img src="/icon-wa-blue-192.png" alt="360Shmikley" style="height:42px;width:42px;border-radius:8px;flex-shrink:0;object-fit:contain;">
     <div style="display:flex;flex-direction:column;line-height:1.1;">
       <span style="font-size:15px;font-weight:900;background:linear-gradient(135deg,#1a73e8,#0d47a1);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;letter-spacing:-0.5px;">360Shmikley</span>
       <span style="font-size:9px;font-weight:400;color:var(--text3);letter-spacing:0.5px;">WA Manager</span>
@@ -1084,6 +1084,8 @@ let lastKnownMsgCount = {}; // phone → msg count for notification detection
 let lastMsgTimestamp = {}; // phone → timestamp of last known message (for incremental polling)
 let titleFlashTimer = null;
 let adminPhone = ''; // loaded from /config — used for personal tab filter
+let pendingTemplateBody = ''; // body text of template being sent
+const _templateBodies = {}; // templateName → body text (populated by renderTemplates)
 
 // ===== MULTI-TENANT =====
 let tenants = [];
@@ -1415,7 +1417,8 @@ function renderContacts() {
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
     if (currentBizFilter === 'personal') {
-      if (!adminPhone) return biz.cls === 'personal';
+      if (!adminPhone) return false;
+      if (/^[a-z]/i.test(c.phone)) return false; // reject bab: and similar prefixes
       const norm = (p) => { let d = (p||'').replace(/\D/g,''); if (d.startsWith('972')) d = '0'+d.slice(3); return d; };
       return norm(c.phone) === norm(adminPhone);
     }
@@ -2497,6 +2500,12 @@ function renderTemplates() {
   const order = { APPROVED: 0, PENDING: 1, REJECTED: 2 };
   const sorted = [...templates].sort((a,b) => (order[a.status] || 9) - (order[b.status] || 9));
 
+  // Populate body map for use when sending
+  sorted.forEach(tpl => {
+    const bodyComp = (tpl.components || []).find(c => c.type === 'BODY');
+    _templateBodies[tpl.name] = bodyComp?.text || '';
+  });
+
   container.innerHTML = sorted.map(tpl => {
     const status = (tpl.status || '').toLowerCase();
     const category = (tpl.category || 'UTILITY').toLowerCase();
@@ -2541,6 +2550,7 @@ function openSendTemplate(name, lang) {
   document.getElementById('modalTemplateName').value = name;
   document.getElementById('modalPhone').value = '';
   document.getElementById('modalResult').style.display = 'none';
+  pendingTemplateBody = _templateBodies[name] || '';
   const modal = document.getElementById('templateModal');
   modal.style.display = 'flex';
 }
@@ -2568,7 +2578,7 @@ async function doSendTemplate() {
   try {
     const data = await api('/send-template', {
       method: 'POST',
-      body: JSON.stringify({ phone, templateName: name, language: 'he' })
+      body: JSON.stringify({ phone, templateName: name, language: 'he', templateBody: pendingTemplateBody })
     });
     if (data.success) {
       resultEl.style.color = 'var(--success)';

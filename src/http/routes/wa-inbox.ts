@@ -630,7 +630,7 @@ waInboxRouter.get('/wa-inbox/api/templates', async (req: Request, res: Response)
 });
 
 waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Response): Promise<void> => {
-  const { phone, templateName, language } = req.body;
+  const { phone, templateName, language, templateBody } = req.body;
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
@@ -658,6 +658,12 @@ waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Resp
     });
     const data = await resp.json() as any;
     if (data.messages?.[0]?.id) {
+      try {
+        const db = getDb();
+        const content = templateBody || `[template:${templateName}]`;
+        db.prepare('INSERT INTO messages (phone, direction, content, tenant_id, created_at) VALUES (?, ?, ?, ?, ?)')
+          .run(phone, 'out', content, tenant?.id ?? tenantId, nowIsrael());
+      } catch {}
       res.json({ success: true, messageId: data.messages[0].id });
     } else {
       res.json({ success: false, error: data.error?.message, data });
