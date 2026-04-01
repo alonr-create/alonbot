@@ -103,9 +103,13 @@ cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
         ).run(msg.senderPhone, lead?.id ?? null, 'in', msg.text, tenant?.id ?? null);
         // Upsert lead record if not exists
         db.prepare(`
-          INSERT OR IGNORE INTO leads (phone, source, status, tenant_id, created_at, updated_at)
-          VALUES (?, 'whatsapp-cloud', 'new', ?, datetime('now'), datetime('now'))
-        `).run(msg.senderPhone, tenant?.id ?? null);
+          INSERT OR IGNORE INTO leads (phone, name, source, status, tenant_id, created_at, updated_at)
+          VALUES (?, ?, 'whatsapp-cloud', 'new', ?, datetime('now'), datetime('now'))
+        `).run(msg.senderPhone, msg.senderName || null, tenant?.id ?? null);
+        // Update name if it was missing before
+        if (msg.senderName) {
+          db.prepare(`UPDATE leads SET name = ? WHERE phone = ? AND (name IS NULL OR name = '')`).run(msg.senderName, msg.senderPhone);
+        }
       } catch (dbErr: any) {
         log.warn({ dbErr, phone: msg.senderPhone }, 'cloud-webhook: failed to persist incoming message');
       }

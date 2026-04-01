@@ -26,7 +26,7 @@
   --chat-bg:#efeae2;
   --sidebar-w:320px;--details-w:280px;
 }
-body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;padding-bottom:env(safe-area-inset-bottom,0);}
+body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);height:100vh;height:100dvh;overflow:hidden;margin:0;display:flex;flex-direction:column;}
 
 /* ===== TENANT TABS ===== */
 .tenant-tab{
@@ -65,7 +65,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 .nav-tab.active{background:var(--accent);color:#fff;border-color:var(--accent);}
 
 /* ===== MAIN LAYOUT ===== */
-.app{display:flex;height:calc(100vh - 54px);height:calc(100dvh - 54px);overflow:hidden;}
+.app{display:flex;flex:1;overflow:hidden;min-height:0;}
 
 /* ===== LEFT: CONTACT LIST ===== */
 .contacts-panel{
@@ -448,8 +448,8 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 /* ===== PWA STANDALONE (iOS) ===== */
 @media(display-mode:standalone){
-  body{height:100vh;height:100dvh;padding-top:env(safe-area-inset-top,0);padding-bottom:env(safe-area-inset-bottom,0);}
-  .app{height:calc(100dvh - 54px - env(safe-area-inset-top,0) - env(safe-area-inset-bottom,0));}
+  body{padding-top:env(safe-area-inset-top,0);}
+  .chat-input-area{padding-bottom:calc(10px + env(safe-area-inset-bottom,0));}
 }
 
 /* ===== SCROLLBAR GLOBAL ===== */
@@ -537,7 +537,6 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     <button class="nav-tab" id="navCampaign" onclick="showView('campaign')">🚀 קמפיין</button>
     <button class="nav-tab" id="navFlows" onclick="showView('flows')">⚡ פלואים</button>
     <button class="topbar-btn" title="רענון" onclick="refreshAll()">🔄</button>
-    <button class="topbar-btn" title="דשבורד ראשי" onclick="window.location='/dashboard?token='+TOKEN">🏠</button>
   </div>
 </div>
 <div id="tenantTabs" style="display:none;background:#16213e;padding:6px 16px;gap:4px;flex-shrink:0;overflow-x:auto;"></div>
@@ -660,7 +659,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- TEMPLATES VIEW (hidden by default) -->
-<div id="templatesView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="templatesView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:900px;margin:0 auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">📋 תבניות הודעה (Message Templates)</h2>
@@ -805,7 +804,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- CAMPAIGN VIEW -->
-<div id="campaignView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="campaignView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">🚀 קמפיין לידים — Alon.dev</h2>
@@ -827,7 +826,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- COSTS VIEW -->
-<div id="costsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="costsView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:900px;margin:0 auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">💰 מעקב עלויות</h2>
@@ -881,7 +880,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- OVERVIEW VIEW -->
-<div id="overviewView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="overviewView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
     <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📊 סקירה כללית</h2>
     <div id="overviewStats" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:24px;"></div>
@@ -897,7 +896,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- BROADCASTS VIEW -->
-<div id="broadcastsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="broadcastsView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:800px;margin:0 auto;">
     <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📢 שידורים</h2>
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;">
@@ -946,7 +945,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- ANALYTICS VIEW -->
-<div id="analyticsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="analyticsView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
     <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📈 אנליטיקס</h2>
     <!-- Phone health -->
@@ -1001,7 +1000,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <!-- FLOWS VIEW -->
-<div id="flowsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
+<div id="flowsView" style="display:none;flex:1;overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:900px;margin:0 auto;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">⚡ אוטומציות (Chatbot Flows)</h2>
