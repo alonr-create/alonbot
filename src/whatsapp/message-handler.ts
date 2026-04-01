@@ -162,8 +162,8 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
             const analysisResult = await analyzeImage(media.data, media.mimetype, leadContext);
 
             // Route through normal conversation flow (add as message to batch)
-            // Create lead if not exists (skip for admin — boss is not a lead)
-            if (!isAdminPhone(phone)) {
+            // Create lead if not exists (admin phone included — needed for personal tab)
+            {
               const existingLead = db
                 .prepare('SELECT id FROM leads WHERE phone = ?')
                 .get(phone) as { id: number } | undefined;
@@ -212,8 +212,8 @@ export function setupMessageHandler(client: any, adapter: BotAdapter): void {
 
     const db = getDb();
 
-    // Create lead if not exists (skip for admin — boss is not a lead)
-    if (!isAdminPhone(phone)) {
+    // Create lead if not exists (admin phone included — needed for personal tab)
+    {
       const existingLead = db
         .prepare('SELECT id FROM leads WHERE phone = ?')
         .get(phone) as { id: number } | undefined;

@@ -21,21 +21,7 @@ async function main() {
   const db = initDb();
   log.info('database initialized');
 
-  // 1b. Clean up lead/follow-up records for admin phone (test data)
-  // Keep messages — they serve as conversation history for boss mode
-  const adminPhone = config.alonPhone;
-  if (adminPhone) {
-    // Detach messages from lead record before deleting (FK constraint)
-    db.prepare('UPDATE messages SET lead_id = NULL WHERE phone = ?').run(adminPhone);
-    const delFollowUps = db.prepare('DELETE FROM follow_ups WHERE phone = ?').run(adminPhone);
-    const delLeads = db.prepare('DELETE FROM leads WHERE phone = ?').run(adminPhone);
-    if (delLeads.changes || delFollowUps.changes) {
-      log.info(
-        { adminPhone, leads: delLeads.changes, followUps: delFollowUps.changes },
-        'cleaned up admin phone records from DB (messages kept for boss history)'
-      );
-    }
-  }
+  // 1b. Admin phone records kept in DB — needed for personal tab in 360Shmikley
 
   // 2. Start HTTP server (health + QR endpoints)
   const server = createServer(config.port);
