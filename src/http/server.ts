@@ -1,5 +1,8 @@
 import express from 'express';
 import http from 'http';
+import { existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { healthRouter } from './routes/health.js';
 import { qrRouter } from './routes/qr.js';
 import { chatRouter } from './routes/chat.js';
@@ -12,6 +15,12 @@ import { createLogger } from '../utils/logger.js';
 
 const log = createLogger('http');
 
+// Resolve public/ dir — works in both dev (src/http/) and prod Docker (dist/http/)
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const devPublic = join(__dirname, '../public');
+const prodPublic = join(__dirname, '../../src/public');
+const publicDir = existsSync(devPublic) ? devPublic : prodPublic;
+
 // Allowed origins for website chat
 const CHAT_ORIGINS = [
   'https://alon-dev.vercel.app',
@@ -22,6 +31,8 @@ const CHAT_ORIGINS = [
 
 export function createServer(port: number): http.Server {
   const app = express();
+
+  app.use(express.static(publicDir));
 
   app.use(express.json({
     limit: '1mb',
