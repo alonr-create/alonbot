@@ -455,10 +455,13 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   }
   .contacts-panel.hidden-mobile{display:none!important;}
 
+  /* TOPBAR: HIDE WHEN IN CHAT VIEW */
+  .topbar.hidden-mobile{display:none!important;}
+
   /* CHAT PANEL: FULL SCREEN, PROPER FLEX */
   .chat-panel{
-    width:100%;height:100%;flex-direction:column;overflow:hidden;
-    flex-shrink:0;position:absolute;inset:0;z-index:40;
+    width:100%;height:100dvh;flex-direction:column;overflow:hidden;
+    flex-shrink:0;position:fixed;top:0;left:0;right:0;bottom:0;z-index:100;background:var(--bg);
   }
   .chat-panel.hidden-mobile{display:none!important;}
 
@@ -1669,9 +1672,10 @@ function selectContact(phone) {
   loadMessages(phone);
   loadContactDetails(phone, contact);
 
-  // Mobile: show chat
+  // Mobile: show chat, hide topbar
   document.getElementById('contactsPanel').classList.add('hidden-mobile');
   document.getElementById('chatPanel').classList.remove('hidden-mobile');
+  document.querySelector('.topbar').classList.add('hidden-mobile');
 
   // Mark read
   contact.unread = 0;
@@ -2319,6 +2323,7 @@ document.addEventListener('click', (e) => {
 function showMobileContacts() {
   document.getElementById('contactsPanel').classList.remove('hidden-mobile');
   document.getElementById('chatPanel').classList.add('hidden-mobile');
+  document.querySelector('.topbar').classList.remove('hidden-mobile');
 }
 
 // ===== POLLING =====
