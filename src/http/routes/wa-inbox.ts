@@ -130,8 +130,10 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
         SELECT phone, COUNT(*) as message_count FROM messages GROUP BY phone
       ) mc ON mc.phone = l.phone
     `;
+    const adminPhone = process.env.ALON_PHONE || '';
     if (tenantId !== null) {
-      rows = db.prepare(`${leadsQuery} WHERE l.tenant_id = ? ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all(tenantId);
+      // Always include admin phone regardless of tenant (for personal tab)
+      rows = db.prepare(`${leadsQuery} WHERE (l.tenant_id = ? OR l.phone = ?) ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all(tenantId, adminPhone);
     } else {
       rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all();
     }
