@@ -427,29 +427,92 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   .chat-messages{padding:12px 16px;}
 }
 @media(max-width:700px){
-  .app{flex-direction:column;}
-  .contacts-panel{width:100%;height:100%;border-left:none;border-bottom:1px solid var(--border);}
-  .contacts-panel.hidden-mobile{display:none;}
-  .chat-panel{height:100%;}
-  .chat-panel.hidden-mobile{display:none;}
-  .topbar{height:auto;flex-wrap:wrap;padding:8px 12px;gap:8px;}
+  /* TOPBAR: MINIMAL ON MOBILE */
+  .topbar{height:52px;padding:8px 12px;gap:8px;flex-wrap:nowrap;border-bottom:2px solid var(--accent);}
+  .topbar-logo{flex-shrink:0;min-width:fit-content;}
   .topbar-logo span{font-size:13px!important;}
-  .topbar-search{max-width:100%;order:10;flex-basis:100%;}
-  .topbar-search input{font-size:14px;padding:10px 14px;}
+
+  /* HIDE ALL NAV TABS ON MOBILE */
+  .nav-tab{display:none!important;}
   .topbar-channel{display:none;}
-  .topbar-actions{flex-wrap:wrap;gap:4px;order:5;}
-  .nav-tab{font-size:11px;padding:5px 10px;}
+  .topbar-spacer{display:none;}
+
+  /* SEARCH: PROMINENT */
+  .topbar-search{flex:1;max-width:none;}
+  .topbar-search input{font-size:14px;padding:8px 12px;}
+
+  /* TOPBAR ACTIONS: MINIMAL */
+  .topbar-actions{gap:4px;}
+  .topbar-btn{width:32px;height:32px;font-size:14px;}
+
+  /* APP LAYOUT: ROW-BASED FOR MOBILE VIEW SWITCHING */
+  .app{flex-direction:row;flex:1;min-height:0;width:100%;overflow:hidden;}
+
+  /* CONTACTS PANEL: FULL SCREEN OVERLAY WHEN VISIBLE */
+  .contacts-panel{
+    width:100%;height:100%;border-left:none;border-bottom:none;
+    flex-shrink:0;position:absolute;inset:0;z-index:50;background:var(--bg2);
+  }
+  .contacts-panel.hidden-mobile{display:none!important;}
+
+  /* CHAT PANEL: FULL SCREEN, PROPER FLEX */
+  .chat-panel{
+    width:100%;height:100%;flex-direction:column;overflow:hidden;
+    flex-shrink:0;position:absolute;inset:0;z-index:40;
+  }
+  .chat-panel.hidden-mobile{display:none!important;}
+
+  /* CHAT HEADER */
+  .chat-header{flex-shrink:0;}
   .mobile-back{display:flex!important;}
-  .biz-filter{font-size:10px;padding:3px 8px;}
-  .contacts-filters{flex-wrap:wrap;}
-  .contact-name .biz-tag{font-size:8px;padding:1px 4px;}
+
+  /* CHAT MESSAGES: SCROLLABLE, TAKES REMAINING FLEX SPACE */
+  .chat-messages{
+    flex:1;overflow-y:auto;overflow-x:hidden;min-height:0;
+    padding:12px 16px;background-color:#e5ddd5;
+  }
+
+  /* CHAT INPUT: FIXED AT BOTTOM WITH SAFE AREA FOR iOS */
+  .chat-input-area{
+    flex-shrink:0;padding:10px 12px;padding-bottom:calc(10px + env(safe-area-inset-bottom,0));
+    display:flex;align-items:flex-end;gap:6px;
+  }
+  .chat-textarea{font-size:13px;padding:8px 10px;min-height:36px;}
+  .input-btn{width:32px;height:32px;font-size:16px;flex-shrink:0;}
+  .send-btn{width:32px;height:32px;font-size:16px;flex-shrink:0;}
+
+  /* BUSINESS FILTERS: SMALLER ON MOBILE */
+  .contacts-filters{padding:8px 10px;gap:4px;border-bottom:1px solid var(--border-light);}
+  .biz-filter{font-size:9px;padding:4px 10px;}
+
+  /* CONTACT LIST ADJUSTMENTS */
+  .contact-item{padding:10px 12px;}
+  .contact-avatar{width:40px;height:40px;}
+  .contact-name{font-size:13px;}
+  .contact-preview{font-size:11px;}
+  .contact-name .biz-tag{font-size:7px;padding:0px 3px;}
+
+  /* EMOJI PICKER POSITIONING */
+  .emoji-picker{bottom:50px;right:12px;width:240px;}
+
+  /* DETAILS PANEL: HIDDEN ON MOBILE */
+  .details-panel{display:none!important;}
 }
-.mobile-back{display:none!important;margin-left:8px;}
+.mobile-back{display:none!important;}
 
 /* ===== PWA STANDALONE (iOS) ===== */
 @media(display-mode:standalone){
   body{padding-top:env(safe-area-inset-top,0);}
-  .chat-input-area{padding-bottom:calc(10px + env(safe-area-inset-bottom,0));}
+  .topbar{padding-left:max(12px,env(safe-area-inset-left,0));padding-right:max(12px,env(safe-area-inset-right,0));}
+  .chat-input-area{
+    padding-left:max(12px,env(safe-area-inset-left,0));
+    padding-right:max(12px,env(safe-area-inset-right,0));
+    padding-bottom:calc(10px + env(safe-area-inset-bottom,0));
+  }
+  .chat-messages{
+    padding-left:max(16px,env(safe-area-inset-left,0));
+    padding-right:max(16px,env(safe-area-inset-right,0));
+  }
 }
 
 /* ===== SCROLLBAR GLOBAL ===== */
