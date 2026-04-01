@@ -21,7 +21,7 @@ const waInboxHTML = readFileSync(htmlPath, 'utf-8');
 // ─────────────────────────────────────────────────────────────────────────────
 
 function requireToken(req: Request, res: Response, next: NextFunction): void {
-  const secret = process.env.API_SECRET;
+  const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
   const token = (req.query.token as string) || (req.headers.authorization?.replace('Bearer ', ''));
   if (!secret || token !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
@@ -52,7 +52,7 @@ export const waInboxRouter = Router();
 // ── Serve HTML page ──────────────────────────────────────────────────────────
 
 waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
-  const secret = process.env.API_SECRET;
+  const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
   const token = req.query.token as string;
   if (!secret || token !== secret) {
     res.status(401).send('Unauthorized');

@@ -46,6 +46,8 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: DASHBOARD_SECRET
+        sync: false
       - key: MODE
         value: cloud
       - key: PORT
