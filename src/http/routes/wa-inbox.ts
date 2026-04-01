@@ -20,9 +20,15 @@ const waInboxHTML = readFileSync(htmlPath, 'utf-8');
 // Auth middleware
 // ─────────────────────────────────────────────────────────────────────────────
 
+function getCookieToken(req: Request): string {
+  const header = req.headers.cookie || '';
+  const match = header.split(';').map(c => c.trim()).find(c => c.startsWith('wa_token='));
+  return match ? match.slice('wa_token='.length) : '';
+}
+
 function requireToken(req: Request, res: Response, next: NextFunction): void {
   const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
-  const token = (req.query.token as string) || (req.headers.authorization?.replace('Bearer ', ''));
+  const token = (req.query.token as string) || (req.headers.authorization?.replace('Bearer ', '')) || getCookieToken(req);
   if (!secret || token !== secret) {
     res.status(401).json({ error: 'Unauthorized' });
     return;
@@ -53,10 +59,19 @@ export const waInboxRouter = Router();
 
 waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
   const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
-  const token = req.query.token as string;
+  const token = (req.query.token as string) || getCookieToken(req);
   if (!secret || token !== secret) {
     res.status(401).send('Unauthorized');
     return;
+  }
+  // Set long-lived cookie so PWA works without ?token= in URL
+  if (req.query.token === secret) {
+    res.cookie('wa_token', secret, {
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+    });
   }
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(waInboxHTML);
