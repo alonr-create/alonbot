@@ -1427,12 +1427,9 @@ function renderContacts() {
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
     if (currentBizFilter === 'personal') {
-      if (!adminPhone) return false;
-      const norm = (p) => (p||'').replace(/\D/g,'');
-      const cp = norm(c.phone), ap = norm(adminPhone);
-      // Show admin phone + adjacent numbers (family)
-      const base = ap.slice(0, -1);
-      return cp.startsWith(base) || cp === ap || cp.endsWith(ap) || ap.endsWith(cp);
+      // Always show admin phone in personal tab regardless of source label
+      if (adminPhone && c.phone === adminPhone) return true;
+      return biz.cls === 'personal';
     }
     return true;
   });
