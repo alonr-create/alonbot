@@ -20,11 +20,15 @@ const sessions = new Map<string, {
   createdAt: number;
 }>();
 
-// Clean up sessions older than 1 hour
+// Clean up sessions older than 1 hour + expired rate limit entries
 setInterval(() => {
-  const cutoff = Date.now() - 60 * 60 * 1000;
+  const now = Date.now();
+  const cutoff = now - 60 * 60 * 1000;
   for (const [id, session] of sessions) {
     if (session.createdAt < cutoff) sessions.delete(id);
+  }
+  for (const [ip, entry] of rateLimits) {
+    if (now > entry.resetAt) rateLimits.delete(ip);
   }
 }, 10 * 60 * 1000);
 
@@ -44,7 +48,7 @@ function checkRateLimit(ip: string): boolean {
 }
 
 chatRouter.post('/api/chat', async (req, res) => {
-  const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+  const ip = req.ip || 'unknown';
 
   if (!checkRateLimit(ip)) {
     res.status(429).json({ reply: 'יותר מדי בקשות, נסה שוב בעוד דקה.' });

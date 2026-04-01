@@ -68,14 +68,7 @@ export const mondayWebhookRouter = Router();
 mondayWebhookRouter.post('/monday', (req, res) => {
   const payload = req.body as MondayWebhookPayload;
 
-  // Challenge verification for Monday.com webhook setup
-  if (payload.challenge) {
-    log.info('Monday.com webhook challenge received');
-    res.json({ challenge: payload.challenge });
-    return;
-  }
-
-  // Webhook authentication — verify shared secret
+  // Webhook authentication — verify shared secret (before challenge)
   const webhookSecret = process.env.MONDAY_WEBHOOK_SECRET;
   if (webhookSecret) {
     const authHeader = req.headers['authorization'];
@@ -85,7 +78,16 @@ mondayWebhookRouter.post('/monday', (req, res) => {
       return;
     }
   } else {
-    log.warn('MONDAY_WEBHOOK_SECRET not set — webhook is unprotected!');
+    log.warn('MONDAY_WEBHOOK_SECRET not set — rejecting webhook');
+    res.status(401).json({ error: 'Webhook secret not configured' });
+    return;
+  }
+
+  // Challenge verification for Monday.com webhook setup (after auth)
+  if (payload.challenge) {
+    log.info('Monday.com webhook challenge received');
+    res.json({ challenge: payload.challenge });
+    return;
   }
 
   const event = payload.event;
@@ -166,8 +168,8 @@ async function processWebhookEvent(
     log.info({ phone, pulseId }, 'Created new lead from Monday.com');
   }
 
-  // Trigger callback for new lead handling
-  if (onNewLeadCallback) {
+  // Trigger callback only for genuinely new leads (not existing ones)
+  if (onNewLeadCallback && !existing) {
     try {
       await onNewLeadCallback(phone, item.name, item.interest);
     } catch (err) {

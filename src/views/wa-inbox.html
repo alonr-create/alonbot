@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="360Shmikley">
 <meta name="theme-color" content="#0088cc">
+<meta http-equiv="X-Frame-Options" content="DENY">
 <link rel="manifest" href="/manifest-wa.json">
 <link rel="apple-touch-icon" href="/apple-touch-icon-wa-blue.png">
 <link rel="icon" type="image/png" sizes="32x32" href="/favicon-wa-blue-32.png">
@@ -512,7 +513,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     </div>
   </div>
   <div class="topbar-search">
-    <input type="text" id="globalSearch" placeholder="חיפוש אנשי קשר, הודעות..." oninput="handleSearch(this.value)">
+    <input type="text" id="globalSearch" placeholder="חיפוש אנשי קשר, הודעות..." oninput="handleSearchDebounced(this.value)">
     <span class="search-icon">🔍</span>
   </div>
   <div class="topbar-channel">
@@ -1072,7 +1073,10 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <script>
 // ===== CONFIG =====
 const _urlToken = new URLSearchParams(window.location.search).get('token');
-if (_urlToken) localStorage.setItem('wa_token', _urlToken);
+if (_urlToken) {
+  localStorage.setItem('wa_token', _urlToken);
+  history.replaceState({}, '', window.location.pathname);
+}
 const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
 const API = '/wa-inbox/api';
 const POLL_INTERVAL = 15000; // 15s — responsive enough for real-time feel
@@ -1084,9 +1088,6 @@ let titleFlashTimer = null;
 let tenants = [];
 let activeTenantId = null;
 
-// Notification sound (subtle WhatsApp-like chime)
-const notifSound = new Audio('data:audio/wav;base64,UklGRl9vT19telefonAQBGTVQgEAABAAEARKwAAIhYAQACABAAZGF0YV' + 'AAAA==');
-notifSound.volume = 0.4;
 function playNotifSound() {
   try {
     // Use Web Audio API for a clean notification beep
@@ -1151,14 +1152,17 @@ function getInitials(name) {
 // ===== API HELPERS =====
 async function api(path, opts = {}) {
   let url = API + path;
-  const sep = url.includes('?') ? '&' : '?';
   const params = [];
-  if (TOKEN) params.push('token=' + encodeURIComponent(TOKEN));
   if (activeTenantId !== null) params.push('tenant_id=' + activeTenantId);
-  if (params.length) url += sep + params.join('&');
+  if (params.length) {
+    const sep = url.includes('?') ? '&' : '?';
+    url += sep + params.join('&');
+  }
+  const authHeaders = {};
+  if (TOKEN) authHeaders['Authorization'] = 'Bearer ' + TOKEN;
   const res = await fetch(url, {
     credentials: 'same-origin',
-    headers: {'Content-Type': 'application/json', ...opts.headers},
+    headers: {'Content-Type': 'application/json', ...authHeaders, ...opts.headers},
     ...opts
   });
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -1168,7 +1172,7 @@ async function api(path, opts = {}) {
 // ===== TENANT TABS =====
 async function loadTenants() {
   try {
-    const res = await fetch(API + '/tenants?token=' + encodeURIComponent(TOKEN));
+    const res = await fetch(API + '/tenants', { headers: TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {} });
     if (!res.ok) return;
     tenants = await res.json();
     renderTenantTabs();
@@ -1275,7 +1279,7 @@ async function loadContacts() {
     }));
     // Merge campaign leads
     try {
-      const campRes = await fetch(CAMPAIGN_API + '/api/campaign-messages');
+      const campRes = await fetch(CAMPAIGN_API + '/api/campaign-messages', { headers: TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {} });
       const campData = await campRes.json();
       // Normalize phone: 972xxx → 0xxx for consistent matching
       function normPhone(p) {
@@ -1453,7 +1457,7 @@ function renderContacts() {
     const initials = getInitials(c.name);
     const isActive = c.phone === activePhone;
     const timeClass = c.unread > 0 ? 'contact-time unread' : 'contact-time';
-    const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + truncate(c.lastMessage, 40) : 'אין הודעות';
+    const preview = c.lastMessage ? (c.isOutgoing ? '<span class="check">✓✓</span> ' : '') + esc(truncate(c.lastMessage, 40)) : 'אין הודעות';
 
     const biz = getBizLabel(c.source);
     const isNew = c.hasNew && !isActive;
@@ -1461,7 +1465,7 @@ function renderContacts() {
     const previewStyle = isNew ? 'font-weight:600;color:var(--text);' : '';
     const timeStyle = isNew ? 'color:var(--accent);font-weight:700;' : '';
     return `
-      <div class="contact-item ${isActive ? 'active' : ''} ${isNew ? 'has-new' : ''}" data-phone="${c.phone}" onclick="selectContact('${c.phone}')" style="cursor:pointer;">
+      <div class="contact-item ${isActive ? 'active' : ''} ${isNew ? 'has-new' : ''}" data-phone="${esc(c.phone)}" style="cursor:pointer;">
         <div class="contact-avatar" style="${c.profile_pic_url ? '' : 'background:'+color+';'}pointer-events:none;position:relative;${c.profile_pic_url ? 'overflow:hidden;' : ''}">
           ${c.profile_pic_url ? `<img src="${esc(c.profile_pic_url)}" style="width:100%;height:100%;object-fit:cover;border-radius:50%;" onerror="this.style.display='none';this.parentElement.style.background='${color}';this.parentElement.insertAdjacentText('afterbegin','${initials}')">` : initials}
           ${c.online ? '<div class="online-dot" style="pointer-events:none;"></div>' : ''}
@@ -1502,7 +1506,10 @@ function esc(s) {
 function linkify(text) {
   // Convert URLs to clickable links
   const urlRegex = /(https?:\/\/[^\s<]+)/g;
-  return esc(text).replace(urlRegex, '<a href="$1" target="_blank" rel="noopener" style="color:#1a73e8;text-decoration:underline;word-break:break-all;">$1</a>');
+  return esc(text).replace(urlRegex, function(match) {
+    const safeUrl = match.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    return '<a href="' + safeUrl + '" target="_blank" rel="noopener" style="color:#1a73e8;text-decoration:underline;word-break:break-all;">' + match + '</a>';
+  });
 }
 
 // ===== FILTER =====
@@ -1514,6 +1521,8 @@ function setFilter(filter, el) {
 }
 
 // ===== SEARCH =====
+let _searchTimer;
+function handleSearchDebounced(val) { clearTimeout(_searchTimer); _searchTimer = setTimeout(() => handleSearch(val), 150); }
 function handleSearch(val) {
   searchQuery = val;
   renderContacts();
@@ -1969,9 +1978,17 @@ function renderQuickReplies() {
   bar.innerHTML = quickReplies.map(qr => {
     const label = qr.name || qr.label || qr.title || truncate(qr.message || qr.text || '', 25);
     const msg = qr.message || qr.text || qr.content || '';
-    return `<button class="qr-chip" onclick="useQuickReply('${msg.replace(/'/g,"\\'")}')">⚡ ${esc(label)}</button>`;
+    return `<button class="qr-chip" data-msg="${esc(msg)}">⚡ ${esc(label)}</button>`;
   }).join('');
 }
+
+// Event delegation for quick reply clicks
+document.getElementById('quickRepliesBar').addEventListener('click', (e) => {
+  const chip = e.target.closest('.qr-chip');
+  if (chip && chip.dataset.msg) {
+    useQuickReply(chip.dataset.msg);
+  }
+});
 
 function useQuickReply(text) {
   const input = document.getElementById('chatInput');
@@ -2264,9 +2281,14 @@ async function pollMessages() {
       }
     }
 
+    // Only re-render contacts if data actually changed
+    const newHash = newContacts.map(c => c.phone + c.lastTime + c.unread + (c.hasNew?1:0)).join('|');
+    const oldHash = contacts.map(c => c.phone + c.lastTime + c.unread + (c.hasNew?1:0)).join('|');
     contacts = newContacts;
     contacts.sort((a,b) => new Date(b.lastTime) - new Date(a.lastTime));
-    renderContacts();
+    if (newHash !== oldHash || hasNewIncoming) {
+      renderContacts();
+    }
   } catch(e) { /* silent */ }
 }
 
@@ -2354,7 +2376,7 @@ async function loadCampaign() {
   callsEl.innerHTML = '';
 
   try {
-    const res = await fetch('https://campaign-webhook-production.up.railway.app/api/campaign-messages');
+    const res = await fetch('https://campaign-webhook-production.up.railway.app/api/campaign-messages', { headers: TOKEN ? { 'Authorization': 'Bearer ' + TOKEN } : {} });
     const data = await res.json();
 
     // Summary cards

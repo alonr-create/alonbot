@@ -44,6 +44,10 @@ healthRouter.post('/admin/purge-stale-leads', (req, res) => {
   }
 
   const daysInactive = parseInt(String(req.query.days || '30'), 10);
+  if (isNaN(daysInactive) || daysInactive < 1) {
+    res.status(400).json({ error: 'Invalid days parameter' });
+    return;
+  }
   const db = getDb();
 
   // Find leads with no messages in N days AND no monday_item_id

@@ -350,6 +350,7 @@ describe('Cloud Webhook GET verification', () => {
   let app: ReturnType<typeof express>;
 
   beforeEach(async () => {
+    vi.resetModules();
     process.env.WA_CLOUD_VERIFY_TOKEN = 'alonbot-verify-2026';
     const { cloudWebhookRouter } = await import('../src/http/routes/whatsapp-cloud-webhook.js');
     app = express();

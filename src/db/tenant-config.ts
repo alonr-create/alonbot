@@ -9,15 +9,27 @@ import type { TenantRow } from './tenants.js';
 
 const cache = new Map<string, string>();
 let cacheLoaded = false;
+let cacheLoadedAt = 0;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 function loadCache(): void {
-  if (cacheLoaded) return;
+  const now = Date.now();
+  if (cacheLoaded && (now - cacheLoadedAt) < CACHE_TTL_MS) return;
   const db = getDb();
   const rows = db.prepare('SELECT key, value FROM tenant_config').all() as Array<{ key: string; value: string }>;
+  cache.clear();
   for (const row of rows) {
     cache.set(row.key, row.value);
   }
   cacheLoaded = true;
+  cacheLoadedAt = now;
+}
+
+/** Clear the config cache, forcing a reload on next access. */
+export function clearCache(): void {
+  cache.clear();
+  cacheLoaded = false;
+  cacheLoadedAt = 0;
 }
 
 /** Get a single config value. Returns fallback if not found. */
@@ -73,6 +85,7 @@ export function setConfig(key: string, value: string): void {
 export function clearConfigCache(): void {
   cache.clear();
   cacheLoaded = false;
+  cacheLoadedAt = 0;
 }
 
 // ── Convenience getters ──

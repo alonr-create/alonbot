@@ -31,8 +31,9 @@ export function initSchema(db: Database.Database): void {
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  seedTenant.run('דקל', '1080047101853955', '972559566148', 1443236269, 'דקל לפרישה', 'דקל', '972546300783');
-  seedTenant.run('alondev', '967467269793135', '972559173249', 5092777389, 'Alon.dev', 'אלון', '972546300783');
+  const adminPhone = process.env.ADMIN_PHONE || '';
+  seedTenant.run('דקל', '1080047101853955', '972559566148', 1443236269, 'דקל לפרישה', 'דקל', adminPhone);
+  seedTenant.run('alondev', '967467269793135', '972559173249', 5092777389, 'Alon.dev', 'אלון', adminPhone);
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS leads (
@@ -134,7 +135,7 @@ export function initSchema(db: Database.Database): void {
     business_description: 'עסק של אלון, יזם עצמאי שמשתמש ב-AI כדי לתת ללקוחות יכולת של צוות שלם במחיר של פרילנסר',
     business_website: 'alon-dev.vercel.app',
     owner_name: 'אלון',
-    admin_phone: '972546300783',
+    admin_phone: process.env.ADMIN_PHONE || '',
 
     // Personality
     bot_personality: 'אגרסיבי במכירות — דוחף אבל לא גס. יוצר תחושת דחיפות. עברית לא פורמלית, ידידותית אבל עסקית. תמיד מסיים עם שאלה או הצעה לפעולה הבאה.',

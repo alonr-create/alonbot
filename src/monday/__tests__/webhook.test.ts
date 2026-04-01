@@ -16,13 +16,14 @@ async function request(
   server: http.Server,
   path: string,
   body: unknown,
+  extraHeaders: Record<string, string> = {},
 ): Promise<{ status: number; body: unknown }> {
   const addr = server.address();
   if (!addr || typeof addr === 'string') throw new Error('No server address');
 
   const res = await fetch(`http://127.0.0.1:${addr.port}${path}`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...extraHeaders },
     body: JSON.stringify(body),
   });
 
@@ -69,20 +70,23 @@ describe('Monday.com webhook handler', () => {
     vi.restoreAllMocks();
     vi.resetModules();
     globalThis.fetch = originalFetch;
+    delete process.env.MONDAY_WEBHOOK_SECRET;
     db?.close();
     await new Promise<void>((resolve) => server?.close(() => resolve()));
   });
 
   it('echoes challenge token back', async () => {
+    process.env.MONDAY_WEBHOOK_SECRET = 'test-secret';
     const res = await request(server, '/webhook/monday', {
       challenge: 'test-token-123',
-    });
+    }, { 'Authorization': 'test-secret' });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ challenge: 'test-token-123' });
   });
 
   it('responds 200 to create_item event', async () => {
+    process.env.MONDAY_WEBHOOK_SECRET = 'test-secret';
     const res = await request(server, '/webhook/monday', {
       event: {
         type: 'create_item',
@@ -90,13 +94,14 @@ describe('Monday.com webhook handler', () => {
         boardId: 67890,
         pulseName: 'New Lead',
       },
-    });
+    }, { 'Authorization': 'test-secret' });
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
   });
 
   it('creates lead in DB with monday fields', async () => {
+    process.env.MONDAY_WEBHOOK_SECRET = 'test-secret';
     await request(server, '/webhook/monday', {
       event: {
         type: 'create_item',
@@ -104,7 +109,7 @@ describe('Monday.com webhook handler', () => {
         boardId: 67890,
         pulseName: 'New Lead',
       },
-    });
+    }, { 'Authorization': 'test-secret' });
 
     // Wait for async processing
     await new Promise((r) => setTimeout(r, 200));
@@ -121,6 +126,7 @@ describe('Monday.com webhook handler', () => {
   });
 
   it('updates existing lead instead of duplicating', async () => {
+    process.env.MONDAY_WEBHOOK_SECRET = 'test-secret';
     // Insert an existing lead with same phone
     db.prepare(
       "INSERT INTO leads (phone, name, source, status) VALUES ('972546300783', 'Old Name', 'whatsapp', 'new')",
@@ -133,7 +139,7 @@ describe('Monday.com webhook handler', () => {
         boardId: 11111,
         pulseName: 'Updated Lead',
       },
-    });
+    }, { 'Authorization': 'test-secret' });
 
     // Wait for async processing
     await new Promise((r) => setTimeout(r, 200));

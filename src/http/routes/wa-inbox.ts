@@ -89,33 +89,30 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
   try {
     const db = getDb();
     let rows;
+    const leadsQuery = `
+      SELECT
+        l.phone, l.name, l.status, l.interest, l.source, l.score,
+        l.updated_at,
+        lm.content as last_message,
+        lm.created_at as last_message_at,
+        lm.direction as last_message_role,
+        mc.message_count
+      FROM leads l
+      LEFT JOIN (
+        SELECT m.phone, m.content, m.created_at, m.direction
+        FROM messages m
+        INNER JOIN (
+          SELECT phone, MAX(id) as max_id FROM messages GROUP BY phone
+        ) latest ON m.phone = latest.phone AND m.id = latest.max_id
+      ) lm ON lm.phone = l.phone
+      LEFT JOIN (
+        SELECT phone, COUNT(*) as message_count FROM messages GROUP BY phone
+      ) mc ON mc.phone = l.phone
+    `;
     if (tenantId !== null) {
-      rows = db.prepare(`
-        SELECT
-          l.phone, l.name, l.status, l.interest, l.source, l.score,
-          l.updated_at,
-          (SELECT content FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message,
-          (SELECT created_at FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message_at,
-          (SELECT direction FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message_role,
-          (SELECT COUNT(*) FROM messages WHERE phone = l.phone) as message_count
-        FROM leads l
-        WHERE l.tenant_id = ?
-        ORDER BY l.updated_at DESC
-        LIMIT 200
-      `).all(tenantId);
+      rows = db.prepare(`${leadsQuery} WHERE l.tenant_id = ? ORDER BY l.updated_at DESC LIMIT 200`).all(tenantId);
     } else {
-      rows = db.prepare(`
-        SELECT
-          l.phone, l.name, l.status, l.interest, l.source, l.score,
-          l.updated_at,
-          (SELECT content FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message,
-          (SELECT created_at FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message_at,
-          (SELECT direction FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_message_role,
-          (SELECT COUNT(*) FROM messages WHERE phone = l.phone) as message_count
-        FROM leads l
-        ORDER BY l.updated_at DESC
-        LIMIT 200
-      `).all();
+      rows = db.prepare(`${leadsQuery} ORDER BY l.updated_at DESC LIMIT 200`).all();
     }
     // Map role: 'out' → 'assistant' for frontend compatibility
     const leads = (rows as any[]).map(r => ({
@@ -696,7 +693,9 @@ waInboxRouter.post('/wa-inbox/api/create-template', async (req: Request, res: Re
 // ── Costs / API Usage ───────────────────────────────────────────────────────
 
 waInboxRouter.get('/wa-inbox/api/costs', (req: Request, res: Response): void => {
-  const days = parseInt(req.query.days as string) || 30;
+  const rawDays = parseInt(req.query.days as string);
+  const days = (!isNaN(rawDays) && rawDays >= 1 && rawDays <= 365) ? rawDays : 30;
+  const daysParam = `-${days} days`;
   const tenantId = getTenantId(req);
   try {
     const db = getDb();
@@ -715,17 +714,17 @@ waInboxRouter.get('/wa-inbox/api/costs', (req: Request, res: Response): void => 
     // Total costs
     const totals = db.prepare(`
       SELECT SUM(cost_usd) as total_cost, COUNT(*) as total_calls
-      FROM api_usage WHERE created_at >= DATE('now', '-${days} days')${tenantFilter}
-    `).get(...params) as any;
+      FROM api_usage WHERE created_at >= DATE('now', ?)${tenantFilter}
+    `).get(daysParam, ...params) as any;
 
     // Daily breakdown
     const daily = db.prepare(`
       SELECT DATE(created_at) as day, model,
              SUM(input_tokens) as input_tokens, SUM(output_tokens) as output_tokens,
              SUM(cost_usd) as cost_usd, COUNT(*) as calls
-      FROM api_usage WHERE created_at >= DATE('now', '-${days} days')${tenantFilter}
+      FROM api_usage WHERE created_at >= DATE('now', ?)${tenantFilter}
       GROUP BY DATE(created_at), model ORDER BY day DESC
-    `).all(...params);
+    `).all(daysParam, ...params);
 
     // WA message counts for cost estimation
     const waToday = db.prepare(`
@@ -739,9 +738,9 @@ waInboxRouter.get('/wa-inbox/api/costs', (req: Request, res: Response): void => 
              COUNT(DISTINCT phone) as conversations,
              SUM(CASE WHEN direction = 'in' THEN 1 ELSE 0 END) as incoming_msgs,
              SUM(CASE WHEN direction = 'out' THEN 1 ELSE 0 END) as outgoing_msgs
-      FROM messages WHERE created_at >= DATE('now', '-${days} days')${tenantFilter}
+      FROM messages WHERE created_at >= DATE('now', ?)${tenantFilter}
       GROUP BY DATE(created_at) ORDER BY day DESC
-    `).all(...params);
+    `).all(daysParam, ...params);
 
     res.json({ today: todayUsage, totals: totals || {}, daily, waToday: waToday || {}, waDaily });
   } catch (err: any) {

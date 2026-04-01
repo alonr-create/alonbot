@@ -1,9 +1,24 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import { getCurrentQR, getConnectionStatus, getPairingCode } from '../../whatsapp/qr.js';
 
 export const qrRouter = Router();
 
-qrRouter.get('/qr', (_req, res) => {
+/** Require API_SECRET via query param or Authorization header */
+function requireQrToken(req: Request, res: Response, next: NextFunction): void {
+  const secret = process.env.API_SECRET;
+  if (!secret) {
+    res.status(401).json({ error: 'API_SECRET not configured' });
+    return;
+  }
+  const token = (req.query.token as string) || req.headers.authorization?.replace('Bearer ', '');
+  if (token !== secret) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
+
+qrRouter.get('/qr', requireQrToken, (_req, res) => {
   const connected = getConnectionStatus() === 'connected';
   const qr = getCurrentQR();
   const pairingCode = getPairingCode();
@@ -106,7 +121,9 @@ qrRouter.get('/qr', (_req, res) => {
   <script>
     async function poll() {
       try {
-        const res = await fetch('/api/qr-status');
+        const params = new URLSearchParams(window.location.search);
+        const tk = params.get('token') || '';
+        const res = await fetch('/api/qr-status?token=' + encodeURIComponent(tk));
         const data = await res.json();
         const statusEl = document.getElementById('status');
         const contentEl = document.getElementById('content');
@@ -148,7 +165,7 @@ qrRouter.get('/qr', (_req, res) => {
   res.type('html').send(html);
 });
 
-qrRouter.get('/api/qr-status', (_req, res) => {
+qrRouter.get('/api/qr-status', requireQrToken, (_req, res) => {
   const status = getConnectionStatus();
   res.json({
     connected: status === 'connected',

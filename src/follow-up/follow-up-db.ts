@@ -43,7 +43,7 @@ export function getDueFollowUps(): FollowUpRow[] {
     JOIN leads l ON l.phone = f.phone
     WHERE f.sent_at IS NULL
       AND f.cancelled = 0
-      AND f.scheduled_at <= datetime('now')
+      AND datetime(f.scheduled_at) <= datetime('now')
       AND l.status NOT IN (${placeholders})
   `).all(...TERMINAL_STATUSES) as FollowUpRow[];
 }

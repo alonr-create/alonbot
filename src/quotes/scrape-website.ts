@@ -39,7 +39,7 @@ export async function scrapeWebsite(url: string): Promise<ScrapedBranding> {
   if (!['http:', 'https:'].includes(parsed.protocol)) {
     throw new Error('Only http/https URLs are allowed');
   }
-  const blocked = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|0\.0\.0\.0|::1|\[::1\])/i;
+  const blocked = /^(localhost|127\.|10\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|169\.254\.|0\.0\.0\.0|::1|\[::1\]|[fF][cCdD])/i;
   if (blocked.test(parsed.hostname)) {
     throw new Error('Internal URLs are not allowed');
   }

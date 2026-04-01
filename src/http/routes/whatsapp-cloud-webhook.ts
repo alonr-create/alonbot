@@ -1,4 +1,5 @@
-import { Router } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
+import crypto from 'crypto';
 import { parseWebhookPayload, createCloudAdapter } from '../../whatsapp/cloud-api.js';
 import { config } from '../../config.js';
 import { createLogger } from '../../utils/logger.js';
@@ -38,6 +39,33 @@ cloudWebhookRouter.get('/whatsapp-cloud-webhook', (req, res) => {
  * Routes text messages through message batcher → AI conversation handler.
  */
 cloudWebhookRouter.post('/whatsapp-cloud-webhook', (req, res) => {
+  // Verify Meta X-Hub-Signature-256 HMAC
+  const appSecret = process.env.META_APP_SECRET;
+  if (appSecret) {
+    const signature = req.headers['x-hub-signature-256'] as string | undefined;
+    if (!signature) {
+      log.warn('cloud-webhook: missing X-Hub-Signature-256 header');
+      res.status(401).json({ error: 'Missing signature' });
+      return;
+    }
+
+    const rawBody = (req as any)._rawBody as Buffer | undefined;
+    if (!rawBody) {
+      log.error('cloud-webhook: raw body not captured — cannot verify signature');
+      res.status(500).json({ error: 'Internal error' });
+      return;
+    }
+
+    const expectedSig = 'sha256=' + crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
+    const sigBuffer = Buffer.from(signature);
+    const expectedBuffer = Buffer.from(expectedSig);
+    if (sigBuffer.length !== expectedBuffer.length || !crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+      log.warn('cloud-webhook: invalid HMAC signature');
+      res.status(401).json({ error: 'Invalid signature' });
+      return;
+    }
+  }
+
   try {
     const messages = parseWebhookPayload(req.body);
 

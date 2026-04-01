@@ -23,7 +23,13 @@ const CHAT_ORIGINS = [
 export function createServer(port: number): http.Server {
   const app = express();
 
-  app.use(express.json({ limit: '50mb' }));
+  app.use(express.json({
+    limit: '1mb',
+    verify: (req: any, _res, buf) => {
+      // Capture raw body for HMAC signature verification (Meta webhook)
+      req._rawBody = buf;
+    },
+  }));
 
   // CORS for /api/chat
   app.use('/api/chat', (req, res, next) => {
