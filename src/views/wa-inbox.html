@@ -2350,11 +2350,18 @@ async function refreshAll() {
 // ===== INIT =====
 async function init() {
   if (!TOKEN) {
-    document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
-    return;
+    // No token in URL or localStorage — try cookie auth
+    try {
+      const cfg = await api('/config');
+      adminPhone = cfg.admin_phone || '';
+    } catch(e) {
+      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
+      return;
+    }
+  } else {
+    // Load admin phone for personal tab filter
+    try { const cfg = await api('/config'); adminPhone = cfg.admin_phone || ''; } catch(e) {}
   }
-  // Load admin phone for personal tab filter
-  try { const cfg = await api('/config'); adminPhone = cfg.admin_phone || ''; } catch(e) {}
   // Load tenants first — switchTenant will call loadContacts
   await loadTenants();
   // Auto-open chat from URL param ?chat=972...
