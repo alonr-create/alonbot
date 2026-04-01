@@ -630,7 +630,7 @@ waInboxRouter.get('/wa-inbox/api/templates', async (req: Request, res: Response)
 });
 
 waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Response): Promise<void> => {
-  const { phone, templateName, language, templateBody } = req.body;
+  const { phone, templateName, language, templateBody, variables } = req.body;
   const tenantId = getTenantId(req);
   const tenant = tenantId ? getTenantById(tenantId) : null;
   const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
@@ -643,6 +643,10 @@ waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Resp
 
   try {
     const to = phone.startsWith('972') ? phone : '972' + phone.replace(/^0/, '');
+    const templatePayload: any = { name: templateName, language: { code: language || 'he' } };
+    if (variables?.length) {
+      templatePayload.components = [{ type: 'body', parameters: variables.map((v: any) => ({ type: 'text', text: v.text ?? v })) }];
+    }
     const resp = await fetch(`https://graph.facebook.com/v21.0/${pid}/messages`, {
       method: 'POST',
       headers: {
@@ -653,7 +657,7 @@ waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Resp
         messaging_product: 'whatsapp',
         to,
         type: 'template',
-        template: { name: templateName, language: { code: language || 'he' } },
+        template: templatePayload,
       }),
     });
     const data = await resp.json() as any;
@@ -668,6 +672,62 @@ waInboxRouter.post('/wa-inbox/api/send-template', async (req: Request, res: Resp
     } else {
       res.json({ success: false, error: data.error?.message, data });
     }
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /wa-inbox/api/migrate-template-messages ─────────────────────────────
+// One-time backfill: replace [template:name] var → full rendered body text.
+// Fetches template body from Meta API, substitutes {{N}} variables, updates DB.
+waInboxRouter.post('/wa-inbox/api/migrate-template-messages', async (req: Request, res: Response): Promise<void> => {
+  const { templateName } = req.body;
+  if (!templateName) {
+    res.status(400).json({ error: 'templateName required' });
+    return;
+  }
+
+  const tenantId = getTenantId(req);
+  const tenant = tenantId ? getTenantById(tenantId) : null;
+  const token = tenant?.wa_cloud_token ?? process.env.WA_CLOUD_TOKEN;
+  const wabaId = process.env.WABA_ID;
+
+  try {
+    // Fetch template body from Meta API
+    let templateBodyText = '';
+    try {
+      const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates?name=${encodeURIComponent(templateName)}&fields=components`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const d = await r.json() as any;
+      const tpl = d.data?.[0];
+      if (tpl) {
+        const bodyComp = (tpl.components || []).find((c: any) => c.type === 'BODY');
+        templateBodyText = bodyComp?.text || '';
+      }
+    } catch {}
+
+    const db = getDb();
+    const pattern = `[template:${templateName}]%`;
+    const rows = db.prepare('SELECT id, content FROM messages WHERE content LIKE ?').all(pattern) as any[];
+
+    let updated = 0;
+    for (const row of rows) {
+      const match = (row.content as string).match(/^\[template:[^\]]+\]\s*(.*)/s);
+      const varValue = match ? match[1].trim() : '';
+      let newContent: string;
+      if (templateBodyText) {
+        // Substitute {{1}} with the captured variable value
+        newContent = templateBodyText.replace(/\{\{1\}\}/g, varValue);
+      } else {
+        // Fallback: just use the variable value or keep as-is
+        newContent = varValue || row.content;
+      }
+      db.prepare('UPDATE messages SET content = ? WHERE id = ?').run(newContent, row.id);
+      updated++;
+    }
+
+    res.json({ success: true, updated, templateBodyFound: !!templateBodyText });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -859,7 +919,7 @@ waInboxRouter.get('/wa-inbox/api/messages', (req: Request, res: Response): void 
     const db = getDb();
     const rows = db.prepare(`
       SELECT direction, content, created_at FROM messages
-      WHERE phone = ? ORDER BY created_at ASC LIMIT 200
+      WHERE phone = ? ORDER BY created_at ASC
     `).all(phone);
     res.json(rows);
   } catch (err: any) {

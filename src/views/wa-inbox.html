@@ -679,10 +679,11 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
           <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">שם התבנית</label>
           <input id="modalTemplateName" readonly style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
         </div>
-        <div style="margin-bottom:16px;">
+        <div style="margin-bottom:12px;">
           <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">מספר טלפון (עם קידומת מדינה)</label>
           <input id="modalPhone" placeholder="972546300783" style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;direction:ltr;">
         </div>
+        <div id="modalVarsContainer" style="display:none;margin-bottom:12px;"></div>
         <div style="display:flex;gap:8px;justify-content:flex-start;">
           <button onclick="doSendTemplate()" style="padding:8px 20px;border-radius:8px;background:var(--accent);color:#fff;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:500;">שלח</button>
           <button onclick="closeTemplateModal()" style="padding:8px 20px;border-radius:8px;background:var(--bg3);color:var(--text2);border:1px solid var(--border);cursor:pointer;font-family:inherit;font-size:13px;">ביטול</button>
@@ -2563,6 +2564,23 @@ function openSendTemplate(name, lang) {
   document.getElementById('modalPhone').value = '';
   document.getElementById('modalResult').style.display = 'none';
   pendingTemplateBody = _templateBodies[name] || '';
+
+  // Detect variables {{1}}, {{2}} etc. and show input fields
+  const varNums = [...new Set([...pendingTemplateBody.matchAll(/\{\{(\d+)\}\}/g)].map(m => parseInt(m[1])))].sort((a,b) => a-b);
+  const varContainer = document.getElementById('modalVarsContainer');
+  if (varNums.length > 0) {
+    varContainer.innerHTML = varNums.map(n => `
+      <div style="margin-bottom:8px;">
+        <label style="font-size:12px;color:var(--text2);display:block;margin-bottom:4px;">משתנה {{${n}}}</label>
+        <input id="modalVar_${n}" placeholder="הכנס ערך..." style="width:100%;padding:8px 12px;border-radius:8px;border:1px solid var(--border);background:var(--bg3);font-family:inherit;font-size:13px;">
+      </div>
+    `).join('');
+    varContainer.style.display = 'block';
+  } else {
+    varContainer.innerHTML = '';
+    varContainer.style.display = 'none';
+  }
+
   const modal = document.getElementById('templateModal');
   modal.style.display = 'flex';
 }
@@ -2588,9 +2606,19 @@ async function doSendTemplate() {
   resultEl.textContent = 'שולח...';
 
   try {
+    // Collect variable values and substitute into body
+    let body = pendingTemplateBody;
+    const varNums = [...new Set([...body.matchAll(/\{\{(\d+)\}\}/g)].map(m => parseInt(m[1])))].sort((a,b) => a-b);
+    const variables = [];
+    for (const n of varNums) {
+      const val = document.getElementById(`modalVar_${n}`)?.value.trim() || '';
+      variables.push({ type: 'text', text: val });
+      body = body.replace(new RegExp(`\\{\\{${n}\\}\\}`, 'g'), val);
+    }
+
     const data = await api('/send-template', {
       method: 'POST',
-      body: JSON.stringify({ phone, templateName: name, language: 'he', templateBody: pendingTemplateBody })
+      body: JSON.stringify({ phone, templateName: name, language: 'he', templateBody: body, variables })
     });
     if (data.success) {
       resultEl.style.color = 'var(--success)';
