@@ -1192,3 +1192,122 @@ waInboxRouter.post('/wa-inbox/api/bulk-import', (req: Request, res: Response): v
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── POST /wa-inbox/api/import-history — import chat history from Evolution API ──
+
+waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Response): Promise<void> => {
+  const apiUrl = process.env.EVOLUTION_API_URL || 'https://evolution-api-production-237d.up.railway.app';
+  const apiKey = process.env.EVOLUTION_API_KEY || 'F46C3EB3-34D6-47B5-A62C-AB8885FE5984';
+  const instance = process.env.EVOLUTION_INSTANCE || 'pics-only';
+
+  const thirtyDaysAgo = Math.floor(Date.now() / 1000) - 30 * 24 * 60 * 60;
+
+  try {
+    const db = getDb();
+
+    const tenant = db.prepare("SELECT id FROM tenants WHERE name = 'alondev'").get() as { id: number } | undefined;
+    const defaultTenantId = tenant?.id ?? null;
+
+    // 1. Fetch all chats
+    log.info('import-history: fetching chats from Evolution API');
+    const chatsResp = await fetch(`${apiUrl}/chat/findChats/${instance}`, {
+      method: 'POST',
+      headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+
+    if (!chatsResp.ok) {
+      const text = await chatsResp.text();
+      res.status(502).json({ error: `Evolution API error: ${chatsResp.status}`, detail: text });
+      return;
+    }
+
+    const chatsData = await chatsResp.json() as any;
+    const chats: Array<{ id: string; name?: string }> = Array.isArray(chatsData) ? chatsData : (chatsData.chats || chatsData.data || []);
+    log.info({ count: chats.length }, 'import-history: got chats');
+
+    let importedLeads = 0;
+    let importedMessages = 0;
+    let skippedMessages = 0;
+    let processedChats = 0;
+
+    const insertLead = db.prepare(`
+      INSERT OR IGNORE INTO leads (phone, name, source, status, tenant_id, created_at, updated_at)
+      VALUES (?, ?, 'whatsapp', 'new', ?, datetime('now'), datetime('now'))
+    `);
+    const getLead = db.prepare('SELECT id FROM leads WHERE phone = ?');
+    const checkMessage = db.prepare('SELECT 1 FROM messages WHERE phone = ? AND content = ? AND created_at = ?');
+    const insertMessage = db.prepare(`
+      INSERT INTO messages (phone, direction, content, tenant_id, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `);
+
+    for (const chat of chats) {
+      // Skip groups and broadcast lists
+      if (!chat.id.endsWith('@s.whatsapp.net')) continue;
+
+      const phone = chat.id.replace('@s.whatsapp.net', '');
+
+      // 2. Fetch messages for this chat
+      let msgs: any[];
+      try {
+        const msgsResp = await fetch(`${apiUrl}/chat/fetchMessages/${instance}`, {
+          method: 'POST',
+          headers: { apikey: apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ where: { key: { remoteJid: chat.id } }, limit: 200 }),
+        });
+        if (!msgsResp.ok) continue;
+        const msgsData = await msgsResp.json() as any;
+        msgs = Array.isArray(msgsData) ? msgsData : (msgsData.messages || msgsData.data || []);
+      } catch {
+        continue;
+      }
+
+      let chatImported = false;
+      for (const msg of msgs) {
+        const ts = msg.messageTimestamp;
+        if (!ts || ts < thirtyDaysAgo) continue;
+
+        // Extract text content
+        const content: string | null =
+          msg.message?.conversation ||
+          msg.message?.extendedTextMessage?.text ||
+          msg.message?.imageMessage?.caption ||
+          msg.message?.videoMessage?.caption ||
+          msg.message?.documentMessage?.caption ||
+          msg.message?.buttonsResponseMessage?.selectedDisplayText ||
+          msg.message?.listResponseMessage?.title ||
+          null;
+
+        if (!content) continue;
+
+        const direction: 'in' | 'out' = msg.key?.fromMe ? 'out' : 'in';
+        const createdAt = new Date(ts * 1000).toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, '');
+
+        if (checkMessage.get(phone, content, createdAt)) {
+          skippedMessages++;
+          continue;
+        }
+
+        // Ensure lead exists
+        if (!getLead.get(phone)) {
+          const name: string | null = chat.name || msg.pushName || null;
+          const r = insertLead.run(phone, name, defaultTenantId);
+          if (r.changes > 0) importedLeads++;
+        }
+
+        insertMessage.run(phone, direction, content, defaultTenantId, createdAt);
+        importedMessages++;
+        chatImported = true;
+      }
+
+      if (chatImported) processedChats++;
+    }
+
+    log.info({ importedLeads, importedMessages, skippedMessages, processedChats }, 'import-history complete');
+    res.json({ success: true, importedLeads, importedMessages, skippedMessages, processedChats });
+  } catch (err: any) {
+    log.error({ err }, 'POST /import-history: error');
+    res.status(500).json({ error: err.message });
+  }
+});
