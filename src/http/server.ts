@@ -58,6 +58,8 @@ export function createServer(port: number): http.Server {
     next();
   });
 
+  app.get('/', (_req, res) => res.redirect('/wa-inbox'));
+
   app.use('/', healthRouter);
   app.use('/', qrRouter);
   app.use('/', chatRouter);
