@@ -1549,12 +1549,14 @@ function renderContacts() {
     if (currentBizFilter === 'dekel') return biz.cls === 'dekel';
     if (currentBizFilter === 'alon_dev') return biz.cls === 'alon_dev';
     if (currentBizFilter === 'personal') {
-      // Personal tab: show only the admin's own phone conversations
-      if (!adminPhone) return false;
+      // Personal tab: show admin's and Jesse's conversations
+      const personalPhones = ['972546300783', '972546300782'];
       const norm = (p) => (p||'').replace(/\D/g,'');
-      const cp = norm(c.phone), ap = norm(adminPhone);
-      // Match: exact, or last 9 digits match (handles 972 vs 0 prefix)
-      return cp === ap || (cp.length >= 9 && ap.length >= 9 && cp.slice(-9) === ap.slice(-9));
+      const cp = norm(c.phone);
+      return personalPhones.some(pp => {
+        const np = norm(pp);
+        return cp === np || (cp.length >= 9 && np.length >= 9 && cp.slice(-9) === np.slice(-9));
+      });
     }
     return true;
   });
