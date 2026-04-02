@@ -1294,8 +1294,9 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
       return;
     }
 
+    // Evolution API v2: chats is a flat array with remoteJid field (not id)
     const chatsData = await chatsResp.json() as any;
-    const chats: Array<{ id: string; name?: string }> = Array.isArray(chatsData) ? chatsData : (chatsData.chats || chatsData.data || []);
+    const chats: Array<{ remoteJid: string; pushName?: string; lastMessage?: any }> = Array.isArray(chatsData) ? chatsData : (chatsData.chats || chatsData.data || []);
     log.info({ count: chats.length }, 'import-history: got chats');
 
     let importedLeads = 0;
@@ -1315,22 +1316,32 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
     `);
 
     for (const chat of chats) {
-      // Skip groups and broadcast lists
-      if (!chat.id || !chat.id.endsWith('@s.whatsapp.net')) continue;
+      // Skip groups, broadcasts, and chats without a JID
+      const jid: string = chat.remoteJid || '';
+      if (!jid.endsWith('@s.whatsapp.net') && !jid.endsWith('@lid')) continue;
 
-      const phone = chat.id.replace('@s.whatsapp.net', '');
+      // Resolve phone: @s.whatsapp.net → strip suffix; @lid → use remoteJidAlt from lastMessage
+      let phone: string;
+      if (jid.endsWith('@s.whatsapp.net')) {
+        phone = jid.replace('@s.whatsapp.net', '');
+      } else {
+        const alt: string = chat.lastMessage?.key?.remoteJidAlt || '';
+        if (!alt.endsWith('@s.whatsapp.net')) continue; // no real phone available
+        phone = alt.replace('@s.whatsapp.net', '');
+      }
 
-      // 2. Fetch messages for this chat
+      // 2. Fetch messages for this chat (Evolution API v2: chat/findMessages)
       let msgs: any[];
       try {
-        const msgsResp = await fetch(`${apiUrl}/chat/fetchMessages/${instance}`, {
+        const msgsResp = await fetch(`${apiUrl}/chat/findMessages/${instance}`, {
           method: 'POST',
           headers: { apikey: apiKey, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ where: { key: { remoteJid: chat.id } }, limit: 200 }),
+          body: JSON.stringify({ where: { key: { remoteJid: jid } }, limit: 200 }),
         });
         if (!msgsResp.ok) continue;
         const msgsData = await msgsResp.json() as any;
-        msgs = Array.isArray(msgsData) ? msgsData : (msgsData.messages || msgsData.data || []);
+        // v2 response: { messages: { records: [...] } }
+        msgs = Array.isArray(msgsData) ? msgsData : (msgsData.messages?.records || msgsData.messages || msgsData.data || []);
       } catch {
         continue;
       }
@@ -1363,7 +1374,7 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
 
         // Ensure lead exists
         if (!getLead.get(phone)) {
-          const name: string | null = chat.name || msg.pushName || null;
+          const name: string | null = chat.pushName || msg.pushName || null;
           const r = insertLead.run(phone, name, defaultTenantId);
           if (r.changes > 0) importedLeads++;
         }
