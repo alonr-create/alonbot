@@ -785,6 +785,9 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
       <h2 style="font-size:20px;font-weight:700;color:var(--text);">📋 תבניות הודעה (Message Templates)</h2>
       <div style="display:flex;gap:8px;align-items:center;">
+        <button id="importHistoryBtn" onclick="importEvolutionHistory()" style="padding:8px 16px;border-radius:8px;background:var(--bg2);color:#7c3aed;border:2px solid #7c3aed;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='#7c3aed';this.style.color='#fff'" onmouseout="this.style.background='var(--bg2)';this.style.color='#7c3aed'">
+          📥 ייבוא היסטוריה
+        </button>
         <button id="backfillBtn" onclick="backfillAllTemplates()" style="padding:8px 16px;border-radius:8px;background:var(--bg2);color:#f59e0b;border:2px solid #f59e0b;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;transition:all .15s;" onmouseover="this.style.background='#f59e0b';this.style.color='#fff'" onmouseout="this.style.background='var(--bg2)';this.style.color='#f59e0b'">
           🔄 תיקון הודעות ישנות
         </button>
@@ -3077,6 +3080,31 @@ function showCtplResult(type, msg) {
   } else {
     el.style.background = '#f0f9ff'; el.style.color = '#0369a1'; el.style.border = '1px solid #bae6fd';
   }
+}
+
+// ===== EVOLUTION HISTORY IMPORT =====
+async function importEvolutionHistory() {
+  const btn = document.getElementById('importHistoryBtn');
+  btn.disabled = true;
+  btn.textContent = '⏳ מייבא...';
+  try {
+    const data = await api('/import-history', { method: 'POST', body: JSON.stringify({}) });
+    if (data.success) {
+      btn.textContent = `✅ ${data.importedMessages} הודעות, ${data.importedLeads} לידים`;
+      btn.style.color = '#15803d';
+      btn.style.borderColor = '#15803d';
+    } else {
+      btn.textContent = '❌ ' + (data.error || 'שגיאה');
+    }
+  } catch(e) {
+    btn.textContent = '❌ שגיאה: ' + e.message;
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '📥 ייבוא היסטוריה';
+    btn.style.color = '#7c3aed';
+    btn.style.borderColor = '#7c3aed';
+  }, 5000);
 }
 
 // ===== TEMPLATE BACKFILL =====
