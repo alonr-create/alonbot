@@ -197,17 +197,31 @@ waInboxRouter.get('/wa-inbox/api/conversations/:phone', (req: Request, res: Resp
   const since = req.query.since as string | undefined;
   try {
     const db = getDb();
-    const rows = since
-      ? db.prepare(`
-          SELECT direction, content as body, created_at as timestamp FROM messages
-          WHERE phone = ? AND created_at > ?
-          ORDER BY created_at ASC
-        `).all(phone, since)
-      : db.prepare(`
-          SELECT direction, content as body, created_at as timestamp FROM messages
+    let rows;
+    if (since) {
+      const sinceId = parseInt(since, 10);
+      if (!isNaN(sinceId)) {
+        // ID-based polling — immune to timezone inconsistencies between incoming (UTC) and outgoing (Israel time)
+        rows = db.prepare(`
+          SELECT id, direction, content as body, created_at as timestamp FROM messages
+          WHERE phone = ? AND id > ?
+          ORDER BY id ASC
+        `).all(phone, sinceId);
+      } else {
+        // Legacy timestamp-based (kept for backward compat, use >= to avoid missing same-second messages)
+        rows = db.prepare(`
+          SELECT id, direction, content as body, created_at as timestamp FROM messages
+          WHERE phone = ? AND created_at >= ?
+          ORDER BY created_at ASC, id ASC
+        `).all(phone, since);
+      }
+    } else {
+      rows = db.prepare(`
+          SELECT id, direction, content as body, created_at as timestamp FROM messages
           WHERE phone = ?
-          ORDER BY created_at ASC
+          ORDER BY id ASC
         `).all(phone);
+    }
     // Map direction to frontend format
     const messages = (rows as any[]).map(r => ({
       ...r,

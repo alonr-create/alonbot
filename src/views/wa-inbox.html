@@ -1211,7 +1211,8 @@ const CONTACTS_POLL_EVERY = 4; // refresh contacts every 4th poll (~16s)
 let pollCount = 0;
 let seenPhones = new Set(); // phones we've opened at least once
 let lastKnownMsgCount = {}; // phone → msg count for notification detection
-let lastMsgTimestamp = {}; // phone → timestamp of last known message (for incremental polling)
+let lastMsgId = {}; // phone → id of last known message (ID-based polling, timezone-immune)
+let lastMsgTimestamp = {}; // phone → timestamp fallback (not used for polling)
 let titleFlashTimer = null;
 let adminPhone = ''; // loaded from /config — used for personal tab filter
 let pendingTemplateBody = ''; // body text of template being sent
@@ -1773,9 +1774,10 @@ async function loadMessages(phone) {
     const data = await api('/conversations/' + encodeURIComponent(phone));
     activeMessages = data.messages || data || [];
     activeDeliveryStatus = data.deliveryStatus || 'sent';
-    // Track last timestamp for incremental polling
+    // Track last message ID for incremental polling (ID-based is timezone-immune)
     if (activeMessages.length > 0) {
       const last = activeMessages[activeMessages.length - 1];
+      if (last.id) lastMsgId[phone] = last.id;
       lastMsgTimestamp[phone] = last.timestamp || last.time || last.created_at || '';
     }
     // Merge campaign messages if available
@@ -2424,16 +2426,22 @@ async function pollMessages() {
   // ── Incremental conversation poll (every tick = 4s) ──
   if (activePhone) {
     try {
-      const since = lastMsgTimestamp[activePhone];
-      const path = '/conversations/' + encodeURIComponent(activePhone) + (since ? '?since=' + encodeURIComponent(since) : '');
+      // Use ID-based polling (timezone-immune) — falls back to timestamp if no ID tracked yet
+      const sinceId = lastMsgId[activePhone];
+      const sinceTs = lastMsgTimestamp[activePhone];
+      const sinceParam = sinceId != null ? sinceId : sinceTs;
+      const path = '/conversations/' + encodeURIComponent(activePhone) + (sinceParam != null ? '?since=' + encodeURIComponent(sinceParam) : '');
       const data = await api(path);
       const newMsgs = data.messages || [];
       if (newMsgs.length > 0) {
-        // Update last-known timestamp to the newest message
-        lastMsgTimestamp[activePhone] = newMsgs[newMsgs.length - 1].timestamp;
-        // Append to existing messages (avoid duplicates by timestamp+body key)
+        // Update last-known ID and timestamp to the newest message
+        const lastNew = newMsgs[newMsgs.length - 1];
+        if (lastNew.id) lastMsgId[activePhone] = lastNew.id;
+        lastMsgTimestamp[activePhone] = lastNew.timestamp;
+        // Append to existing messages (avoid duplicates by id or timestamp+body key)
+        const existingIds = new Set(activeMessages.map(m => m.id).filter(Boolean));
         const existingKeys = new Set(activeMessages.map(m => (m.timestamp||'') + '|' + (m.body||m.content||'')));
-        const toAdd = newMsgs.filter(m => !existingKeys.has((m.timestamp||'') + '|' + (m.body||m.content||'')));
+        const toAdd = newMsgs.filter(m => !(m.id && existingIds.has(m.id)) && !existingKeys.has((m.timestamp||'') + '|' + (m.body||m.content||'')));
         if (toAdd.length > 0) {
           activeMessages = [...activeMessages, ...toAdd];
           messageCache[activePhone] = activeMessages;
