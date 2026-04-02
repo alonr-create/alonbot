@@ -317,6 +317,9 @@ export function initSchema(db: Database.Database): void {
     "UPDATE messages SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
     "UPDATE follow_ups SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
     "UPDATE bot_rules SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
+    // Re-assign alondev source leads/messages to alondev tenant (overrides the דקל blanket above)
+    "UPDATE leads SET tenant_id = (SELECT id FROM tenants WHERE name = 'alondev') WHERE (source = 'alon_dev' OR source LIKE 'alon_dev%') AND (SELECT id FROM tenants WHERE name = 'alondev') IS NOT NULL",
+    "UPDATE messages SET tenant_id = (SELECT id FROM tenants WHERE name = 'alondev') WHERE phone IN (SELECT phone FROM leads WHERE source = 'alon_dev' OR source LIKE 'alon_dev%') AND (SELECT id FROM tenants WHERE name = 'alondev') IS NOT NULL",
   ];
 
   for (const sql of backfills) {
