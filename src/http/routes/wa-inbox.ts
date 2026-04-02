@@ -149,13 +149,9 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
         SELECT phone, COUNT(*) as message_count FROM messages GROUP BY phone
       ) mc ON mc.phone = l.phone
     `;
-    const adminPhone = process.env.ALON_PHONE || '';
-    if (tenantId !== null) {
-      // Always include admin phone regardless of tenant (for personal tab)
-      rows = db.prepare(`${leadsQuery} WHERE (l.tenant_id = ? OR l.phone = ?) ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all(tenantId, adminPhone);
-    } else {
-      rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all();
-    }
+    // Return all leads from all tenants — biz filter on the client handles visual separation.
+    // Tenant filtering here would hide alondev (tenant_id=2) leads when דקל (tenant_id=1) is auto-selected.
+    rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all();
     // Map role: 'out' → 'assistant' for frontend compatibility
     const leads = (rows as any[]).map(r => ({
       ...r,
@@ -206,29 +202,42 @@ waInboxRouter.get('/wa-inbox/api/conversations/:phone', (req: Request, res: Resp
   try {
     const db = getDb();
     let rows;
+
+    // Normalize phone: try both Israeli (0XXXXXXXXX) and international (972XXXXXXXXX) formats
+    // Campaign contacts are stored as "0X" but Cloud API messages are stored as "972X"
+    function altPhone(p: string): string | null {
+      const d = p.replace(/\D/g, '');
+      if (d.startsWith('972') && d.length >= 11) return '0' + d.slice(3);
+      if (d.startsWith('0') && d.length === 10) return '972' + d.slice(1);
+      return null;
+    }
+    const alt = altPhone(phone);
+    const phones = alt ? [phone, alt] : [phone];
+    const placeholders = phones.map(() => '?').join(', ');
+
     if (since) {
       const sinceId = parseInt(since, 10);
       if (!isNaN(sinceId)) {
         // ID-based polling — immune to timezone inconsistencies between incoming (UTC) and outgoing (Israel time)
         rows = db.prepare(`
           SELECT id, direction, content as body, created_at as timestamp FROM messages
-          WHERE phone = ? AND id > ?
+          WHERE phone IN (${placeholders}) AND id > ?
           ORDER BY id ASC
-        `).all(phone, sinceId);
+        `).all(...phones, sinceId);
       } else {
         // Legacy timestamp-based (kept for backward compat, use >= to avoid missing same-second messages)
         rows = db.prepare(`
           SELECT id, direction, content as body, created_at as timestamp FROM messages
-          WHERE phone = ? AND created_at >= ?
+          WHERE phone IN (${placeholders}) AND created_at >= ?
           ORDER BY created_at ASC, id ASC
-        `).all(phone, since);
+        `).all(...phones, since);
       }
     } else {
       rows = db.prepare(`
           SELECT id, direction, content as body, created_at as timestamp FROM messages
-          WHERE phone = ?
+          WHERE phone IN (${placeholders})
           ORDER BY id ASC
-        `).all(phone);
+        `).all(...phones);
     }
     // Map direction to frontend format
     const messages = (rows as any[]).map(r => ({
