@@ -311,7 +311,28 @@ export function initSchema(db: Database.Database): void {
     }
   }
 
-  // Backfill existing rows with דקל tenant_id (the original single-tenant data)
+  // Smart backfill: assign correct tenant to leads via monday_board_id (before fallback)
+  // Fixes leads inserted by Monday webhook before tenant_id was added (commit 6174750)
+  const smartBackfills = [
+    // Leads with monday_board_id → match to correct tenant by board
+    `UPDATE leads SET tenant_id = (
+       SELECT t.id FROM tenants t WHERE CAST(t.monday_board_id AS INTEGER) = CAST(leads.monday_board_id AS INTEGER)
+     ) WHERE tenant_id IS NULL AND monday_board_id IS NOT NULL`,
+    // Messages → infer tenant from the lead sharing the same phone
+    `UPDATE messages SET tenant_id = (
+       SELECT l.tenant_id FROM leads l WHERE l.phone = messages.phone AND l.tenant_id IS NOT NULL LIMIT 1
+     ) WHERE tenant_id IS NULL`,
+  ];
+
+  for (const sql of smartBackfills) {
+    try {
+      db.exec(sql);
+    } catch {
+      // Ignore errors — idempotent
+    }
+  }
+
+  // Fallback backfill: remaining NULLs → דקל (original single-tenant data)
   const backfills = [
     "UPDATE leads SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",
     "UPDATE messages SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL",

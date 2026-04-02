@@ -144,9 +144,9 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
     const adminPhone = process.env.ALON_PHONE || '';
     if (tenantId !== null) {
       // Always include admin phone regardless of tenant (for personal tab)
-      rows = db.prepare(`${leadsQuery} WHERE (l.tenant_id = ? OR l.phone = ?) ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all(tenantId, adminPhone);
+      rows = db.prepare(`${leadsQuery} WHERE (l.tenant_id = ? OR l.phone = ?) ORDER BY COALESCE(lm.created_at, l.updated_at) DESC`).all(tenantId, adminPhone);
     } else {
-      rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC LIMIT 1000`).all();
+      rows = db.prepare(`${leadsQuery} ORDER BY COALESCE(lm.created_at, l.updated_at) DESC`).all();
     }
     // Map role: 'out' → 'assistant' for frontend compatibility
     const leads = (rows as any[]).map(r => ({
@@ -1123,7 +1123,7 @@ waInboxRouter.get('/wa-inbox/api/conversations', (req: Request, res: Response): 
       SELECT l.phone, l.name, l.status, l.interest, l.updated_at,
         (SELECT content FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_msg,
         (SELECT created_at FROM messages WHERE phone = l.phone ORDER BY id DESC LIMIT 1) as last_msg_at
-      FROM leads l WHERE l.tenant_id = ? ORDER BY l.updated_at DESC LIMIT 500
+      FROM leads l WHERE l.tenant_id = ? ORDER BY l.updated_at DESC
     `).all(tenantId);
     res.json(rows);
   } catch (err: any) {
