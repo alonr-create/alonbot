@@ -1316,7 +1316,7 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
 
     for (const chat of chats) {
       // Skip groups and broadcast lists
-      if (!chat.id.endsWith('@s.whatsapp.net')) continue;
+      if (!chat.id || !chat.id.endsWith('@s.whatsapp.net')) continue;
 
       const phone = chat.id.replace('@s.whatsapp.net', '');
 
