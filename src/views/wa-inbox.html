@@ -19,7 +19,7 @@
 :root{
   --bg:#f0f2f5;--bg2:#ffffff;--bg3:#f5f6f8;
   --border:#e0e0e0;--border-light:#eee;
-  --accent:#25D366;--accent2:#128C7E;--accent-light:#e7fce9;
+  --accent:#1a73e8;--accent2:#0d47a1;--accent-light:#e8f0fe;
   --text:#1a1a1a;--text2:#667781;--text3:#8696a0;--text4:#b0b6ba;
   --danger:#ea4335;--warning:#f59e0b;--success:#25D366;
   --bubble-out:#d9fdd3;--bubble-in:#ffffff;
@@ -39,9 +39,9 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 /* ===== TOP BAR ===== */
 .topbar{
-  height:58px;background:linear-gradient(135deg,#ffffff 0%,#f0faf4 100%);border-bottom:2px solid var(--accent);
+  height:58px;background:linear-gradient(135deg,#ffffff 0%,#f0f4ff 100%);border-bottom:2px solid var(--accent);
   display:flex;align-items:center;padding:0 20px;gap:16px;z-index:100;
-  box-shadow:0 1px 8px rgba(37,211,102,0.08);
+  box-shadow:0 1px 8px rgba(26,115,232,0.08);
 }
 .topbar-logo{display:flex;align-items:center;gap:8px;font-weight:700;font-size:16px;color:var(--text);white-space:nowrap;}
 .topbar-logo .wa-circle{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;}
@@ -359,7 +359,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
 /* ===== FLOW EDITOR ===== */
 .flow-card{display:flex;align-items:center;gap:14px;padding:14px 18px;background:var(--bg2);border:1px solid var(--border);border-radius:12px;transition:all .15s;}
-.flow-card:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(37,211,102,0.08);}
+.flow-card:hover{border-color:var(--accent);box-shadow:0 2px 12px rgba(26,115,232,0.08);}
 .flow-icon{width:42px;height:42px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
 .flow-info{flex:1;min-width:0;}
 .flow-name{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px;}
@@ -394,7 +394,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 .fe-canvas svg.fe-connections path.active{stroke:var(--accent);stroke-width:2.5;}
 .fe-node{position:absolute;width:220px;background:var(--bg2);border:2px solid var(--border);border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,0.06);cursor:grab;z-index:10;transition:box-shadow .2s;user-select:none;}
 .fe-node:hover{box-shadow:0 4px 20px rgba(0,0,0,0.1);}
-.fe-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(37,211,102,0.2);}
+.fe-node.selected{border-color:var(--accent);box-shadow:0 0 0 3px rgba(26,115,232,0.2);}
 .fe-node.dragging{z-index:100;opacity:0.9;cursor:grabbing;}
 .fe-node-header{padding:10px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;border-radius:10px 10px 0 0;}
 .fe-node-header .nh-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0;}
@@ -438,7 +438,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 .mobile-nav-drawer.open{right:0;}
 .mobile-nav-header{
   padding:16px 20px;border-bottom:2px solid var(--accent);display:flex;align-items:center;justify-content:space-between;
-  background:linear-gradient(135deg,#ffffff 0%,#f0faf4 100%);
+  background:linear-gradient(135deg,#ffffff 0%,#f0f4ff 100%);
 }
 .mobile-nav-header h3{font-size:16px;font-weight:700;color:var(--text);}
 .mobile-nav-close{width:32px;height:32px;border:none;background:none;font-size:20px;cursor:pointer;color:var(--text2);display:flex;align-items:center;justify-content:center;border-radius:8px;}
@@ -563,7 +563,7 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 .contact-item{animation:fadeIn .15s ease;}
 
 /* Notification badge pulse */
-@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(37,211,102,.5);}100%{box-shadow:0 0 0 8px rgba(37,211,102,0);}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(26,115,232,.5);}100%{box-shadow:0 0 0 8px rgba(26,115,232,0);}}
 .unread-badge{animation:pulse 1.5s infinite;}
 
 /* ===== TEMPLATES ===== */
