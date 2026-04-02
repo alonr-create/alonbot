@@ -135,6 +135,10 @@ async function processWebhookEvent(
 
   const db = getDb();
 
+  // Resolve tenant by Monday board ID so leads/messages get correct tenant_id
+  const tenantRow = db.prepare('SELECT id FROM tenants WHERE monday_board_id = ?').get(boardId) as { id: number } | undefined;
+  const tenantId = tenantRow?.id ?? null;
+
   // Check if lead already exists by phone
   const existing = db
     .prepare('SELECT id, created_at FROM leads WHERE phone = ?')
@@ -148,10 +152,10 @@ async function processWebhookEvent(
       )
       .get(phone);
 
-    // Update existing lead with Monday.com data
+    // Update existing lead with Monday.com data (also fix tenant_id if missing)
     db.prepare(
-      `UPDATE leads SET monday_item_id = ?, monday_board_id = ?, interest = ?, name = COALESCE(?, name), source_detail = COALESCE(NULLIF(?, ''), source_detail), updated_at = datetime('now') WHERE phone = ?`,
-    ).run(pulseId, boardId, item.interest, item.name, item.source, phone);
+      `UPDATE leads SET monday_item_id = ?, monday_board_id = ?, interest = ?, name = COALESCE(?, name), source_detail = COALESCE(NULLIF(?, ''), source_detail), tenant_id = COALESCE(tenant_id, ?), updated_at = datetime('now') WHERE phone = ?`,
+    ).run(pulseId, boardId, item.interest, item.name, item.source, tenantId, phone);
 
     if (recentMsg) {
       log.info({ phone, pulseId }, 'Lead has recent messages, skipping auto-intro');
@@ -162,8 +166,8 @@ async function processWebhookEvent(
   } else {
     // Create new lead
     db.prepare(
-      `INSERT INTO leads (phone, name, source, status, monday_item_id, monday_board_id, interest, source_detail) VALUES (?, ?, 'monday', 'new', ?, ?, ?, ?)`,
-    ).run(phone, item.name, pulseId, boardId, item.interest, item.source);
+      `INSERT INTO leads (phone, name, source, status, monday_item_id, monday_board_id, interest, source_detail, tenant_id) VALUES (?, ?, 'monday', 'new', ?, ?, ?, ?, ?)`,
+    ).run(phone, item.name, pulseId, boardId, item.interest, item.source, tenantId);
 
     log.info({ phone, pulseId }, 'Created new lead from Monday.com');
   }
@@ -217,8 +221,8 @@ async function processColumnChangeEvent(
   // Find the lead by monday_item_id
   const db = getDb();
   const lead = db
-    .prepare('SELECT phone, name FROM leads WHERE monday_item_id = ?')
-    .get(pulseId) as { phone: string; name: string | null } | undefined;
+    .prepare('SELECT phone, name, id, tenant_id FROM leads WHERE monday_item_id = ?')
+    .get(pulseId) as { phone: string; name: string | null; id: number; tenant_id: number | null } | undefined;
 
   if (!lead) {
     log.warn({ pulseId }, 'No local lead found for Monday item');
@@ -234,10 +238,9 @@ async function processColumnChangeEvent(
     await sendWithTyping(botAdapter, jid, message);
     log.info({ phone: lead.phone, newStatus }, 'Status change WhatsApp message sent');
 
-    // Store outgoing message
-    const leadRow = db.prepare('SELECT id FROM leads WHERE phone = ?').get(lead.phone) as { id: number } | undefined;
-    db.prepare('INSERT INTO messages (phone, lead_id, direction, content) VALUES (?, ?, ?, ?)')
-      .run(lead.phone, leadRow?.id || null, 'out', message);
+    // Store outgoing message with correct tenant_id
+    db.prepare('INSERT INTO messages (phone, lead_id, direction, content, tenant_id) VALUES (?, ?, ?, ?, ?)')
+      .run(lead.phone, lead.id, 'out', message, lead.tenant_id);
   } catch (err) {
     log.error({ err, phone: lead.phone, newStatus }, 'Failed to send status change message');
   }
