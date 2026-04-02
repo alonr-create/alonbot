@@ -120,6 +120,14 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
   const tenantId = getTenantId(req);
   try {
     const db = getDb();
+
+    // Backfill any NULL tenant_id records to דקל (the default tenant).
+    // Runs inline so leads created after startup are never lost — idempotent, fast.
+    try {
+      db.exec("UPDATE leads SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL");
+      db.exec("UPDATE messages SET tenant_id = (SELECT id FROM tenants WHERE name = 'דקל') WHERE tenant_id IS NULL");
+    } catch { /* ignore — tenant may not exist in test environments */ }
+
     let rows;
     const leadsQuery = `
       SELECT
