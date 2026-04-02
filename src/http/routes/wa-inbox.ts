@@ -1192,3 +1192,58 @@ waInboxRouter.post('/wa-inbox/api/bulk-import', (req: Request, res: Response): v
     res.status(500).json({ error: err.message });
   }
 });
+
+// ── POST /wa-inbox/api/debug-db ───────────────────────────────────────────────
+// Temporary debug endpoint — returns raw DB stats to diagnose missing alondev data
+
+waInboxRouter.post('/wa-inbox/api/debug-db', (req: Request, res: Response): void => {
+  try {
+    const db = getDb();
+
+    const distinctLeadTenants = db.prepare('SELECT DISTINCT tenant_id FROM leads').all();
+    const distinctMsgTenants = db.prepare('SELECT DISTINCT tenant_id FROM messages').all();
+    const distinctTenantTable = db.prepare('SELECT DISTINCT id, name FROM tenants').all();
+
+    const leadCountByTenant = db.prepare('SELECT tenant_id, COUNT(*) as cnt FROM leads GROUP BY tenant_id').all();
+    const msgCountByTenant = db.prepare('SELECT tenant_id, COUNT(*) as cnt FROM messages GROUP BY tenant_id').all();
+
+    const alondevLeads = db.prepare(
+      "SELECT COUNT(*) as cnt FROM leads WHERE tenant_id = 2"
+    ).get();
+
+    const alondevMsgs = db.prepare(
+      "SELECT COUNT(*) as cnt FROM messages WHERE tenant_id = 2"
+    ).get();
+
+    const sampleLeads = db.prepare(
+      "SELECT id, phone, name, tenant_id, source, status, created_at FROM leads ORDER BY created_at DESC LIMIT 10"
+    ).all();
+
+    const march30msgs = db.prepare(
+      "SELECT id, phone, tenant_id, direction, substr(content,1,80) as content_preview, created_at FROM messages WHERE created_at >= '2026-03-29' AND created_at <= '2026-03-31' ORDER BY created_at DESC LIMIT 20"
+    ).all();
+
+    const march30msgsCount = db.prepare(
+      "SELECT COUNT(*) as cnt FROM messages WHERE created_at >= '2026-03-29' AND created_at <= '2026-03-31'"
+    ).get();
+
+    const allTenantsRows = db.prepare('SELECT id, name, business_name, wa_phone_number_id, wa_number, admin_phone FROM tenants').all();
+
+    res.json({
+      distinctLeadTenants,
+      distinctMsgTenants,
+      distinctTenantTable,
+      leadCountByTenant,
+      msgCountByTenant,
+      alondevLeads,
+      alondevMsgs,
+      sampleLeads,
+      march30msgsCount,
+      march30msgs,
+      allTenantsRows,
+    });
+  } catch (err: any) {
+    log.error({ err }, 'POST /debug-db: error');
+    res.status(500).json({ error: err.message });
+  }
+});
