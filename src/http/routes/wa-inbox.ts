@@ -539,10 +539,69 @@ waInboxRouter.patch('/wa-inbox/api/leads/:phone', (req: Request, res: Response):
 
 // ── POST /wa-inbox/api/profile-pics-batch ───────────────────────────────────
 
-waInboxRouter.post('/wa-inbox/api/profile-pics-batch', (_req: Request, res: Response): void => {
-  // Profile pics require WhatsApp Web.js — not available in Cloud API mode
-  // Return empty results gracefully
-  res.json({ success: true, results: {} });
+waInboxRouter.post('/wa-inbox/api/profile-pics-batch', async (req: Request, res: Response): Promise<void> => {
+  const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL;
+  const EVOLUTION_API_KEY = process.env.EVOLUTION_API_KEY;
+  const EVOLUTION_INSTANCE = process.env.EVOLUTION_INSTANCE;
+
+  if (!EVOLUTION_API_URL || !EVOLUTION_API_KEY || !EVOLUTION_INSTANCE) {
+    res.json({ success: true, results: {} });
+    return;
+  }
+
+  const { phones } = req.body as { phones?: string[] };
+  if (!Array.isArray(phones) || phones.length === 0) {
+    res.json({ success: true, results: {} });
+    return;
+  }
+
+  const db = getDb();
+  const TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+  const now = Date.now();
+  const results: Record<string, string> = {};
+
+  // Check cache first
+  const uncached: string[] = [];
+  for (const phone of phones) {
+    const row = db.prepare('SELECT pic_url, fetched_at FROM profile_pics WHERE phone = ?').get(phone) as { pic_url: string | null; fetched_at: number } | undefined;
+    if (row && (now - row.fetched_at) < TTL_MS) {
+      if (row.pic_url) results[phone] = row.pic_url;
+    } else {
+      uncached.push(phone);
+    }
+  }
+
+  // Fetch uncached phones from Evolution API
+  if (uncached.length > 0) {
+    const endpoint = `${EVOLUTION_API_URL}/chat/fetchProfilePictureUrl/${EVOLUTION_INSTANCE}`;
+    const fetchPic = async (phone: string): Promise<void> => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 3000);
+        const resp = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', apikey: EVOLUTION_API_KEY },
+          body: JSON.stringify({ number: phone }),
+          signal: controller.signal,
+        });
+        clearTimeout(timeout);
+        if (resp.ok) {
+          const data = await resp.json() as { profilePictureUrl?: string };
+          const url = data.profilePictureUrl || null;
+          db.prepare('INSERT OR REPLACE INTO profile_pics (phone, pic_url, fetched_at) VALUES (?, ?, ?)').run(phone, url, now);
+          if (url) results[phone] = url;
+        } else {
+          db.prepare('INSERT OR REPLACE INTO profile_pics (phone, pic_url, fetched_at) VALUES (?, ?, ?)').run(phone, null, now);
+        }
+      } catch {
+        // Timeout or network error — skip, don't cache so it retries next time
+      }
+    };
+
+    await Promise.allSettled(uncached.map(fetchPic));
+  }
+
+  res.json({ success: true, results });
 });
 
 // ── GET /wa-inbox/api/stats ─────────────────────────────────────────────────

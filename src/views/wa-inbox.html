@@ -1713,7 +1713,16 @@ function selectContact(phone) {
   if (chatHeader) chatHeader.style.display = 'flex';
   if (chatInputArea) chatInputArea.style.display = 'flex';
   if (emptyState) emptyState.style.display = 'none';
-  if (avatarEl) { avatarEl.style.background = color; avatarEl.textContent = initials; }
+  if (avatarEl) {
+    const picUrl = contact?.profile_pic_url;
+    if (picUrl) {
+      avatarEl.style.background = 'transparent';
+      avatarEl.innerHTML = `<img src="${picUrl}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;" onerror="this.style.display='none';this.parentElement.style.background='${color}';this.parentElement.textContent='${initials}'">`;
+    } else {
+      avatarEl.style.background = color;
+      avatarEl.textContent = initials;
+    }
+  }
   if (nameEl) nameEl.textContent = headerName;
   if (statusEl) statusEl.textContent = contact.phone;
 

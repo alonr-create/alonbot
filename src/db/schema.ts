@@ -288,6 +288,15 @@ export function initSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_api_usage_date ON api_usage(created_at, tenant_id);
   `);
 
+  // Profile pictures cache
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS profile_pics (
+      phone TEXT PRIMARY KEY,
+      pic_url TEXT,
+      fetched_at INTEGER DEFAULT 0
+    )
+  `);
+
   // Idempotent migration: add tenant_id to tables created after the first migrations block
   const lateTableMigrations = [
     'ALTER TABLE follow_ups ADD COLUMN tenant_id INTEGER REFERENCES tenants(id)',
