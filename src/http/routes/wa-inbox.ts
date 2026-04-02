@@ -1299,16 +1299,12 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
     const chats: Array<{ remoteJid: string; pushName?: string; lastMessage?: any }> = Array.isArray(chatsData) ? chatsData : (chatsData.chats || chatsData.data || []);
     log.info({ count: chats.length }, 'import-history: got chats');
 
-    let importedLeads = 0;
     let importedMessages = 0;
     let skippedMessages = 0;
+    let skippedChats = 0;
     let processedChats = 0;
 
-    const insertLead = db.prepare(`
-      INSERT OR IGNORE INTO leads (phone, name, source, status, tenant_id, created_at, updated_at)
-      VALUES (?, ?, 'whatsapp', 'new', ?, datetime('now'), datetime('now'))
-    `);
-    const getLead = db.prepare('SELECT id FROM leads WHERE phone = ?');
+    const getLead = db.prepare('SELECT id FROM leads WHERE phone = ? AND tenant_id = ?');
     const checkMessage = db.prepare('SELECT 1 FROM messages WHERE phone = ? AND content = ? AND created_at = ?');
     const insertMessage = db.prepare(`
       INSERT INTO messages (phone, direction, content, tenant_id, created_at)
@@ -1328,6 +1324,13 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
         const alt: string = chat.lastMessage?.key?.remoteJidAlt || '';
         if (!alt.endsWith('@s.whatsapp.net')) continue; // no real phone available
         phone = alt.replace('@s.whatsapp.net', '');
+      }
+
+      // Only import messages for phones that already exist as leads in the CRM
+      // This prevents personal contacts from being imported
+      if (!getLead.get(phone, defaultTenantId)) {
+        skippedChats++;
+        continue;
       }
 
       // 2. Fetch messages for this chat (Evolution API v2: chat/findMessages)
@@ -1372,13 +1375,6 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
           continue;
         }
 
-        // Ensure lead exists
-        if (!getLead.get(phone)) {
-          const name: string | null = chat.pushName || msg.pushName || null;
-          const r = insertLead.run(phone, name, defaultTenantId);
-          if (r.changes > 0) importedLeads++;
-        }
-
         insertMessage.run(phone, direction, content, defaultTenantId, createdAt);
         importedMessages++;
         chatImported = true;
@@ -1387,10 +1383,58 @@ waInboxRouter.post('/wa-inbox/api/import-history', async (req: Request, res: Res
       if (chatImported) processedChats++;
     }
 
-    log.info({ importedLeads, importedMessages, skippedMessages, processedChats }, 'import-history complete');
-    res.json({ success: true, importedLeads, importedMessages, skippedMessages, processedChats });
+    log.info({ importedMessages, skippedMessages, skippedChats, processedChats }, 'import-history complete');
+    res.json({ success: true, importedMessages, skippedMessages, skippedChats, processedChats });
   } catch (err: any) {
     log.error({ err }, 'POST /import-history: error');
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /wa-inbox/api/import-history — rollback a bad import ───────────────
+// Deletes leads created by the import (source='whatsapp', created within a date prefix)
+// and all messages for those phones (which had no prior existence in the DB).
+
+waInboxRouter.delete('/wa-inbox/api/import-history', (req: Request, res: Response): void => {
+  // date_prefix: e.g. "2026-04-02 16:38" — delete leads created at this time
+  const datePrefix = req.body?.date_prefix as string | undefined;
+  const tenantId = getTenantId(req) ?? 2; // default to alondev
+
+  if (!datePrefix) {
+    res.status(400).json({ error: 'date_prefix required (e.g. "2026-04-02 16:38")' });
+    return;
+  }
+
+  try {
+    const db = getDb();
+
+    // Find all phones from leads created by this import batch
+    const importedLeads = db.prepare(
+      `SELECT phone FROM leads WHERE tenant_id = ? AND source = 'whatsapp' AND created_at LIKE ?`
+    ).all(tenantId, `${datePrefix}%`) as { phone: string }[];
+
+    if (importedLeads.length === 0) {
+      res.json({ success: true, deletedLeads: 0, deletedMessages: 0, message: 'No leads found for that date_prefix' });
+      return;
+    }
+
+    const phones = importedLeads.map(r => r.phone);
+
+    // Delete messages for those phones
+    const placeholders = phones.map(() => '?').join(',');
+    const deletedMsgs = db.prepare(
+      `DELETE FROM messages WHERE phone IN (${placeholders}) AND tenant_id = ?`
+    ).run(...phones, tenantId);
+
+    // Delete the leads themselves
+    const deletedLeadsResult = db.prepare(
+      `DELETE FROM leads WHERE tenant_id = ? AND source = 'whatsapp' AND created_at LIKE ?`
+    ).run(tenantId, `${datePrefix}%`);
+
+    log.info({ deletedLeads: deletedLeadsResult.changes, deletedMessages: deletedMsgs.changes, datePrefix }, 'import-history rollback complete');
+    res.json({ success: true, deletedLeads: deletedLeadsResult.changes, deletedMessages: deletedMsgs.changes });
+  } catch (err: any) {
+    log.error({ err }, 'DELETE /import-history: error');
     res.status(500).json({ error: err.message });
   }
 });
