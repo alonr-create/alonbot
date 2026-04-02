@@ -197,7 +197,7 @@ waInboxRouter.get('/wa-inbox/api/leads', (req: Request, res: Response): void => 
 // ── GET /wa-inbox/api/conversations/:phone ──────────────────────────────────
 
 waInboxRouter.get('/wa-inbox/api/conversations/:phone', (req: Request, res: Response): void => {
-  const phone = req.params.phone;
+  const phone = req.params.phone as string;
   const since = req.query.since as string | undefined;
   try {
     const db = getDb();
