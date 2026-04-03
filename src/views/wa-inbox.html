@@ -930,7 +930,14 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 <!-- ANALYTICS VIEW -->
 <div id="analyticsView" style="display:none;height:calc(100vh - 54px);overflow-y:auto;background:var(--bg);padding:24px 40px;">
   <div style="max-width:1000px;margin:0 auto;">
-    <h2 style="font-size:20px;font-weight:700;color:var(--text);margin-bottom:20px;">📈 אנליטיקס</h2>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <h2 style="font-size:20px;font-weight:700;color:var(--text);margin:0;">📈 אנליטיקס</h2>
+      <div style="display:flex;gap:6px;" id="analyticsWsFilter">
+        <button class="biz-filter active" onclick="setAnalyticsWs('all',this)">🔵 הכל</button>
+        <button class="biz-filter" onclick="setAnalyticsWs('dekel',this)">🏡 דקל</button>
+        <button class="biz-filter" onclick="setAnalyticsWs('alon_dev',this)">💻 Alon.dev</button>
+      </div>
+    </div>
     <!-- Phone health -->
     <div id="phoneHealthCard" style="background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:20px;display:none;">
       <h3 style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:14px;">📞 בריאות הקווים</h3>
@@ -3008,9 +3015,18 @@ const STATUS_MAP = {
   'meeting_set': 'נקבע זום', 'closed': 'סגור', '': 'לא הוגדר', null: 'לא הוגדר'
 };
 
+let currentAnalyticsWs = 'all';
+function setAnalyticsWs(ws, btn) {
+  currentAnalyticsWs = ws;
+  document.querySelectorAll('#analyticsWsFilter .biz-filter').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadAnalytics();
+}
+
 async function loadAnalytics() {
   try {
-    const [data, meta] = await Promise.all([api('/stats'), api('/meta-health').catch(() => null)]);
+    const wsParam = currentAnalyticsWs !== 'all' ? `?workspace=${currentAnalyticsWs}` : '';
+    const [data, meta] = await Promise.all([api('/stats' + wsParam), api('/meta-health').catch(() => null)]);
     // Phone health cards — both numbers
     if (meta?.success && meta.phone) {
       const limitMap = { TIER_1K: '1,000', TIER_10K: '10,000', TIER_100K: '100,000', TIER_UNLIMITED: 'ללא הגבלה' };
