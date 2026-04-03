@@ -15,42 +15,87 @@ function nowIsrael(): string {
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 
+// Phone number → workspace/token mapping for multi-tenant WhatsApp
+interface PhoneConfig {
+  phoneNumberId: string;
+  token: string;
+  workspaceId: string;
+  source: string;
+}
+
+function buildPhoneMap(): Map<string, PhoneConfig> {
+  const map = new Map<string, PhoneConfig>();
+  // Primary: דקל לפרישה (148)
+  if (config.waCloudPhoneId && config.waCloudToken) {
+    map.set(config.waCloudPhoneId, {
+      phoneNumberId: config.waCloudPhoneId,
+      token: config.waCloudToken,
+      workspaceId: 'dekel',
+      source: 'voice_agent',
+    });
+  }
+  // Secondary: Alon.dev (3249)
+  if (config.waCloudPhoneId2 && config.waCloudToken2) {
+    map.set(config.waCloudPhoneId2, {
+      phoneNumberId: config.waCloudPhoneId2,
+      token: config.waCloudToken2,
+      workspaceId: 'alon_dev',
+      source: 'alon_dev_whatsapp',
+    });
+  }
+  return map;
+}
+
 export function createWhatsAppCloudAdapter(): ChannelAdapter {
   let messageHandler: ((msg: UnifiedMessage) => void) | null = null;
 
   const token = config.waCloudToken;
   const phoneNumberId = config.waCloudPhoneId;
+  const phoneMap = buildPhoneMap();
 
   if (!token || !phoneNumberId) {
     log.warn('WA_CLOUD_TOKEN or WA_CLOUD_PHONE_ID not set');
   }
+  if (config.waCloudPhoneId2) {
+    log.info({ phoneId2: config.waCloudPhoneId2 }, 'second WhatsApp number configured (Alon.dev)');
+  }
 
-  async function sendGraphApi(endpoint: string, body: Record<string, unknown>) {
-    const res = await withRetry(() => fetch(`${GRAPH_API}/${phoneNumberId}/${endpoint}`, {
+  function getPhoneConfig(forPhoneId?: string): PhoneConfig {
+    if (forPhoneId && phoneMap.has(forPhoneId)) return phoneMap.get(forPhoneId)!;
+    // Default to primary
+    return { phoneNumberId: phoneNumberId, token: token, workspaceId: 'dekel', source: 'voice_agent' };
+  }
+
+  async function sendGraphApi(endpoint: string, body: Record<string, unknown>, usePhoneId?: string, useToken?: string) {
+    const pid = usePhoneId || phoneNumberId;
+    const tk = useToken || token;
+    const res = await withRetry(() => fetch(`${GRAPH_API}/${pid}/${endpoint}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        'Authorization': `Bearer ${tk}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
     }));
     const data = await res.json() as Record<string, unknown>;
     if (!res.ok) {
-      log.error({ status: res.status, data }, 'Graph API error');
+      log.error({ status: res.status, data, phoneId: pid }, 'Graph API error');
     }
     return data;
   }
 
-  async function uploadMedia(buffer: Buffer, mimeType: string, filename: string): Promise<string | null> {
+  async function uploadMedia(buffer: Buffer, mimeType: string, filename: string, usePhoneId?: string, useToken?: string): Promise<string | null> {
+    const pid = usePhoneId || phoneNumberId;
+    const tk = useToken || token;
     try {
       const formData = new FormData();
       formData.append('messaging_product', 'whatsapp');
       formData.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), filename);
       formData.append('type', mimeType);
 
-      const res = await fetch(`${GRAPH_API}/${phoneNumberId}/media`, {
+      const res = await fetch(`${GRAPH_API}/${pid}/media`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${tk}` },
         body: formData,
       });
       const data = await res.json() as { id?: string; error?: { message?: string; code?: number } };
@@ -70,9 +115,11 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     for (const entry of body.entry || []) {
       for (const change of entry.changes || []) {
         const value = change.value;
+        // Extract receiving phone_number_id from Meta webhook metadata
+        const receivingPhoneId = value.metadata?.phone_number_id || phoneNumberId;
         if (value.messages) {
           for (const msg of value.messages) {
-            processIncomingMessage(msg, value.contacts).catch(err =>
+            processIncomingMessage(msg, value.contacts, undefined, receivingPhoneId).catch(err =>
               log.error({ err: err.message }, 'error processing message')
             );
           }
@@ -139,7 +186,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     for (const [k, v] of processedWamIds) if (v < cutoff) processedWamIds.delete(k);
   }, 120_000);
 
-  async function processIncomingMessage(msg: any, contacts?: any[] | null, overrideFrom?: string) {
+  async function processIncomingMessage(msg: any, contacts?: any[] | null, overrideFrom?: string, receivingPhoneId?: string) {
     if (!messageHandler) return;
 
     const from = overrideFrom || msg.from;
@@ -153,6 +200,9 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     }
     if (wamid) processedWamIds.set(wamid, Date.now());
 
+    // Determine which phone number received this message → workspace routing
+    const phoneCfg = getPhoneConfig(receivingPhoneId);
+
     // Normalize phone number
     let senderId = from.replace(/^\+/, '');
 
@@ -163,13 +213,14 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       if (contact?.profile?.name) senderName = contact.profile.name;
     }
 
-    log.debug({ from: senderId, type: msg.type }, 'Cloud API message received');
+    log.debug({ from: senderId, type: msg.type, workspace: phoneCfg.workspaceId, receivingPhone: receivingPhoneId }, 'Cloud API message received');
 
     // Auto-upsert lead in leads table for dashboard tracking
+    // Source is determined by which phone number received the message
     try {
       const pushName = senderName !== senderId ? senderName : '';
       const now = nowIsrael();
-      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, 'alon_dev_whatsapp', ?, ?) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), updated_at = ?`).run(senderId, pushName, now, now, pushName, now);
+      db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(phone) DO UPDATE SET name = COALESCE(NULLIF(?, ''), name), source = ?, updated_at = ?`).run(senderId, pushName, phoneCfg.source, now, now, pushName, phoneCfg.source, now);
     } catch (e: any) {
       log.warn({ err: e.message, senderId }, 'lead upsert failed');
     }
@@ -211,7 +262,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       // Download image from Cloud API
       const mediaId = msg.image?.id;
       if (mediaId) {
-        const buffer = await downloadCloudMedia(mediaId);
+        const buffer = await downloadCloudMedia(mediaId, phoneCfg.token);
         if (buffer) {
           image = buffer.toString('base64');
           imageMediaType = (msg.image?.mime_type as UnifiedMessage['imageMediaType']) || 'image/jpeg';
@@ -221,7 +272,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       text = msg.document?.caption || '';
       const mediaId = msg.document?.id;
       if (mediaId) {
-        const buffer = await downloadCloudMedia(mediaId);
+        const buffer = await downloadCloudMedia(mediaId, phoneCfg.token);
         if (buffer) {
           document = buffer.toString('base64');
           documentName = msg.document?.filename || 'document';
@@ -232,7 +283,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       const mediaId = msg.audio?.id;
       if (mediaId && config.groqApiKey) {
         try {
-          const buffer = await downloadCloudMedia(mediaId);
+          const buffer = await downloadCloudMedia(mediaId, phoneCfg.token);
           if (buffer) {
             const formData = new FormData();
             formData.append('file', new Blob([new Uint8Array(buffer)], { type: 'audio/ogg' }), 'voice.ogg');
@@ -265,7 +316,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       // Download sticker image for dashboard display
       const stickerId = msg.sticker?.id;
       if (stickerId) {
-        const buffer = await downloadCloudMedia(stickerId);
+        const buffer = await downloadCloudMedia(stickerId, phoneCfg.token);
         if (buffer) {
           image = buffer.toString('base64');
           imageMediaType = 'image/webp';
@@ -329,24 +380,25 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       document,
       documentName,
       isVoice,
-      raw: { from: senderId, cloudApi: true },
+      raw: { from: senderId, cloudApi: true, receivingPhoneId: phoneCfg.phoneNumberId },
     };
 
     messageHandler(unified);
   }
 
-  async function downloadCloudMedia(mediaId: string): Promise<Buffer | null> {
+  async function downloadCloudMedia(mediaId: string, useToken?: string): Promise<Buffer | null> {
+    const tk = useToken || token;
     try {
       // Step 1: Get media URL
       const metaRes = await fetch(`${GRAPH_API}/${mediaId}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${tk}` },
       });
       const meta = await metaRes.json() as { url?: string };
       if (!meta.url) return null;
 
       // Step 2: Download the actual file
       const fileRes = await fetch(meta.url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 'Authorization': `Bearer ${tk}` },
       });
       const arrayBuf = await fileRes.arrayBuffer();
       return Buffer.from(arrayBuf);
@@ -374,6 +426,12 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     async sendReply(original: UnifiedMessage, reply: UnifiedReply) {
       if (!token || !phoneNumberId) return;
       const to = original.senderId;
+
+      // Determine which phone number to reply from (based on which received the message)
+      const rawData = original.raw as Record<string, any> | undefined;
+      const replyPhoneCfg = getPhoneConfig(rawData?.receivingPhoneId);
+      const replyPhoneId = replyPhoneCfg.phoneNumberId;
+      const replyToken = replyPhoneCfg.token;
 
       // Dedup: skip if exact same text was sent to same number within 30s
       if (reply.text && !reply.template && !reply.image && !reply.voice && !reply.document) {
@@ -407,20 +465,20 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           to,
           type: 'template',
           template: tpl,
-        });
+        }, replyPhoneId, replyToken);
         return;
       }
 
       // Voice message
       if (reply.voice) {
-        const mediaId = await uploadMedia(reply.voice, 'audio/ogg', 'voice.ogg');
+        const mediaId = await uploadMedia(reply.voice, 'audio/ogg', 'voice.ogg', replyPhoneId, replyToken);
         if (mediaId) {
           await sendGraphApi('messages', {
             messaging_product: 'whatsapp',
             to,
             type: 'audio',
             audio: { id: mediaId },
-          });
+          }, replyPhoneId, replyToken);
         } else {
           log.error({ to }, 'voice upload failed — sending text fallback');
           await sendGraphApi('messages', {
@@ -428,7 +486,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
             to,
             type: 'text',
             text: { body: reply.text || '⚠️ לא הצלחתי לשלוח הודעה קולית' },
-          });
+          }, replyPhoneId, replyToken);
           return;
         }
       }
@@ -437,7 +495,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       if (reply.document) {
         const mime = reply.documentMimetype || 'application/octet-stream';
         const filename = reply.documentName || 'file';
-        const mediaId = await uploadMedia(reply.document, mime, filename);
+        const mediaId = await uploadMedia(reply.document, mime, filename, replyPhoneId, replyToken);
         if (mediaId) {
           await sendGraphApi('messages', {
             messaging_product: 'whatsapp',
@@ -448,14 +506,14 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
               filename,
               caption: reply.text || undefined,
             },
-          });
+          }, replyPhoneId, replyToken);
           return; // Caption included with document
         }
       }
 
       // Image
       if (reply.image) {
-        const mediaId = await uploadMedia(reply.image, 'image/png', 'image.png');
+        const mediaId = await uploadMedia(reply.image, 'image/png', 'image.png', replyPhoneId, replyToken);
         if (mediaId) {
           await sendGraphApi('messages', {
             messaging_product: 'whatsapp',
@@ -465,7 +523,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
               id: mediaId,
               caption: reply.text || undefined,
             },
-          });
+          }, replyPhoneId, replyToken);
           // Save outbound image to disk + tag DB for dashboard display
           try {
             const mediaDir = join(config.dataDir, 'media');
@@ -500,7 +558,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           to,
           type: 'interactive',
           interactive,
-        });
+        }, replyPhoneId, replyToken);
         return;
       }
 
@@ -528,7 +586,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           to,
           type: 'interactive',
           interactive,
-        });
+        }, replyPhoneId, replyToken);
         return;
       }
 
@@ -549,7 +607,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
               },
             },
           },
-        });
+        }, replyPhoneId, replyToken);
         return;
       }
 
@@ -560,7 +618,7 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
           to,
           type: 'text',
           text: { body: reply.text },
-        });
+        }, replyPhoneId, replyToken);
       }
     },
 

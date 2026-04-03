@@ -25,6 +25,9 @@ export const config = {
   waCloudToken: process.env.WA_CLOUD_TOKEN || '',
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
+  // Second WhatsApp number (Alon.dev — 0559173249)
+  waCloudToken2: process.env.WA_CLOUD_TOKEN_2 || '',
+  waCloudPhoneId2: process.env.WA_CLOUD_PHONE_ID_2 || '',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
   evolutionApiUrl: process.env.EVOLUTION_API_URL || '',
   evolutionApiKey: process.env.EVOLUTION_API_KEY || '',
@@ -33,5 +36,5 @@ export const config = {
   skillsDir: join(process.cwd(), 'skills'),
   growUserId: process.env.GROW_USER_ID || '',
   growPageCode: process.env.GROW_PAGE_CODE || '',
-  growApiUrl: process.env.GROW_API_URL || 'https://grow.link/api/light/server/1.0',
+  growApiUrl: process.env.GROW_API_URL || 'https://secure.meshulam.co.il/api/light/server/1.0',
 };

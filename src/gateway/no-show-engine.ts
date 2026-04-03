@@ -485,9 +485,11 @@ async function processScheduledMessages() {
 }
 
 // ── WhatsApp Send Helper ──
-async function sendWhatsAppText(phone: string, text: string) {
-  const token = config.waCloudToken;
-  const phoneId = config.waCloudPhoneId;
+async function sendWhatsAppText(phone: string, text: string, workspaceId?: string) {
+  const { getPhoneConfigForWorkspace } = await import('../utils/workspaces.js');
+  const pc = workspaceId ? getPhoneConfigForWorkspace(workspaceId) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+  const token = pc.token;
+  const phoneId = pc.phoneId;
   if (!token || !phoneId) throw new Error('Cloud API not configured');
 
   const to = phone.replace(/\D/g, '');

@@ -320,7 +320,7 @@ export async function sendFollowup(phone: string, templateId?: number) {
 
   if (metaTemplateName) {
     try {
-      await sendWhatsAppTemplate(phone, metaTemplateName, [name || 'שלום', siteUrl]);
+      await sendWhatsAppTemplate(phone, metaTemplateName, [name || 'שלום', siteUrl], workspace);
       sentViaTemplate = true;
       log.info({ phone, template: metaTemplateName, workspace }, 'follow-up sent via Meta template');
     } catch (e: any) {
@@ -330,7 +330,7 @@ export async function sendFollowup(phone: string, templateId?: number) {
 
   // Fallback to regular text (works inside 24h window)
   if (!sentViaTemplate) {
-    await sendWhatsAppText(phone, text);
+    await sendWhatsAppText(phone, text, workspace);
   }
 
   // Update lead: increment followup_count, set next follow-up
@@ -459,9 +459,11 @@ export function cancelFollowup(phone: string) {
   db.prepare('UPDATE leads SET next_followup = NULL, updated_at = datetime(\'now\') WHERE phone = ?').run(phone);
 }
 
-async function sendWhatsAppTemplate(phone: string, templateName: string, params: string[]) {
-  const token = config.waCloudToken;
-  const phoneId = config.waCloudPhoneId;
+async function sendWhatsAppTemplate(phone: string, templateName: string, params: string[], workspaceId?: string) {
+  const { getPhoneConfigForWorkspace } = await import('../utils/workspaces.js');
+  const pc = workspaceId ? getPhoneConfigForWorkspace(workspaceId) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+  const token = pc.token;
+  const phoneId = pc.phoneId;
   if (!token || !phoneId) throw new Error('Cloud API not configured');
 
   const to = phone.replace(/\D/g, '');
@@ -494,9 +496,11 @@ async function sendWhatsAppTemplate(phone: string, templateName: string, params:
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, bodyText, nowIsrael());
 }
 
-async function sendWhatsAppText(phone: string, text: string) {
-  const token = config.waCloudToken;
-  const phoneId = config.waCloudPhoneId;
+async function sendWhatsAppText(phone: string, text: string, workspaceId?: string) {
+  const { getPhoneConfigForWorkspace } = await import('../utils/workspaces.js');
+  const pc = workspaceId ? getPhoneConfigForWorkspace(workspaceId) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+  const token = pc.token;
+  const phoneId = pc.phoneId;
   if (!token || !phoneId) throw new Error('Cloud API not configured');
 
   const to = phone.replace(/\D/g, '');

@@ -782,11 +782,22 @@ app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
       res.json({ success: false, error: 'WhatsApp Cloud API not configured' });
       return;
     }
-    // Phone number quality + status
+    // Phone number quality + status — primary (דקל)
     const phoneRes = await fetch(`https://graph.facebook.com/v21.0/${phoneId}?fields=verified_name,quality_rating,display_phone_number,platform_type,code_verification_status,name_status,messaging_limit_tier`, {
       headers: { Authorization: `Bearer ${token}` }
     });
     const phoneData = await phoneRes.json();
+
+    // Phone number quality + status — secondary (Alon.dev)
+    let phoneData2: any = null;
+    if (config.waCloudPhoneId2 && config.waCloudToken2) {
+      try {
+        const phoneRes2 = await fetch(`https://graph.facebook.com/v21.0/${config.waCloudPhoneId2}?fields=verified_name,quality_rating,display_phone_number,platform_type,code_verification_status,name_status,messaging_limit_tier`, {
+          headers: { Authorization: `Bearer ${config.waCloudToken2}` }
+        });
+        phoneData2 = await phoneRes2.json();
+      } catch (e) { log.debug({ err: (e as Error).message }, 'secondary phone health check failed'); }
+    }
 
     // WABA account info
     let wabaData: any = {};
@@ -822,6 +833,13 @@ app.get('/api/wa-manager/meta-health', dashAuth, async (_req, res) => {
         review_status: wabaData.account_review_status,
       },
       ads: adsData,
+      phone2: phoneData2 ? {
+        verified_name: phoneData2.verified_name,
+        quality_rating: phoneData2.quality_rating,
+        display_phone_number: phoneData2.display_phone_number,
+        name_status: phoneData2.name_status,
+        messaging_limit_tier: phoneData2.messaging_limit_tier,
+      } : null,
     });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
@@ -1138,20 +1156,26 @@ app.post('/api/wa-manager/send', dashAuth, async (req, res) => {
     if (chatPhone.startsWith('0')) chatPhone = '972' + chatPhone.slice(1);
     chatPhone = chatPhone.replace(/^\+/, '');
 
+    // Determine which phone to send from based on lead's workspace
+    const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(chatPhone) as any;
+    const { getPhoneConfigForWorkspace, getWorkspaceForSource } = await import('../utils/workspaces.js');
+    const ws = lead?.source ? getWorkspaceForSource(lead.source) : null;
+    const pc = ws ? getPhoneConfigForWorkspace(ws.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+
     // Try adapter first, fall back to direct Cloud API
     const { getAdapter } = await import('./router.js');
     const wa = getAdapter('whatsapp');
     if (wa) {
       const chatId = `${chatPhone}@s.whatsapp.net`;
       await wa.sendReply(
-        { id: 'wa-mgr', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId } },
+        { id: 'wa-mgr', channel: 'whatsapp', senderId: chatPhone, senderName: '', text: '', timestamp: Date.now(), raw: { from: chatId, receivingPhoneId: pc.phoneId } },
         { text: message }
       );
-    } else if (config.waCloudToken && config.waCloudPhoneId) {
-      // Direct Cloud API fallback
-      const r = await fetch(`https://graph.facebook.com/v21.0/${config.waCloudPhoneId}/messages`, {
+    } else if (pc.token && pc.phoneId) {
+      // Direct Cloud API fallback — using correct phone for this lead
+      const r = await fetch(`https://graph.facebook.com/v21.0/${pc.phoneId}/messages`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${config.waCloudToken}`, 'Content-Type': 'application/json' },
+        headers: { 'Authorization': `Bearer ${pc.token}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ messaging_product: 'whatsapp', to: chatPhone, type: 'text', text: { body: message } }),
       });
       const data = await r.json() as any;
@@ -1763,13 +1787,16 @@ app.post('/api/wa-manager/followup/quick-reply', dashAuth, async (req, res) => {
   try {
     const { phone, message } = req.body;
     if (!phone || !message) { res.status(400).json({ success: false, error: 'Missing phone or message' }); return; }
-    const token = config.waCloudToken;
-    const phoneId = config.waCloudPhoneId;
-    if (!token || !phoneId) { res.status(500).json({ success: false, error: 'Cloud API not configured' }); return; }
+    // Send from correct phone based on lead workspace
+    const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+    const { getPhoneConfigForWorkspace: getPC2, getWorkspaceForSource: getWS2 } = await import('../utils/workspaces.js');
+    const ws2 = lead?.source ? getWS2(lead.source) : null;
+    const pc2 = ws2 ? getPC2(ws2.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+    if (!pc2.token || !pc2.phoneId) { res.status(500).json({ success: false, error: 'Cloud API not configured' }); return; }
     const to = phone.replace(/\D/g, '');
-    const resp = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    const resp = await fetch(`https://graph.facebook.com/v21.0/${pc2.phoneId}/messages`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${pc2.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: message } })
     });
     if (!resp.ok) throw new Error(`WhatsApp API error: ${resp.status}`);
@@ -1886,40 +1913,55 @@ app.get('/api/wa-manager/costs', dashAuth, (req, res) => {
   }
 });
 
-// WA Templates API — proxy to Meta Graph API
-app.get('/api/wa-manager/templates', dashAuth, async (_req, res) => {
+// WA Templates API — proxy to Meta Graph API (both WABAs)
+app.get('/api/wa-manager/templates', dashAuth, async (req, res) => {
   try {
-    const wabaId = config.waCloudWabaId || '1289908013100682';
-    const token = config.waCloudToken;
-    if (!token) { res.json({ templates: [], debug: 'no token' }); return; }
-    const url = `https://graph.facebook.com/v21.0/${wabaId}/message_templates?limit=100`;
-    log.info({ wabaId, url }, 'fetching templates');
-    const r = await fetch(url, {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    const data = await r.json() as any;
-    if (data.error) {
-      log.error({ error: data.error }, 'Meta templates API error');
-      res.json({ templates: [], error: data.error });
-      return;
+    const workspace = (req.query as any).workspace as string | undefined;
+    const allTemplates: any[] = [];
+
+    // Primary WABA (דקל)
+    if (!workspace || workspace === 'dekel') {
+      const wabaId = config.waCloudWabaId || '1289908013100682';
+      const token = config.waCloudToken;
+      if (token) {
+        const r = await fetch(`https://graph.facebook.com/v21.0/${wabaId}/message_templates?limit=100`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        const data = await r.json() as any;
+        if (data.data) allTemplates.push(...data.data.map((t: any) => ({ ...t, workspace: 'dekel' })));
+      }
     }
-    res.json({ templates: data.data || [] });
+
+    // Secondary WABA (Alon.dev)
+    if ((!workspace || workspace === 'alon_dev') && config.waCloudToken2) {
+      const wabaId2 = '2465573403891833';
+      const r2 = await fetch(`https://graph.facebook.com/v21.0/${wabaId2}/message_templates?limit=100`, {
+        headers: { 'Authorization': `Bearer ${config.waCloudToken2}` }
+      });
+      const data2 = await r2.json() as any;
+      if (data2.data) allTemplates.push(...data2.data.map((t: any) => ({ ...t, workspace: 'alon_dev' })));
+    }
+
+    res.json({ templates: allTemplates });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
   }
 });
 
-// Send template message via Cloud API
+// Send template message via Cloud API (routes to correct phone based on lead workspace)
 app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
   try {
     const { phone, templateName, language } = req.body;
-    const token = config.waCloudToken;
-    const phoneId = config.waCloudPhoneId;
-    if (!token || !phoneId) { res.status(400).json({ success: false, error: 'Cloud API not configured' }); return; }
+    // Determine correct phone from lead's workspace
+    const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+    const { getPhoneConfigForWorkspace: getPC3, getWorkspaceForSource: getWS3 } = await import('../utils/workspaces.js');
+    const ws3 = lead?.source ? getWS3(lead.source) : null;
+    const pc3 = ws3 ? getPC3(ws3.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+    if (!pc3.token || !pc3.phoneId) { res.status(400).json({ success: false, error: 'Cloud API not configured' }); return; }
     const to = phone.replace(/\D/g, '');
-    const r = await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
+    const r = await fetch(`https://graph.facebook.com/v21.0/${pc3.phoneId}/messages`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${pc3.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
         to,

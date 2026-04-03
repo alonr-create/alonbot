@@ -106,8 +106,13 @@ function getLeadName(phone: string): string {
 }
 
 async function sendWhatsAppMessage(phone: string, text: string) {
-  const token = config.waCloudToken;
-  const phoneId = config.waCloudPhoneId;
+  // Look up lead source to determine which phone to send from
+  const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+  const { getPhoneConfigForWorkspace, getWorkspaceForSource } = await import('../utils/workspaces.js');
+  const ws = lead?.source ? getWorkspaceForSource(lead.source) : null;
+  const pc = ws ? getPhoneConfigForWorkspace(ws.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+  const token = pc.token;
+  const phoneId = pc.phoneId;
   if (!token || !phoneId) {
     log.warn('Cloud API not configured for flow message');
     return;
@@ -129,8 +134,13 @@ async function sendWhatsAppMessage(phone: string, text: string) {
 
 async function sendWhatsAppVoice(phone: string, text: string, voice: string) {
   const elevenLabsKey = config.elevenlabsApiKey;
-  const waToken = config.waCloudToken;
-  const waPhoneId = config.waCloudPhoneId;
+  // Look up lead source to determine which phone to send from
+  const voiceLead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+  const { getPhoneConfigForWorkspace: getPC, getWorkspaceForSource: getWS } = await import('../utils/workspaces.js');
+  const voiceWs = voiceLead?.source ? getWS(voiceLead.source) : null;
+  const voicePc = voiceWs ? getPC(voiceWs.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
+  const waToken = voicePc.token;
+  const waPhoneId = voicePc.phoneId;
   if (!elevenLabsKey || !waToken || !waPhoneId) {
     log.warn('voice or Cloud API not configured for flow voice');
     return;

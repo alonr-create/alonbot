@@ -1,3 +1,4 @@
+import { config } from './config.js';
 import { db } from './db.js';
 import { LEAD_STATUS } from './lead-status.js';
 import { createLogger } from './logger.js';
@@ -39,6 +40,19 @@ export function getWorkspaceForSource(source: string): Workspace | null {
   };
   const wsId = map[source] || source;
   return getWorkspace(wsId);
+}
+
+/**
+ * Get the WhatsApp phone_number_id + token for a workspace.
+ * Used by engines that send proactive messages (followup, no-show, flow).
+ */
+export function getPhoneConfigForWorkspace(workspaceId: string): { phoneId: string; token: string } {
+  // Alon.dev workspace → second phone number
+  if (workspaceId === 'alon_dev' && config.waCloudPhoneId2 && config.waCloudToken2) {
+    return { phoneId: config.waCloudPhoneId2, token: config.waCloudToken2 };
+  }
+  // Default (dekel and everything else) → primary phone number
+  return { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
 }
 
 export function getDefaultWorkspace(): Workspace | null {
