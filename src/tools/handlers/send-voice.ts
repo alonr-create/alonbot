@@ -38,7 +38,7 @@ const handler: ToolHandler = {
       let preset = VOICE_PRESETS[input.voice || ''];
       if (!preset) {
         const isHebrew = /[\u0590-\u05FF]/.test(input.text);
-        preset = isHebrew ? VOICE_PRESETS.alon : VOICE_PRESETS.english;
+        preset = isHebrew ? VOICE_PRESETS.yael : VOICE_PRESETS.english;
       }
 
       const res = await withRetry(() => fetch(
