@@ -53,8 +53,12 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
         headers: { 'Authorization': `Bearer ${token}` },
         body: formData,
       });
-      const data = await res.json() as { id?: string };
-      return data.id || null;
+      const data = await res.json() as { id?: string; error?: { message?: string; code?: number } };
+      if (!data.id) {
+        log.error({ filename, mimeType, error: data.error }, 'media upload returned no id');
+        return null;
+      }
+      return data.id;
     } catch (e: any) {
       log.error({ err: e.message }, 'media upload failed');
       return null;
@@ -417,6 +421,15 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
             type: 'audio',
             audio: { id: mediaId },
           });
+        } else {
+          log.error({ to }, 'voice upload failed — sending text fallback');
+          await sendGraphApi('messages', {
+            messaging_product: 'whatsapp',
+            to,
+            type: 'text',
+            text: { body: reply.text || '⚠️ לא הצלחתי לשלוח הודעה קולית' },
+          });
+          return;
         }
       }
 
