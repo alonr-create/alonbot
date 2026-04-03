@@ -57,6 +57,8 @@ const stmtRateLimitClean = db.prepare(
 );
 
 function checkRateLimit(userId: string): boolean {
+  // Skip rate limiting for the owner
+  if (config.allowedTelegram.includes(userId) || config.allowedWhatsApp.includes(userId)) return true;
   const now = nowIsrael();
   const row = stmtRateLimitCheck.get(userId, now) as { count: number };
   if (row.count >= RATE_LIMIT) return false;
