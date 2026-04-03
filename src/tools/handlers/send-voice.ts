@@ -42,7 +42,7 @@ const handler: ToolHandler = {
       }
 
       const res = await withRetry(() => fetch(
-        `https://api.elevenlabs.io/v1/text-to-speech/${preset.id}?output_format=ogg_opus`,
+        `https://api.elevenlabs.io/v1/text-to-speech/${preset.id}?output_format=opus_48000_128`,
         {
           method: 'POST',
           headers: {
