@@ -28,8 +28,8 @@ export const config = {
   localApiSecret: process.env.LOCAL_API_SECRET || crypto.randomBytes(32).toString('hex'),
   dashboardSecret: process.env.DASHBOARD_SECRET || crypto.randomBytes(32).toString('hex'),
   googleCalendarScriptUrl: process.env.GOOGLE_CALENDAR_SCRIPT_URL || '',
-  fbAccessToken: process.env.FB_ACCESS_TOKEN || '',
-  waCloudToken: process.env.WA_CLOUD_TOKEN || '',
+  fbAccessToken: process.env.FB_ACCESS_TOKEN || readTokenFile('fb-access-token'),
+  waCloudToken: process.env.WA_CLOUD_TOKEN || readTokenFile('wa-cloud-token'),
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   // Second WhatsApp number (Alon.dev — 0559173249)
