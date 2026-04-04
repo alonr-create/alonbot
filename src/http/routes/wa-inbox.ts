@@ -58,22 +58,8 @@ export const waInboxRouter = Router();
 // ── Serve HTML page ──────────────────────────────────────────────────────────
 
 waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
-  const secret = process.env.API_SECRET || process.env.DASHBOARD_SECRET;
-  const token = (req.query.token as string) || getCookieToken(req);
-  if (!secret || token !== secret) {
-    res.status(401).send('Unauthorized');
-    return;
-  }
-  // Set long-lived cookie so PWA works without ?token= in URL
-  if (req.query.token === secret) {
-    res.cookie('wa_token', secret, {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
+  // HTML page is public — auth happens client-side via token entry form.
+  // API endpoints below are protected by requireToken middleware.
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.send(waInboxHTML);
 });
