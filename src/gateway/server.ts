@@ -229,6 +229,18 @@ app.get('/health', (_req, res) => {
   });
 });
 
+// Admin: write a token file to data dir (one-time setup for env vars not in Render)
+app.post('/admin/set-token', (req, res) => {
+  const secret = req.query.secret || req.headers['x-dashboard-token'];
+  if (secret !== config.dashboardSecret) { res.status(403).json({ error: 'Forbidden' }); return; }
+  const { name, value } = req.body as { name?: string; value?: string };
+  if (!name || !value || !/^[a-z0-9-]+$/.test(name)) { res.status(400).json({ error: 'Invalid name/value' }); return; }
+  const path = join(config.dataDir, `${name}.token`);
+  writeFileSync(path, value, 'utf-8');
+  log.info({ name, path }, 'admin: token file written');
+  res.json({ ok: true, path });
+});
+
 function formatUptime(seconds: number): string {
   const d = Math.floor(seconds / 86400);
   const h = Math.floor((seconds % 86400) / 3600);

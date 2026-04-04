@@ -1,7 +1,14 @@
 import 'dotenv/config';
 import crypto from 'crypto';
 import { join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
+
+// Read a token from a file on disk (fallback when env var is empty)
+function readTokenFile(name: string): string {
+  const dataDir = process.env.DATA_DIR || (existsSync('/data') ? '/data' : join(process.cwd(), 'data'));
+  const path = join(dataDir, `${name}.token`);
+  try { return existsSync(path) ? readFileSync(path, 'utf-8').trim() : ''; } catch { return ''; }
+}
 
 export const config = {
   mode: (process.env.MODE || 'local') as 'cloud' | 'local',
@@ -26,8 +33,8 @@ export const config = {
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   // Second WhatsApp number (Alon.dev — 0559173249)
-  waCloudToken2: process.env.WA_CLOUD_TOKEN_2 || '',
-  waCloudPhoneId2: process.env.WA_CLOUD_PHONE_ID_2 || '',
+  waCloudToken2: process.env.WA_CLOUD_TOKEN_2 || readTokenFile('wa-cloud-token-2'),
+  waCloudPhoneId2: process.env.WA_CLOUD_PHONE_ID_2 || '967467269793135',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
   evolutionApiUrl: process.env.EVOLUTION_API_URL || '',
   evolutionApiKey: process.env.EVOLUTION_API_KEY || '',

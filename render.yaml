@@ -46,6 +46,10 @@ services:
         sync: false
       - key: OPENROUTER_API_KEY
         sync: false
+      - key: WA_CLOUD_TOKEN_2
+        sync: false
+      - key: WA_CLOUD_PHONE_ID_2
+        sync: false
       - key: MODE
         value: cloud
       - key: PORT
