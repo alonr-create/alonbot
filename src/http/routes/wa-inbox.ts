@@ -69,6 +69,7 @@ waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
     res.cookie('wa_token', secret, {
       maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
       httpOnly: true,
+      secure: true,
       sameSite: 'lax',
       path: '/',
     });
