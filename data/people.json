@@ -1,0 +1,82 @@
+{
+  "_meta": {
+    "description": "Hivemind — shared people knowledge for all bots",
+    "updated": "2026-03-26",
+    "source": "Obsidian People/ folder",
+    "consumers": ["Claude Code", "AlonBot (WA+TG)", "Telegram tmux", "auto-dream"]
+  },
+  "people": [
+    {
+      "name": "ג'סי (Jessica) פרס",
+      "relationship": "אשתו של אלון",
+      "importance": 10,
+      "tags": ["family"],
+      "details": "מוצא טורקי, אזרחות ישראלית+אמריקאית. עובדת במיתר. שותפה במצפן לעושר — קורס וקהילה פיננסית. חיו 8 שנים בארה\"ב, חזרו 2022.",
+      "links": ["אריאל רחמים", "מצפן לעושר"]
+    },
+    {
+      "name": "אריאל רחמים",
+      "relationship": "הבן של אלון",
+      "importance": 10,
+      "tags": ["family"],
+      "details": "נולד 27.10.2023, בגן, מתחיל לדבר. ילד מתוק.",
+      "links": ["ג'סי פרס", "עמוס רחמים"]
+    },
+    {
+      "name": "עמוס רחמים",
+      "relationship": "אבא של אלון",
+      "importance": 10,
+      "tags": ["family"],
+      "details": "תותח, הסברא הכי טוב. דוגמא לחיקוי. עוזר המון עם אריאל. אלון מעריץ אותו.",
+      "links": ["אריאל רחמים"]
+    },
+    {
+      "name": "נועה רחמים",
+      "relationship": "אחות של אלון",
+      "importance": 7,
+      "tags": ["family"],
+      "details": "נולדה 1989, אחות קטנה.",
+      "links": []
+    },
+    {
+      "name": "תימור שילו",
+      "relationship": "חבר אמת מכיתה ז'",
+      "importance": 9,
+      "tags": ["friends"],
+      "details": "חבר מילדות, מכיתה ז' בראש העין. בן דוד של דקל חן. הוא זה שחיבר בין אלון לדקל — בלעדיו דקל לפרישה לא היה קיים.",
+      "links": ["דקל חן"]
+    },
+    {
+      "name": "דקל חן",
+      "relationship": "שותף 50/50 בדקל לפרישה",
+      "importance": 10,
+      "tags": ["business-partner"],
+      "details": "יועץ פנסיוני מוסמך. הצד המקצועי של דקל לפרישה. אלון הכיר דרך תימור שילו (בן דוד). דקל = מקצועי, אלון = שיווק+טכנולוגיה.",
+      "links": ["תימור שילו", "עידן בריסקר", "דורית ורסנו", "איילת אשל"]
+    },
+    {
+      "name": "עידן בריסקר",
+      "relationship": "צוות דקל לפרישה",
+      "importance": 6,
+      "tags": ["business"],
+      "details": "חלק מצוות דקל לפרישה.",
+      "links": ["דקל חן"]
+    },
+    {
+      "name": "דורית ורסנו",
+      "relationship": "צוות דקל לפרישה",
+      "importance": 6,
+      "tags": ["business"],
+      "details": "חלק מצוות דקל לפרישה.",
+      "links": ["דקל חן"]
+    },
+    {
+      "name": "איילת אשל",
+      "relationship": "צוות דקל לפרישה",
+      "importance": 6,
+      "tags": ["business"],
+      "details": "חלק מצוות דקל לפרישה.",
+      "links": ["דקל חן"]
+    }
+  ]
+}
