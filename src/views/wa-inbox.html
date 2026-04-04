@@ -2547,7 +2547,12 @@ async function init() {
       const cfg = await api('/config');
       adminPhone = cfg.admin_phone || '';
     } catch(e) {
-      document.body.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#e74c3c;font-family:Heebo,sans-serif;">נדרש טוקן — הוסף ?token=xxx לכתובת</div>';
+      document.body.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:Heebo,sans-serif;gap:16px;direction:rtl;background:#f5f6fa;">
+        <div style="font-size:22px;font-weight:700;color:#1a1a2e;">360 Shmikley</div>
+        <div style="font-size:15px;color:#666;">הזן את הטוקן להמשך</div>
+        <input id="_tokenInput" type="password" placeholder="טוקן גישה..." autofocus style="padding:10px 16px;border:1.5px solid #ddd;border-radius:8px;font-size:16px;width:260px;font-family:Heebo,sans-serif;text-align:right;" />
+        <button onclick="(function(){var t=document.getElementById('_tokenInput').value.trim();if(t){localStorage.setItem('wa_token',t);location.reload();}})()" style="padding:10px 28px;background:#25d366;color:#fff;border:none;border-radius:8px;font-size:16px;cursor:pointer;font-family:Heebo,sans-serif;font-weight:600;">כניסה</button>
+      </div>`;
       return;
     }
   } else {
