@@ -33,7 +33,7 @@ export const config = {
   waCloudPhoneId: process.env.WA_CLOUD_PHONE_ID || '',
   waCloudWabaId: process.env.WA_CLOUD_WABA_ID || '',
   // Second WhatsApp number (Alon.dev — 0559173249)
-  waCloudToken2: process.env.WA_CLOUD_TOKEN_2 || readTokenFile('wa-cloud-token-2'),
+  waCloudToken2: process.env.WA_CLOUD_TOKEN_2 || process.env.FB_ACCESS_TOKEN || readTokenFile('wa-cloud-token-2'),
   waCloudPhoneId2: process.env.WA_CLOUD_PHONE_ID_2 || '967467269793135',
   whatsappMode: (process.env.WHATSAPP_MODE || 'baileys') as 'cloud' | 'baileys',
   evolutionApiUrl: process.env.EVOLUTION_API_URL || '',
