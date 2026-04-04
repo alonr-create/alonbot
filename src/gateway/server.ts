@@ -967,7 +967,7 @@ app.get('/api/wa-manager/conversations/:phone', dashAuth, (req, res) => {
     const messages = db.prepare(`
       SELECT id, channel, sender_id, sender_name, role, content, created_at
       FROM messages
-      WHERE sender_id = ? AND channel IN ('whatsapp-inbound','whatsapp-outbound')
+      WHERE sender_id = ? AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
       ORDER BY id ASC
     `).all(phone);
     // Get delivery receipts for this phone to determine read/delivered status
