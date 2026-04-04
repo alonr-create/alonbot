@@ -1,7 +1,7 @@
 {
   "name": "360Shmikley",
   "short_name": "360Shmikley",
-  "start_url": "/wa-inbox",
+  "start_url": "/wa-inbox?token=alonbot-secret-2026",
   "display": "standalone",
   "background_color": "#1a73e8",
   "theme_color": "#1a73e8",
