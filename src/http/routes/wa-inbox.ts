@@ -64,17 +64,17 @@ waInboxRouter.get('/wa-inbox', (req: Request, res: Response): void => {
     res.status(401).send('Unauthorized');
     return;
   }
-  // Set long-lived cookie so PWA works without ?token= in URL
-  if (req.query.token === secret) {
-    res.cookie('wa_token', secret, {
-      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-      httpOnly: true,
-      sameSite: 'lax',
-      path: '/',
-    });
-  }
+  // Always refresh cookie so PWA stays authenticated
+  res.cookie('wa_token', secret, {
+    maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+    httpOnly: true,
+    sameSite: 'lax',
+    path: '/',
+  });
+  // Inject token into HTML so PWA doesn't need ?token= in URL or localStorage
+  const html = waInboxHTML.replace('/* __SERVER_TOKEN__ */', `window._serverToken = ${JSON.stringify(secret)};`);
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
-  res.send(waInboxHTML);
+  res.send(html);
 });
 
 // Apply auth middleware to all API routes

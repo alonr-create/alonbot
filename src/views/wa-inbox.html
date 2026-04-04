@@ -1201,13 +1201,15 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 </div>
 
 <script>
+/* __SERVER_TOKEN__ */
 // ===== CONFIG =====
 const _urlToken = new URLSearchParams(window.location.search).get('token');
 if (_urlToken) {
   localStorage.setItem('wa_token', _urlToken);
   history.replaceState({}, '', window.location.pathname);
 }
-const TOKEN = _urlToken || localStorage.getItem('wa_token') || '';
+const TOKEN = window._serverToken || _urlToken || localStorage.getItem('wa_token') || '';
+if (TOKEN) localStorage.setItem('wa_token', TOKEN);
 const API = '/wa-inbox/api';
 const POLL_INTERVAL = 4000;  // 4s for live message updates
 const CONTACTS_POLL_EVERY = 4; // refresh contacts every 4th poll (~16s)
