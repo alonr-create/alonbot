@@ -422,16 +422,19 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
   .contacts-panel.hidden-mobile{display:none;}
   .chat-panel{height:100%;}
   .chat-panel.hidden-mobile{display:none;}
-  .topbar{height:auto;flex-wrap:wrap;padding:8px 12px;gap:8px;}
+  .topbar{height:auto;flex-wrap:nowrap;padding:8px 12px;gap:8px;}
   .topbar-logo span{font-size:13px!important;}
   .topbar-search{max-width:100%;order:10;flex-basis:100%;}
   .topbar-search input{font-size:14px;padding:10px 14px;}
   .topbar-channel{display:none;}
-  .topbar-actions{flex-wrap:wrap;gap:4px;order:5;}
-  .nav-tab{font-size:11px;padding:5px 10px;}
+  .topbar-actions{display:flex;flex-wrap:nowrap;gap:4px;order:5;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;max-width:calc(100vw - 100px);}
+  .topbar-actions::-webkit-scrollbar{display:none;}
+  .nav-tab{font-size:11px;padding:5px 10px;flex-shrink:0;}
   .mobile-back{display:flex!important;}
-  .biz-filter{font-size:10px;padding:3px 8px;}
-  .contacts-filters{flex-wrap:wrap;}
+  .biz-filter{font-size:11px;padding:4px 10px;flex-shrink:0;}
+  .contacts-filters{flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+  .contacts-filters::-webkit-scrollbar{display:none;}
+  .contacts-filters.status-filters{display:flex!important;}
   .contact-name .biz-tag{font-size:8px;padding:1px 4px;}
 }
 .mobile-back{display:none!important;margin-left:8px;}
@@ -530,14 +533,16 @@ body{font-family:'Heebo',sans-serif;background:var(--bg);color:var(--text);heigh
 
   <!-- LEFT: CONTACTS -->
   <div class="contacts-panel" id="contactsPanel">
-    <div class="contacts-filters" style="display:none;">
-      <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+    <div class="contacts-filters status-filters" style="padding:6px 12px;gap:4px;border-bottom:1px solid var(--border-light);">
+      <button class="filter-tab active" data-filter="all" onclick="setFilter('all',this)">הכל <span class="count" id="countAll"></span></button>
+      <button class="filter-tab" data-filter="unanswered" onclick="setFilter('unanswered',this)">לא נענו <span class="count" id="countUnanswered"></span></button>
+      <button class="filter-tab" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו <span class="count" id="countUnread"></span></button>
     </div>
     <div class="contacts-filters" style="padding:0 12px 6px;gap:6px;">
-      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">🔵 הכל</button>
-      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">🏡 דקל</button>
-      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">💻 Alon.dev</button>
-      <button class="biz-filter" data-biz="whatsapp" onclick="setBizFilter('whatsapp',this)">💬 אורגני</button>
+      <button class="biz-filter active" data-biz="all" onclick="setBizFilter('all',this)">הכל</button>
+      <button class="biz-filter" data-biz="dekel" onclick="setBizFilter('dekel',this)">דקל · 148</button>
+      <button class="biz-filter" data-biz="alon_dev" onclick="setBizFilter('alon_dev',this)">Alon.dev · 249</button>
+      <button class="biz-filter" data-biz="whatsapp" onclick="setBizFilter('whatsapp',this)">אורגני</button>
     </div>
     <div class="contacts-list" id="contactsList">
       <!-- dynamically populated -->
@@ -1167,8 +1172,8 @@ function setBizFilter(biz, btn) {
 }
 function getBizLabel(source) {
   if (!source) return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
-  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: 'דקל', cls: 'dekel' };
-  if (source.includes('alon_dev') || source === 'campaign') return { emoji: '💻', label: 'Alon.dev', cls: 'alon_dev' };
+  if (source.includes('dekel') || source.includes('voice_agent')) return { emoji: '🏡', label: '148 דקל', cls: 'dekel' };
+  if (source.includes('alon_dev') || source === 'campaign') return { emoji: '💻', label: '249 Alon', cls: 'alon_dev' };
   return { emoji: '💬', label: 'אורגני', cls: 'whatsapp' };
 }
 
@@ -1391,16 +1396,12 @@ function renderContacts() {
   const allCount = contacts.length;
   const unansweredCount = contacts.filter(c => !c.isOutgoing && c.lastMessage).length;
   const unreadCount = contacts.filter(c => c.unread > 0).length;
-  document.querySelectorAll('.filter-tab').forEach(tab => {
-    const f = tab.dataset.filter;
-    const countEl = tab.querySelector('.count');
-    if (f === 'unanswered' && unansweredCount > 0) {
-      if (!countEl) tab.innerHTML = `<span class="count">${unansweredCount}</span>` + tab.textContent;
-    }
-    if (f === 'unread' && unreadCount > 0) {
-      if (!countEl) tab.innerHTML = `<span class="count">${unreadCount}</span>` + tab.textContent;
-    }
-  });
+  const cAll = document.getElementById('countAll');
+  const cUn = document.getElementById('countUnanswered');
+  const cUr = document.getElementById('countUnread');
+  if (cAll) cAll.textContent = allCount > 0 ? allCount : '';
+  if (cUn) cUn.textContent = unansweredCount > 0 ? unansweredCount : '';
+  if (cUr) cUr.textContent = unreadCount > 0 ? unreadCount : '';
 
   if (filtered.length === 0) {
     list.innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text3);font-size:13px;">אין שיחות</div>';
