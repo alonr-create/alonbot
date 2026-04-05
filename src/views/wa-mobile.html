@@ -1496,17 +1496,10 @@ function buildSourcePills() {
   });
   const el = document.getElementById('sourceSelect');
   if (!el) return;
-  let html = `<option value="all">כל המספרים (${contacts.length})</option>`;
-  // Phone number groups
-  if (count148 > 0) html += `<option value="_148" ${currentSource === '_148' ? 'selected' : ''}>148 — דקל (${count148})</option>`;
-  if (count249 > 0) html += `<option value="_249" ${currentSource === '_249' ? 'selected' : ''}>249 — Alon.dev (${count249})</option>`;
+  let html = `<option value="all">הכל (${contacts.length})</option>`;
+  if (count148 > 0) html += `<option value="_148" ${currentSource === '_148' ? 'selected' : ''}>148 · דקל (${count148})</option>`;
+  if (count249 > 0) html += `<option value="_249" ${currentSource === '_249' ? 'selected' : ''}>249 · Alon.dev (${count249})</option>`;
   if (countOther > 0) html += `<option value="_organic" ${currentSource === '_organic' ? 'selected' : ''}>אורגני (${countOther})</option>`;
-  // Separator + individual sources
-  html += '<option disabled>──────</option>';
-  Object.entries(sources).sort((a, b) => b[1] - a[1]).forEach(([src, count]) => {
-    const label = SOURCE_LABELS[src] || src;
-    html += `<option value="${esc(src)}" ${currentSource === src ? 'selected' : ''}>${esc(label)} (${count})</option>`;
-  });
   el.innerHTML = html;
   el.value = currentSource;
 }
