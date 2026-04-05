@@ -780,11 +780,12 @@ html,body{
       <div class="filters-row">
         <div class="filters">
           <button class="filter-pill active" data-filter="all" onclick="setFilter('all',this)">הכל</button>
+          <button class="filter-pill" data-filter="unanswered" onclick="setFilter('unanswered',this)">לא נענו</button>
           <button class="filter-pill" data-filter="replied" onclick="setFilter('replied',this)">ענו</button>
           <button class="filter-pill" data-filter="unread" onclick="setFilter('unread',this)">לא נקראו</button>
         </div>
         <select class="source-select" id="sourceSelect" onchange="setSource(this.value)">
-          <option value="all">כל המקורות</option>
+          <option value="all">כל המספרים</option>
         </select>
       </div>
     </div>
@@ -1349,6 +1350,13 @@ function initials(name) {
   return name.slice(0, 2).toUpperCase();
 }
 
+function sourceTag(source) {
+  if (!source) return '';
+  if (source === 'dekel' || source === 'voice_agent') return '<span style="font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px;background:#e0f2fe;color:#0369a1;margin-left:4px;vertical-align:middle;">148</span>';
+  if (source === 'alon_dev' || source === 'alon_dev_whatsapp' || source === 'campaign') return '<span style="font-size:9px;font-weight:600;padding:1px 5px;border-radius:4px;background:#fef3c7;color:#92400e;margin-left:4px;vertical-align:middle;">249</span>';
+  return '';
+}
+
 function renderAvatar(el, name, picUrl, size) {
   if (picUrl) {
     el.style.backgroundImage = `url(${picUrl})`;
@@ -1434,8 +1442,12 @@ async function lazyLoadProfilePics() {
 function applyFilter() {
   const q = (document.getElementById('searchInput').value || '').trim().toLowerCase();
   filteredContacts = contacts.filter(c => {
-    if (currentSource !== 'all' && c.source !== currentSource) return false;
+    if (currentSource === '_148' && !['dekel', 'voice_agent'].includes(c.source)) return false;
+    else if (currentSource === '_249' && !['alon_dev', 'alon_dev_whatsapp', 'campaign'].includes(c.source)) return false;
+    else if (currentSource === '_organic' && ['dekel', 'voice_agent', 'alon_dev', 'alon_dev_whatsapp', 'campaign'].includes(c.source)) return false;
+    else if (currentSource !== 'all' && !currentSource.startsWith('_') && c.source !== currentSource) return false;
     if (currentFilter === 'unread' && !(c.unread_count > 0)) return false;
+    if (currentFilter === 'unanswered' && (c.last_message_role === 'assistant' || !c.last_message)) return false;
     if (currentFilter === 'new' && c.lead_status !== 'new') return false;
     if (currentFilter === 'waiting' && c.lead_status !== 'waiting') return false;
     if (currentFilter === 'replied' && !(c.user_reply_count > 0)) return false;
@@ -1461,23 +1473,36 @@ function setSource(src) {
 }
 
 const SOURCE_LABELS = {
-  'alon_dev': 'Cold Calling',
-  'voice_agent': 'דקל לפרישה',
-  'alon_dev_whatsapp': 'WA Campaign',
-  'campaign': 'Campaign',
+  'alon_dev': 'Alon.dev · 249',
+  'voice_agent': 'דקל · 148',
+  'alon_dev_whatsapp': 'Alon.dev WA · 249',
+  'campaign': 'קמפיין · 249',
+  'dekel': 'דקל · 148',
+  'whatsapp': 'אורגני',
 };
-const HIDDEN_SOURCES = ['whatsapp'];
+const HIDDEN_SOURCES = [];
 
 function buildSourcePills() {
+  // Group by phone number (148 vs 249)
+  let count148 = 0, count249 = 0, countOther = 0;
   const sources = {};
   contacts.forEach(c => {
     const s = c.source || 'other';
     if (HIDDEN_SOURCES.includes(s)) return;
     sources[s] = (sources[s] || 0) + 1;
+    if (s === 'dekel' || s === 'voice_agent') count148++;
+    else if (s === 'alon_dev' || s === 'alon_dev_whatsapp' || s === 'campaign') count249++;
+    else countOther++;
   });
   const el = document.getElementById('sourceSelect');
   if (!el) return;
-  let html = `<option value="all">כל המקורות (${contacts.length})</option>`;
+  let html = `<option value="all">כל המספרים (${contacts.length})</option>`;
+  // Phone number groups
+  if (count148 > 0) html += `<option value="_148" ${currentSource === '_148' ? 'selected' : ''}>148 — דקל (${count148})</option>`;
+  if (count249 > 0) html += `<option value="_249" ${currentSource === '_249' ? 'selected' : ''}>249 — Alon.dev (${count249})</option>`;
+  if (countOther > 0) html += `<option value="_organic" ${currentSource === '_organic' ? 'selected' : ''}>אורגני (${countOther})</option>`;
+  // Separator + individual sources
+  html += '<option disabled>──────</option>';
   Object.entries(sources).sort((a, b) => b[1] - a[1]).forEach(([src, count]) => {
     const label = SOURCE_LABELS[src] || src;
     html += `<option value="${esc(src)}" ${currentSource === src ? 'selected' : ''}>${esc(label)} (${count})</option>`;
@@ -1504,7 +1529,7 @@ function renderContactList() {
         >${c.profile_pic_url ? '' : esc(initials(c.name))}</div>
         <div class="contact-info">
           <div class="contact-top">
-            <span class="contact-name">${esc(c.name || c.phone)}</span>
+            <span class="contact-name">${sourceTag(c.source)}${esc(c.name || c.phone)}</span>
             <span class="contact-time ${hasUnread ? 'unread' : ''}">${timeAgo(c.last_message_at)}</span>
           </div>
           <div class="contact-bottom">
@@ -2092,7 +2117,10 @@ async function sendBroadcast() {
 
   // CRITICAL: Filter by BOTH status AND source to prevent cross-business sends
   const filtered = contacts.filter(c => {
-    if (currentSource !== 'all' && c.source !== currentSource) return false;
+    if (currentSource === '_148' && !['dekel', 'voice_agent'].includes(c.source)) return false;
+    else if (currentSource === '_249' && !['alon_dev', 'alon_dev_whatsapp', 'campaign'].includes(c.source)) return false;
+    else if (currentSource === '_organic' && ['dekel', 'voice_agent', 'alon_dev', 'alon_dev_whatsapp', 'campaign'].includes(c.source)) return false;
+    else if (currentSource !== 'all' && !currentSource.startsWith('_') && c.source !== currentSource) return false;
     if (currentFilter !== 'all' && c.lead_status !== currentFilter) return false;
     return true;
   });
@@ -2869,9 +2897,9 @@ async function runAutoFollowups() {
 
 // Map source filter to workspace
 function sourceToWorkspace(source) {
-  if (source === 'dekel' || source === 'voice_agent') return 'dekel';
-  if (source === 'alon_dev' || source === 'alon_dev_whatsapp') return 'alon_dev';
-  if (source === 'all' || !source) return null; // no filter
+  if (source === 'dekel' || source === 'voice_agent' || source === '_148') return 'dekel';
+  if (source === 'alon_dev' || source === 'alon_dev_whatsapp' || source === '_249') return 'alon_dev';
+  if (source === 'all' || !source || source === '_organic') return null; // no filter
   return null;
 }
 
