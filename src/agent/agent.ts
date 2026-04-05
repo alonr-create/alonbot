@@ -205,7 +205,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
   // Detect complex queries for extended thinking
   const thinkingKeywords = ['נתח', 'השווה', 'תכנן', 'אסטרטגיה', 'הסבר לעומק', 'ניתוח', 'יתרונות וחסרונות', 'מה ההבדל', 'תחשוב'];
   const isComplex = useOpus || msg.text.length > 150 || thinkingKeywords.some(kw => msg.text.includes(kw));
-  const useThinking = isComplex && !msg.image && !msg.document; // Thinking doesn't mix well with vision
+  const useThinking = isComplex && !msg.image && !msg.document && !isLeadConversation; // Thinking off for leads (can return empty text blocks)
 
   // Agent loop — handle tool calls, with Gemini fallback on rate limit
   let replyText: string;
@@ -426,9 +426,10 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       replyText += `\n\n📎 מקורות: ${[...citedSources].join(', ')}`;
     }
     if (!replyText && toolIteration >= MAX_TOOL_ITERATIONS) {
-      replyText = 'ביצעתי פעולות אבל הגעתי למגבלת הכלים. נסה לנסח את הבקשה מחדש.';
+      replyText = isLeadConversation ? 'שלום! קיבלתי את הודעתך. אחזור אליך בהקדם.' : 'ביצעתי פעולות אבל הגעתי למגבלת הכלים. נסה לנסח את הבקשה מחדש.';
     } else if (!replyText) {
-      replyText = 'קיבלתי את ההודעה אבל לא הצלחתי לייצר תשובה. נסה שוב.';
+      log.warn({ senderId: msg.senderId, channel: msg.channel }, 'empty response from Claude');
+      replyText = isLeadConversation ? 'שלום! קיבלתי את הודעתך. אחזור אליך בהקדם.' : 'קיבלתי את ההודעה אבל לא הצלחתי לייצר תשובה. נסה שוב.';
     }
   } catch (err: any) {
     // Fallback to Gemini on rate limit (429), overload (529), or billing/auth errors (400/401)
