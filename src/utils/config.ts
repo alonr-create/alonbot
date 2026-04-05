@@ -41,6 +41,8 @@ export const config = {
   evolutionInstance: process.env.EVOLUTION_INSTANCE || 'alonbot',
   dataDir: process.env.DATA_DIR || (existsSync('/data') ? '/data' : join(process.cwd(), 'data')),
   skillsDir: join(process.cwd(), 'skills'),
+  crmApiUrl: process.env.CRM_API_URL || 'https://chic-forgiveness-production.up.railway.app',
+  crmApiSecret: process.env.CRM_API_SECRET || '',
   growUserId: process.env.GROW_USER_ID || '',
   growPageCode: process.env.GROW_PAGE_CODE || '',
   growApiUrl: process.env.GROW_API_URL || 'https://secure.meshulam.co.il/api/light/server/1.0',
