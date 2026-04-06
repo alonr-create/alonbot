@@ -249,9 +249,13 @@ function formatUptime(seconds: number): string {
 }
 
 // ===== Web Push Notifications (VAPID) =====
-const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || 'BNI2cmVacqU-ko85HdAztRuHeIkcEkSkqtowzctVvRmlsaAVCLYq-SJ4rfHiHlJavEINc8dDieQGPA-fK2jaGOo';
-const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || 'tJ2AEB-UTaKnLnHgeZbAJ8LOQv8NtpfK43o2JKoFQkc';
-webpush.setVapidDetails('mailto:alondevoffice@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails('mailto:alondevoffice@gmail.com', VAPID_PUBLIC, VAPID_PRIVATE);
+} else {
+  log.warn('VAPID keys not set — push notifications disabled');
+}
 
 // Create push_subscriptions table
 try {
@@ -440,7 +444,10 @@ function verifyAuthCookie(cookieVal: string, secret: string): boolean {
     if (Date.now() > expires) return false;
     const payload = `${secret}:${expires}`;
     const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex').slice(0, 16);
-    return sig === expected;
+    const sigBuf = Buffer.from(sig);
+    const expectedBuf = Buffer.from(expected);
+    if (sigBuf.length !== expectedBuf.length) return false;
+    return crypto.timingSafeEqual(sigBuf, expectedBuf);
   } catch (e) { log.debug({ err: (e as Error).message }, 'auth cookie verification failed'); return false; }
 }
 
@@ -1323,7 +1330,7 @@ app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
       updates.push('lead_status = ?'); params.push(lead_status);
     }
     if (source !== undefined) { updates.push('source = ?'); params.push(source); }
-    else if (tags !== undefined) { updates.push('source = ?'); params.push(tags); }
+    if (tags !== undefined) { updates.push('tags = ?'); params.push(tags); }
     if (name !== undefined) { updates.push('name = ?'); params.push(name); }
     if (updates.length === 0) {
       res.status(400).json({ success: false, error: 'No fields to update' });
@@ -1993,7 +2000,7 @@ app.post('/api/wa-manager/create-template', dashAuth, async (req, res) => {
   try {
     const { name, category, language, headerType, headerText, body, footer, buttons } = req.body;
     if (!name || !body) { res.status(400).json({ success: false, error: 'name and body are required' }); return; }
-    const wabaId = config.waCloudWabaId || '1289908913100682';
+    const wabaId = config.waCloudWabaId || '1289908013100682';
     const token = config.waCloudToken;
     if (!token) { res.status(400).json({ success: false, error: 'Cloud API token not configured' }); return; }
 
@@ -2098,7 +2105,13 @@ app.get('/chat', dashAuth, (_req, res) => {
 // === External API: Send WhatsApp message (used by voice-agent) ===
 function externalAuth(req: any, res: any, next: any) {
   const secret = req.headers['x-api-secret'];
-  if (secret !== config.localApiSecret) {
+  if (!secret || !config.localApiSecret) {
+    res.status(401).json({ success: false, error: 'Unauthorized' });
+    return;
+  }
+  const aBuf = Buffer.from(String(secret));
+  const bBuf = Buffer.from(config.localApiSecret);
+  if (aBuf.length !== bBuf.length || !crypto.timingSafeEqual(aBuf, bBuf)) {
     res.status(401).json({ success: false, error: 'Unauthorized' });
     return;
   }
@@ -2505,6 +2518,26 @@ app.post('/api/create-payment', async (req, res) => {
 // Grow webhook — called server-to-server when payment completes
 app.post('/api/grow-webhook', (req, res) => {
   try {
+    // Verify webhook authenticity via shared secret
+    const webhookSecret = process.env.GROW_WEBHOOK_SECRET;
+    if (webhookSecret) {
+      const incomingToken = req.headers['x-webhook-token'] || req.query?.token;
+      if (!incomingToken) {
+        log.warn('Grow webhook rejected — no token provided');
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+      const tokenBuf = Buffer.from(String(incomingToken));
+      const secretBuf = Buffer.from(webhookSecret);
+      if (tokenBuf.length !== secretBuf.length || !crypto.timingSafeEqual(tokenBuf, secretBuf)) {
+        log.warn('Grow webhook rejected — invalid token');
+        res.status(401).json({ success: false, error: 'Unauthorized' });
+        return;
+      }
+    } else {
+      log.warn('GROW_WEBHOOK_SECRET not set — webhook is unprotected!');
+    }
+
     const data = req.body || {};
     const { customFields, asmachta, cardSuffix, sum, statusCode, transactionId, paymentProcessId } = data;
     const plan = customFields?.cField1 || 'basic';
@@ -2553,7 +2586,7 @@ app.post('/api/grow-webhook', (req, res) => {
 
               // 1. Notify Alon
               await wa.sendReply(
-                makeMsg('972546300783', 'אלון'),
+                makeMsg(process.env.ALON_PHONE || '972546300783', 'אלון'),
                 { text: `💳 תשלום חדש!\n\nשם: ${order.name}\nטלפון: ${order.phone}\nחבילה: ${planLabel}\nסכום: ₪${sum}\nכרטיס: ****${cardSuffix || '????'}\nאסמכתא: ${asmachta || ''}` }
               );
 
