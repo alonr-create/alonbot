@@ -2301,7 +2301,18 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
       replyPayload
     );
     // Log outbound WA message for flow tracking + 360Shmikley CRM visibility
-    const logContent = template ? `[template:${template}] ${(templateParams || []).join(', ')}` : message;
+    const expandTemplate = (name: string, params: string[]): string => {
+      const bodies: Record<string, string> = {
+        'dprisha_postcall_webinar':
+          'שלום {{1}} 👋\n\nתודה על השיחה! נשמח להיות לשירותך.\n\n🎥 ווביינר חינמי על תכנון פרישה:\nצפייה בהקלטה: https://www.youtube.com/live/5p_8hX1QhlE\nזום בשידור חי (כל שלישי 19:00): https://zoom.us/j/96752752908\n\nלפרטים נוספים: https://dprisha.co.il\n\nדקל לפרישה 🏡',
+        'dprisha_postcall_booked':
+          'שלום {{1}} 👋\n\nהפגישה נקבעה בהצלחה! נחזור אליך לאישור.\n\n🎥 בינתיים, ווביינר חינמי על תכנון פרישה:\nhttps://www.youtube.com/live/5p_8hX1QhlE\n\nדקל לפרישה 🏡',
+      };
+      const body = bodies[name];
+      if (!body) return `[template:${name}] ${params.join(', ')}`;
+      return body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? `{{${n}}}`);
+    };
+    const logContent = template ? expandTemplate(template, templateParams || []) : message;
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, logContent, nowIsrael());
     } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }
