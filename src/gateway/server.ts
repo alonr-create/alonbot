@@ -2144,6 +2144,14 @@ app.post('/api/sync/import', externalAuth, (req, res) => {
       INSERT OR IGNORE INTO messages (channel, sender_id, sender_name, role, content, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
     `);
+    // Dedup check: skip if same (channel, sender_id, role, content) exists within ±90s
+    // — happens when both cloud + local instances process the same Meta webhook
+    const existsSimilar = db.prepare(`
+      SELECT 1 FROM messages
+      WHERE channel = ? AND sender_id = ? AND role = ? AND content = ?
+        AND ABS(strftime('%s', created_at) - strftime('%s', ?)) < 90
+      LIMIT 1
+    `);
 
     const syncTx = db.transaction(() => {
       for (const l of leads) {
@@ -2151,6 +2159,8 @@ app.post('/api/sync/import', externalAuth, (req, res) => {
         leadsUpserted++;
       }
       for (const m of messages) {
+        const dup = existsSimilar.get(m.channel, m.sender_id, m.role, m.content, m.created_at);
+        if (dup) continue;
         insertMsg.run(m.channel, m.sender_id, m.sender_name || '', m.role, m.content, m.created_at);
         msgsInserted++;
       }
