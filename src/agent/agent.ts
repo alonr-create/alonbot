@@ -43,8 +43,10 @@ async function callGeminiFallback(systemPrompt: string, messages: Anthropic.Mess
   return { text: 'לא הצלחתי לעבד (כל המודלים נכשלו).', model: 'none' };
 }
 
-// Rate limiting: max 10 messages per minute per user (DB-backed, survives restarts)
-const RATE_LIMIT = 10;
+// Rate limiting: max 20 messages per minute per user (DB-backed, survives restarts)
+// Active leads (registered in `leads` table) are exempt — they're in legitimate sales flows
+// (calendar negotiation can produce many messages quickly).
+const RATE_LIMIT = 20;
 
 const stmtRateLimitCheck = db.prepare(
   "SELECT COUNT(*) as count FROM rate_limits WHERE user_id = ? AND timestamp > datetime(?, '-60 seconds')"
@@ -55,10 +57,16 @@ const stmtRateLimitAdd = db.prepare(
 const stmtRateLimitClean = db.prepare(
   "DELETE FROM rate_limits WHERE timestamp < datetime(?, '-5 minutes')"
 );
+const stmtIsLead = db.prepare("SELECT 1 FROM leads WHERE phone = ? LIMIT 1");
 
 function checkRateLimit(userId: string): boolean {
   // Skip rate limiting for the owner
   if (config.allowedTelegram.includes(userId) || config.allowedWhatsApp.includes(userId)) return true;
+  // Skip rate limiting for known leads — they're in active sales flows
+  try {
+    const lead = stmtIsLead.get(userId);
+    if (lead) return true;
+  } catch { /* leads table may not exist in test env — fall through to rate check */ }
   const now = nowIsrael();
   const row = stmtRateLimitCheck.get(userId, now) as { count: number };
   if (row.count >= RATE_LIMIT) return false;
