@@ -11,6 +11,7 @@ import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { getAllWorkspaces, getWorkspace, createWorkspace, updateWorkspace, deleteWorkspace } from '../utils/workspaces.js';
 import { LEAD_STATUS, PIPELINE_STAGES, TERMINAL_STATUSES } from '../utils/lead-status.js';
+import { registerGrowDekelWebhook } from './grow-dekel-webhook.js';
 
 const log = createLogger('server');
 
@@ -2911,6 +2912,9 @@ export function wsBroadcast(event: { type: string; [key: string]: any }) {
     }
   }
 }
+
+// Register Grow Dekel webhook route
+registerGrowDekelWebhook(app);
 
 export function startServer() {
   httpServer.listen(config.port, () => {
