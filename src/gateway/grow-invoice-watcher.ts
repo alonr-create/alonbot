@@ -1,0 +1,295 @@
+// Watches alonra@gmail.com for new Grow invoice emails.
+// When an email arrives with PDF attachment from @grow.security,
+// extract transaction details, match to a transaction in our SQLite bridge table,
+// upload the PDF to the matching Monday lead's file column.
+
+import { ImapFlow } from "imapflow";
+// @ts-ignore - mailparser lacks types; we only use simpleParser runtime
+import { simpleParser } from "mailparser";
+import { db } from "../utils/db.js";
+import { config } from "../utils/config.js";
+import { createLogger } from "../utils/logger.js";
+
+const log = createLogger("grow-invoice-watcher");
+
+const LEADS_BOARD_ID = 1443236269;
+const INVOICE_FILE_COL = "file_mm2g3bcb";
+const INVOICE_URL_COL = "link_mm2gh2mr";
+const INVOICE_NUMBER_COL = "text_mm2gb630";
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS grow_imap_state (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_uid INTEGER NOT NULL DEFAULT 0,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now', '+3 hours'))
+  );
+  INSERT OR IGNORE INTO grow_imap_state (id, last_uid) VALUES (1, 0);
+`);
+
+function getLastUid(): number {
+  const row: any = db
+    .prepare(`SELECT last_uid FROM grow_imap_state WHERE id = 1`)
+    .get();
+  return row?.last_uid || 0;
+}
+function setLastUid(uid: number): void {
+  db.prepare(
+    `UPDATE grow_imap_state SET last_uid = ?, updated_at = datetime('now', '+3 hours') WHERE id = 1`,
+  ).run(uid);
+}
+
+// Extract transaction details from Grow HTML email
+function extractFromHtml(html: string): {
+  asmachta?: string;
+  fullName?: string;
+  payerPhone?: string;
+  paymentSum?: string;
+  invoiceNumber?: string;
+  invoiceUrl?: string;
+} {
+  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
+  const out: any = {};
+  const asmachta = text.match(/אסמכתא[:\s]*(\d+)/);
+  if (asmachta) out.asmachta = asmachta[1];
+  const sum = text.match(/(\d[\d,]*\.?\d*)\s*ש["״]?ח|₪\s*(\d[\d,]*\.?\d*)/);
+  if (sum) out.paymentSum = (sum[1] || sum[2]).replace(/,/g, "");
+  const name = text.match(/שם:\s*([^\s](?:[^\n]{0,50}?))\s+(?:טלפון|מייל)/);
+  if (name) out.fullName = name[1].trim();
+  const phone = text.match(/טלפון:\s*(\d[\d\-+]*)/);
+  if (phone) out.payerPhone = phone[1].replace(/[^\d+]/g, "");
+  const invNum = text.match(/חשבונית\s*(?:מס)?[.:#\s]*(\d+)/i);
+  if (invNum) out.invoiceNumber = invNum[1];
+  // Look for invoice URLs (pay.grow.link or secure.meshulam.co.il)
+  const urlMatch = html.match(
+    /https?:\/\/[^\s"'<>]*(?:meshulam\.co\.il|grow\.link|grow\.website)[^\s"'<>]*/,
+  );
+  if (urlMatch) out.invoiceUrl = urlMatch[0];
+  return out;
+}
+
+async function mondayQuery(query: string): Promise<any> {
+  const res = await fetch("https://api.monday.com/v2", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: config.mondayApiKey,
+      "API-Version": "2024-01",
+    },
+    body: JSON.stringify({ query }),
+  });
+  return await res.json();
+}
+
+function normalizePhone(raw: string): string[] {
+  if (!raw) return [];
+  const digits = raw.replace(/\D/g, "");
+  const s = new Set<string>([digits]);
+  if (digits.startsWith("972")) {
+    s.add("0" + digits.slice(3));
+    s.add(digits.slice(3));
+  } else if (digits.startsWith("0")) {
+    s.add(digits.slice(1));
+    s.add("972" + digits.slice(1));
+  }
+  return [...s].filter(Boolean);
+}
+
+async function findLeadByDetails(
+  phone: string,
+  asmachta: string,
+): Promise<string | null> {
+  // 1. Try SQLite cache (from previous transaction webhook)
+  if (asmachta) {
+    const row: any = db
+      .prepare(
+        `SELECT monday_item_id FROM grow_dekel_transactions WHERE asmachta = ? AND monday_item_id IS NOT NULL`,
+      )
+      .get(asmachta);
+    if (row?.monday_item_id) return row.monday_item_id;
+  }
+  // 2. Search Monday by phone
+  if (!config.mondayApiKey) return null;
+  for (const p of normalizePhone(phone)) {
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 1, columns: [{column_id: "phone", column_values: ["${p}"]}]) { items { id } } }`;
+    const data = await mondayQuery(q);
+    const itemId = data?.data?.items_page_by_column_values?.items?.[0]?.id;
+    if (itemId) return itemId;
+  }
+  return null;
+}
+
+async function uploadPdfToMonday(
+  itemId: string,
+  pdf: Buffer,
+  filename: string,
+): Promise<boolean> {
+  if (!config.mondayApiKey) return false;
+  try {
+    const form = new FormData();
+    form.append(
+      "query",
+      `mutation ($file: File!) { add_file_to_column(item_id: ${itemId}, column_id: "${INVOICE_FILE_COL}", file: $file) { id } }`,
+    );
+    form.append("map", '{"fileToUpload":"variables.file"}');
+    form.append(
+      "fileToUpload",
+      new Blob([new Uint8Array(pdf)], { type: "application/pdf" }),
+      filename,
+    );
+    const res = await fetch("https://api.monday.com/v2/file", {
+      method: "POST",
+      headers: { Authorization: config.mondayApiKey },
+      body: form as any,
+    });
+    const data: any = await res.json();
+    return Boolean(data?.data?.add_file_to_column?.id);
+  } catch (e: any) {
+    log.warn({ err: e.message }, "monday PDF upload failed");
+    return false;
+  }
+}
+
+async function sendTelegram(text: string): Promise<void> {
+  if (!config.telegramBotToken) return;
+  try {
+    await fetch(
+      `https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chat_id: process.env.ALON_TG_CHAT_ID || "1584581543",
+          text,
+          parse_mode: "Markdown",
+        }),
+      },
+    );
+  } catch {}
+}
+
+async function processMessage(c: any, uid: number): Promise<void> {
+  const msg = await c.fetchOne(uid, { envelope: true, source: true });
+  const fromAddr = msg.envelope.from?.[0]?.address || "";
+  const subject = msg.envelope.subject || "";
+
+  log.info({ uid, from: fromAddr, subject }, "processing Grow email");
+
+  // Parse full email with attachments
+  const parsed: any = await simpleParser(msg.source);
+  const pdfAtt = (parsed.attachments || []).find(
+    (a: any) =>
+      a.contentType?.includes("pdf") ||
+      a.filename?.toLowerCase().endsWith(".pdf"),
+  );
+
+  const html = parsed.html || "";
+  const details = extractFromHtml(typeof html === "string" ? html : "");
+
+  log.info({ uid, hasPdf: Boolean(pdfAtt), details }, "extracted details");
+
+  // Find matching lead
+  const itemId = await findLeadByDetails(
+    details.payerPhone || "",
+    details.asmachta || "",
+  );
+  if (!itemId) {
+    log.warn(
+      { uid, phone: details.payerPhone, asmachta: details.asmachta },
+      "no matching lead found",
+    );
+    await sendTelegram(
+      `📧 מייל חשבונית מ-Grow התקבל (asmachta: ${details.asmachta}, ${details.fullName}) — לא נמצא ליד תואם במאנדיי`,
+    );
+    return;
+  }
+
+  // Upload PDF to Monday (if present)
+  let uploaded = false;
+  if (pdfAtt?.content) {
+    const filename =
+      pdfAtt.filename ||
+      `חשבונית-${details.invoiceNumber || details.asmachta || "grow"}.pdf`;
+    uploaded = await uploadPdfToMonday(
+      itemId,
+      pdfAtt.content as Buffer,
+      filename,
+    );
+  }
+
+  // Also update invoice number + URL link columns
+  if (details.invoiceNumber || details.invoiceUrl) {
+    const values: Record<string, any> = {};
+    if (details.invoiceNumber)
+      values[INVOICE_NUMBER_COL] = details.invoiceNumber;
+    if (details.invoiceUrl)
+      values[INVOICE_URL_COL] = {
+        url: details.invoiceUrl,
+        text: `חשבונית ${details.invoiceNumber || ""}`.trim(),
+      };
+    const valuesJson = JSON.stringify(JSON.stringify(values));
+    await mondayQuery(
+      `mutation { change_multiple_column_values(board_id: ${LEADS_BOARD_ID}, item_id: ${itemId}, column_values: ${valuesJson}) { id } }`,
+    );
+  }
+
+  const tgText = uploaded
+    ? `📎 חשבונית ${details.invoiceNumber || details.asmachta} הועלתה לליד של *${details.fullName}*`
+    : `📧 מייל חשבונית (${details.fullName}) — ליד עודכן${pdfAtt ? "" : ", אבל אין PDF מצורף"}`;
+  await sendTelegram(tgText);
+}
+
+let running = false;
+
+export async function runImapPoll(): Promise<void> {
+  if (running) return;
+  running = true;
+
+  const user = process.env.IMAP_USER;
+  const pass = process.env.IMAP_PASS?.replace(/\s/g, "");
+  if (!user || !pass) {
+    log.debug("IMAP_USER/IMAP_PASS not set — skipping poll");
+    running = false;
+    return;
+  }
+
+  const client = new ImapFlow({
+    host: "imap.gmail.com",
+    port: 993,
+    secure: true,
+    auth: { user, pass },
+    logger: false,
+  });
+
+  try {
+    await client.connect();
+    await client.mailboxOpen("INBOX");
+    const lastUid = getLastUid();
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24h
+    const searchResult = await client.search({ from: "grow.security", since });
+    const uids: number[] = Array.isArray(searchResult) ? searchResult : [];
+    const newUids = uids.filter((u: number) => u > lastUid);
+    if (newUids.length > 0) {
+      log.info({ count: newUids.length, newUids }, "found new Grow emails");
+      for (const uid of newUids) {
+        try {
+          await processMessage(client, uid);
+          setLastUid(uid);
+        } catch (e: any) {
+          log.error({ err: e.message, uid }, "failed to process email");
+        }
+      }
+    }
+    await client.logout();
+  } catch (e: any) {
+    log.warn({ err: e.message }, "IMAP poll error");
+  } finally {
+    running = false;
+  }
+}
+
+export function startImapWatcher(intervalMs = 60_000): void {
+  log.info({ intervalMs }, "starting Grow invoice IMAP watcher");
+  // Initial run after 30s (let server boot)
+  setTimeout(() => runImapPoll(), 30_000);
+  setInterval(() => runImapPoll(), intervalMs);
+}
