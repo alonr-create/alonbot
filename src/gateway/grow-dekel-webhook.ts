@@ -46,6 +46,7 @@ const COLS = {
   paymentDesc: "text_mm2gxpcy", // תיאור שירות Grow
   invoiceUrl: "link_mm2gh2mr", // חשבונית Grow (link)
   invoiceNumber: "text_mm2gb630", // מספר חשבונית Grow
+  invoiceFile: "file_mm2g3bcb", // חשבונית Grow PDF
 };
 
 const ALON_TG_CHAT = process.env.ALON_TG_CHAT_ID || "1584581543"; // @AliClawIsrael_bot private chat
@@ -159,11 +160,73 @@ async function updateLeadPayment(itemId: string, tx: any): Promise<void> {
     log.warn({ errors: res.errors, itemId }, "monday update failed");
 }
 
+async function tryDownloadPdf(
+  url: string,
+): Promise<{ buffer: Buffer; contentType: string } | null> {
+  try {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) {
+      log.warn({ url, status: res.status }, "invoice fetch failed");
+      return null;
+    }
+    const contentType = res.headers.get("content-type") || "";
+    const arr = await res.arrayBuffer();
+    const buf = Buffer.from(arr);
+    // Check for PDF magic bytes (%PDF)
+    if (buf.slice(0, 4).toString() !== "%PDF" && !contentType.includes("pdf")) {
+      log.warn(
+        { url, contentType, firstBytes: buf.slice(0, 20).toString("hex") },
+        "invoice URL did not return PDF (likely auth page)",
+      );
+      return null;
+    }
+    return { buffer: buf, contentType };
+  } catch (e: any) {
+    log.warn({ err: e.message }, "invoice download error");
+    return null;
+  }
+}
+
+async function uploadPdfToMondayFileColumn(
+  itemId: string,
+  columnId: string,
+  pdf: Buffer,
+  filename: string,
+): Promise<boolean> {
+  if (!config.mondayApiKey) return false;
+  try {
+    const form = new FormData();
+    const query = `mutation ($file: File!) { add_file_to_column(item_id: ${itemId}, column_id: "${columnId}", file: $file) { id } }`;
+    form.append("query", query);
+    form.append("map", '{"fileToUpload":"variables.file"}');
+    form.append(
+      "fileToUpload",
+      new Blob([new Uint8Array(pdf)], { type: "application/pdf" }),
+      filename,
+    );
+    const res = await fetch("https://api.monday.com/v2/file", {
+      method: "POST",
+      headers: { Authorization: config.mondayApiKey, "API-Version": "2024-01" },
+      body: form as any,
+    });
+    const data: any = await res.json();
+    if (data.errors) {
+      log.warn({ errors: data.errors }, "file upload failed");
+      return false;
+    }
+    return Boolean(data?.data?.add_file_to_column?.id);
+  } catch (e: any) {
+    log.warn({ err: e.message }, "file upload error");
+    return false;
+  }
+}
+
 async function attachInvoice(
   itemId: string,
   invoiceUrl: string,
   invoiceNumber: string,
-): Promise<void> {
+): Promise<{ fileUploaded: boolean }> {
+  // Always save link + number (as fallback)
   const linkValue = {
     url: invoiceUrl,
     text: `חשבונית ${invoiceNumber || ""}`.trim(),
@@ -176,9 +239,28 @@ async function attachInvoice(
   const mutation = `mutation { change_multiple_column_values(board_id: ${LEADS_BOARD_ID}, item_id: ${itemId}, column_values: ${valuesJson}) { id } }`;
   await mondayQuery(mutation);
 
+  // Try download + upload PDF (works if Grow URL is public/signed)
+  let fileUploaded = false;
+  const pdfData = await tryDownloadPdf(invoiceUrl);
+  if (pdfData) {
+    const filename = `חשבונית-${invoiceNumber || "grow"}.pdf`;
+    fileUploaded = await uploadPdfToMondayFileColumn(
+      itemId,
+      COLS.invoiceFile,
+      pdfData.buffer,
+      filename,
+    );
+    log.info({ itemId, invoiceNumber, fileUploaded }, "PDF upload result");
+  }
+
+  const updateBody = fileUploaded
+    ? `🧾 חשבונית ${invoiceNumber || ""} הועלתה כקובץ (+ לינק לגיבוי): ${invoiceUrl}`
+    : `🧾 חשבונית ${invoiceNumber || ""} (לינק בלבד — PDF לא נגיש ללא login): ${invoiceUrl}`;
   await mondayQuery(
-    `mutation { create_update(item_id: ${itemId}, body: "🧾 חשבונית ${invoiceNumber || ""}: ${invoiceUrl}") { id } }`,
+    `mutation { create_update(item_id: ${itemId}, body: "${updateBody.replace(/"/g, '\\"')}") { id } }`,
   );
+
+  return { fileUploaded };
 }
 
 async function sendTelegram(
@@ -404,7 +486,7 @@ async function handleTransaction(tx: any): Promise<any> {
   return { itemId, transactionCode, lookupError, payerPhone, fullName };
 }
 
-async function handleInvoice(inv: any): Promise<void> {
+async function handleInvoice(inv: any): Promise<any> {
   const transactionCode = inv.transactionCode || "";
   const invoiceUrl = inv.invoiceUrl || "";
   const invoiceNumber = inv.invoiceNumber || "";
@@ -431,15 +513,23 @@ async function handleInvoice(inv: any): Promise<void> {
   }
 
   try {
-    await attachInvoice(row.monday_item_id, invoiceUrl, invoiceNumber);
+    const { fileUploaded } = await attachInvoice(
+      row.monday_item_id,
+      invoiceUrl,
+      invoiceNumber,
+    );
     db.prepare(
       `UPDATE grow_dekel_transactions SET invoice_url = ?, invoice_number = ?, updated_at = datetime('now', '+3 hours') WHERE transaction_code = ?`,
     ).run(invoiceUrl, invoiceNumber, transactionCode);
 
+    const statusLine = fileUploaded
+      ? "📎 PDF הועלה לליד"
+      : "🔗 לינק לליד (PDF דורש login)";
     await sendTelegram(
-      `🧾 חשבונית ${invoiceNumber} צורפה לליד של *${row.full_name}*`,
+      `🧾 חשבונית ${invoiceNumber} לליד של *${row.full_name}*\n${statusLine}`,
       { label: "פתח חשבונית", url: invoiceUrl },
     );
+    return { fileUploaded };
   } catch (e: any) {
     log.error({ err: e.message, transactionCode }, "attach invoice failed");
   }
