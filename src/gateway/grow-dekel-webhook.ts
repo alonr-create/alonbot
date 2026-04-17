@@ -265,12 +265,25 @@ export function registerGrowDekelWebhook(app: Express): void {
         "grow-dekel webhook received",
       );
 
+      // Debug mode: process synchronously and return result (query ?debug=1)
+      if (req.query?.debug === "1") {
+        try {
+          const result = await processWebhook(data);
+          res.status(200).json({ ok: true, debug: true, result });
+        } catch (e: any) {
+          res
+            .status(500)
+            .json({ ok: false, debug: true, error: e.message, stack: e.stack });
+        }
+        return;
+      }
+
       res.status(200).json({ ok: true }); // ACK fast — Grow may retry otherwise
 
       // Process async after ACK
       setImmediate(() =>
         processWebhook(data).catch((e) =>
-          log.error({ err: e.message }, "processing failed"),
+          log.error({ err: e.message, stack: e.stack }, "processing failed"),
         ),
       );
     } catch (e: any) {
@@ -282,23 +295,23 @@ export function registerGrowDekelWebhook(app: Express): void {
   log.info("registered POST /api/grow-dekel-webhook");
 }
 
-async function processWebhook(data: any): Promise<void> {
+async function processWebhook(data: any): Promise<any> {
   const transactionCode: string = data.transactionCode || "";
 
   // Invoice event — has invoiceUrl
   if (data.invoiceUrl) {
-    await handleInvoice(data);
-    return;
+    return await handleInvoice(data);
   }
 
   // Transaction event
-  await handleTransaction(data);
+  const txResult = await handleTransaction(data);
 
   // Safety net: some Grow accounts send invoice in same payload
   if (data.invoiceUrl) await handleInvoice(data);
+  return txResult;
 }
 
-async function handleTransaction(tx: any): Promise<void> {
+async function handleTransaction(tx: any): Promise<any> {
   const transactionCode = tx.transactionCode || "";
   const fullName = tx.fullName || "";
   const payerPhone = tx.payerPhone || "";
@@ -314,6 +327,7 @@ async function handleTransaction(tx: any): Promise<void> {
 
   // Monday lookup + update
   let itemId: string | null = null;
+  let lookupError: string | null = null;
   try {
     itemId = await findLeadItemId(payerPhone, payerEmail, fullName);
     if (itemId) {
@@ -325,7 +339,11 @@ async function handleTransaction(tx: any): Promise<void> {
       );
     }
   } catch (e: any) {
-    log.error({ err: e.message }, "monday lookup/update failed");
+    lookupError = `${e.message}\n${e.stack}`;
+    log.error(
+      { err: e.message, stack: e.stack },
+      "monday lookup/update failed",
+    );
   }
 
   // Persist for invoice bridging
@@ -382,6 +400,8 @@ async function handleTransaction(tx: any): Promise<void> {
       ? `✅ עודכן בלידים\n${itemUrl}`
       : `⚠️ לא נמצא ליד — יש להוסיף ידנית`);
   await sendWhatsAppCloud(waText);
+
+  return { itemId, transactionCode, lookupError, payerPhone, fullName };
 }
 
 async function handleInvoice(inv: any): Promise<void> {
