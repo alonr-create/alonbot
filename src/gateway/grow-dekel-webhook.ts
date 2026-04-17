@@ -48,8 +48,8 @@ const COLS = {
   invoiceNumber: "text_mm2gb630", // מספר חשבונית Grow
 };
 
-const ALON_TG_CHAT = "546585625";
-const ALON_WA_PHONE = process.env.ALON_PHONE || "972559566148";
+const ALON_TG_CHAT = process.env.ALON_TG_CHAT_ID || "1584581543"; // @AliClawIsrael_bot private chat
+const ALON_WA_PHONE = process.env.ALON_PHONE || "972546300783";
 
 // ── helpers ──
 function normalizePhone(raw: string): string[] {
