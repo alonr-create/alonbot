@@ -97,6 +97,16 @@ async function mondayQuery(query: string): Promise<any> {
   return data;
 }
 
+// When multiple leads match (duplicates from Meta forms etc), pick the one
+// updated most recently — that's the active record the user works on.
+function pickMostRecent(items: any[]): string | null {
+  if (!items?.length) return null;
+  const sorted = [...items].sort((a, b) =>
+    String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
+  );
+  return sorted[0].id;
+}
+
 async function findLeadItemId(
   phone: string,
   email: string,
@@ -104,35 +114,50 @@ async function findLeadItemId(
 ): Promise<string | null> {
   const phoneCandidates = normalizePhone(phone);
 
-  // Try each phone format
+  // Try each phone format. Pull up to 25 matches and pick the most recently
+  // updated one, since duplicates are common (Meta form sync + manual entry).
   for (const p of phoneCandidates) {
-    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 1, columns: [{column_id: "${COLS.phone}", column_values: ["${p}"]}]) { items { id name } } }`;
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 25, columns: [{column_id: "${COLS.phone}", column_values: ["${p}"]}]) { items { id name updated_at } } }`;
     const data = await mondayQuery(q);
-    const itemId = data?.data?.items_page_by_column_values?.items?.[0]?.id;
+    const items = data?.data?.items_page_by_column_values?.items || [];
+    const itemId = pickMostRecent(items);
     if (itemId) {
-      log.info({ phone: p, itemId }, "lead matched by phone");
+      log.info(
+        { phone: p, itemId, totalMatches: items.length },
+        items.length > 1
+          ? "lead matched by phone (picked most recent of duplicates)"
+          : "lead matched by phone",
+      );
       return itemId;
     }
   }
 
   // Fallback: email
   if (email) {
-    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 1, columns: [{column_id: "${COLS.email}", column_values: ["${email.toLowerCase()}"]}]) { items { id name } } }`;
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 25, columns: [{column_id: "${COLS.email}", column_values: ["${email.toLowerCase()}"]}]) { items { id name updated_at } } }`;
     const data = await mondayQuery(q);
-    const itemId = data?.data?.items_page_by_column_values?.items?.[0]?.id;
+    const items = data?.data?.items_page_by_column_values?.items || [];
+    const itemId = pickMostRecent(items);
     if (itemId) {
-      log.info({ email, itemId }, "lead matched by email");
+      log.info(
+        { email, itemId, totalMatches: items.length },
+        "lead matched by email",
+      );
       return itemId;
     }
   }
 
   // Fallback: name
   if (name) {
-    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 1, columns: [{column_id: "name", column_values: ["${name.replace(/"/g, '\\"')}"]}]) { items { id name } } }`;
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 25, columns: [{column_id: "name", column_values: ["${name.replace(/"/g, '\\"')}"]}]) { items { id name updated_at } } }`;
     const data = await mondayQuery(q);
-    const itemId = data?.data?.items_page_by_column_values?.items?.[0]?.id;
+    const items = data?.data?.items_page_by_column_values?.items || [];
+    const itemId = pickMostRecent(items);
     if (itemId) {
-      log.info({ name, itemId }, "lead matched by name");
+      log.info(
+        { name, itemId, totalMatches: items.length },
+        "lead matched by name",
+      );
       return itemId;
     }
   }

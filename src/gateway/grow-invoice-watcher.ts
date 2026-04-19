@@ -145,13 +145,17 @@ async function findLeadByDetails(
       .get(asmachta);
     if (row?.monday_item_id) return row.monday_item_id;
   }
-  // 2. Search Monday by phone
+  // 2. Search Monday by phone — pick most recently updated when duplicates exist
   if (!config.mondayApiKey) return null;
   for (const p of normalizePhone(phone)) {
-    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 1, columns: [{column_id: "phone", column_values: ["${p}"]}]) { items { id } } }`;
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 25, columns: [{column_id: "phone", column_values: ["${p}"]}]) { items { id updated_at } } }`;
     const data = await mondayQuery(q);
-    const itemId = data?.data?.items_page_by_column_values?.items?.[0]?.id;
-    if (itemId) return itemId;
+    const items: any[] = data?.data?.items_page_by_column_values?.items || [];
+    if (items.length === 0) continue;
+    const sorted = [...items].sort((a, b) =>
+      String(b.updated_at || "").localeCompare(String(a.updated_at || "")),
+    );
+    return sorted[0].id;
   }
   return null;
 }
