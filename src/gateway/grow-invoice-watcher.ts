@@ -57,14 +57,52 @@ function extractFromHtml(html: string): {
   if (name) out.fullName = name[1].trim();
   const phone = text.match(/טלפון:\s*(\d[\d\-+]*)/);
   if (phone) out.payerPhone = phone[1].replace(/[^\d+]/g, "");
-  const invNum = text.match(/חשבונית\s*(?:מס)?[.:#\s]*(\d+)/i);
+  const invNum =
+    text.match(/חשבונית\s*(?:מס)?[.:#\s]*(\d+)/i) ||
+    text.match(/עסקה\s+(\d+)/i);
   if (invNum) out.invoiceNumber = invNum[1];
-  // Look for invoice URLs (pay.grow.link or secure.meshulam.co.il)
-  const urlMatch = html.match(
-    /https?:\/\/[^\s"'<>]*(?:meshulam\.co\.il|grow\.link|grow\.website)[^\s"'<>]*/,
-  );
-  if (urlMatch) out.invoiceUrl = urlMatch[0];
+
+  // Find candidate invoice URLs. Grow emails embed many image URLs (logos,
+  // mail decorations) on the same domains, so we filter image extensions
+  // and prefer URLs that contain /openInvoice or /api/invoice.
+  const allUrls = [
+    ...html.matchAll(
+      /https?:\/\/[^\s"'<>]*(?:meshulam\.co\.il|grow\.link|grow\.website|grow\.business)[^\s"'<>]*/gi,
+    ),
+  ].map((m) => m[0]);
+  const isImage = (u: string) =>
+    /\.(png|jpg|jpeg|gif|svg|webp|ico)(\?|$)/i.test(u);
+  const candidates = allUrls.filter((u) => !isImage(u));
+  const preferred =
+    candidates.find((u) => /openInvoice/i.test(u)) ||
+    candidates.find((u) => /\/api\/invoice/i.test(u)) ||
+    candidates.find((u) => /receipt|חשבונית/i.test(u)) ||
+    candidates[0];
+  if (preferred) out.invoiceUrl = preferred;
   return out;
+}
+
+// Download bytes from a URL, return PDF buffer if response is actually a PDF.
+async function tryDownloadPdf(url: string): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url, { redirect: "follow" });
+    if (!res.ok) {
+      log.warn({ url, status: res.status }, "invoice URL fetch failed");
+      return null;
+    }
+    const ct = res.headers.get("content-type") || "";
+    const arr = await res.arrayBuffer();
+    const buf = Buffer.from(arr);
+    if (buf.slice(0, 4).toString() === "%PDF" || ct.includes("pdf")) return buf;
+    log.warn(
+      { url, contentType: ct, firstBytes: buf.slice(0, 8).toString("hex") },
+      "URL did not return PDF",
+    );
+    return null;
+  } catch (e: any) {
+    log.warn({ url, err: e.message }, "PDF download error");
+    return null;
+  }
 }
 
 async function mondayQuery(query: string): Promise<any> {
@@ -203,18 +241,24 @@ async function processMessage(c: any, uid: number): Promise<void> {
     return;
   }
 
-  // Upload PDF to Monday (if present)
+  // Upload PDF to Monday — prefer attachment, fallback to downloading
+  // the invoiceUrl (Meshulam openInvoice serves the PDF directly).
   let uploaded = false;
+  const filename = `חשבונית-${details.invoiceNumber || details.asmachta || "grow"}.pdf`;
   if (pdfAtt?.content) {
-    const filename =
-      pdfAtt.filename ||
-      `חשבונית-${details.invoiceNumber || details.asmachta || "grow"}.pdf`;
     uploaded = await uploadPdfToMonday(
       itemId,
       pdfAtt.content as Buffer,
-      filename,
+      pdfAtt.filename || filename,
     );
+  } else if (details.invoiceUrl) {
+    const pdfBuf = await tryDownloadPdf(details.invoiceUrl);
+    if (pdfBuf) uploaded = await uploadPdfToMonday(itemId, pdfBuf, filename);
   }
+  log.info(
+    { itemId, invoiceNumber: details.invoiceNumber, uploaded },
+    "PDF upload result",
+  );
 
   // Also update invoice number + URL link columns
   if (details.invoiceNumber || details.invoiceUrl) {

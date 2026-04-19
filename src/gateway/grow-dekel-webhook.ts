@@ -47,6 +47,15 @@ const COLS = {
   invoiceUrl: "link_mm2gh2mr", // חשבונית Grow (link)
   invoiceNumber: "text_mm2gb630", // מספר חשבונית Grow
   invoiceFile: "file_mm2g3bcb", // חשבונית Grow PDF
+  initialPlanningPaid: "status48__1", // שולם עבור ת.ראשוני
+};
+
+// Map payment sum → label index in COLS.initialPlanningPaid
+// 397 → 4, 547 → 6, 635 → 7  (per board settings 2026-04-19)
+const INITIAL_PLANNING_LABEL: Record<number, number> = {
+  397: 4,
+  547: 6,
+  635: 7,
 };
 
 const ALON_TG_CHAT = process.env.ALON_TG_CHAT_ID || "1584581543"; // @AliClawIsrael_bot private chat
@@ -145,7 +154,27 @@ function toIsoDate(raw: string): string {
   return new Date().toISOString().slice(0, 10);
 }
 
+async function getLeadName(itemId: string): Promise<string> {
+  try {
+    const q = `query { items(ids: [${itemId}]) { name } }`;
+    const data = await mondayQuery(q);
+    return data?.data?.items?.[0]?.name || "";
+  } catch {
+    return "";
+  }
+}
+
+async function renameLead(itemId: string, newName: string): Promise<void> {
+  const safe = newName.replace(/"/g, '\\"').slice(0, 200);
+  const mutation = `mutation { change_simple_column_value(board_id: ${LEADS_BOARD_ID}, item_id: ${itemId}, column_id: "name", value: "${safe}") { id } }`;
+  const res = await mondayQuery(mutation);
+  if (res.errors)
+    log.warn({ errors: res.errors, itemId, newName }, "monday rename failed");
+  else log.info({ itemId, newName }, "lead renamed");
+}
+
 async function updateLeadPayment(itemId: string, tx: any): Promise<void> {
+  const sum = Number(tx.paymentSum ?? tx.sum ?? 0);
   const values: Record<string, any> = {
     [COLS.paidStatus]: { label: "שולם" },
     [COLS.paymentSum]: String(tx.paymentSum ?? ""),
@@ -153,6 +182,17 @@ async function updateLeadPayment(itemId: string, tx: any): Promise<void> {
     [COLS.paymentDate]: { date: toIsoDate(tx.paymentDate) },
     [COLS.paymentDesc]: String(tx.paymentDesc ?? "").slice(0, 200),
   };
+
+  // Auto-mark "שולם עבור ת.ראשוני" if amount matches initial-planning tier
+  const planningLabelIdx = INITIAL_PLANNING_LABEL[sum];
+  if (planningLabelIdx !== undefined) {
+    values[COLS.initialPlanningPaid] = { index: planningLabelIdx };
+    log.info(
+      { itemId, sum, labelIdx: planningLabelIdx },
+      "auto-marking initial-planning paid",
+    );
+  }
+
   const valuesJson = JSON.stringify(JSON.stringify(values));
   const mutation = `mutation { change_multiple_column_values(board_id: ${LEADS_BOARD_ID}, item_id: ${itemId}, column_values: ${valuesJson}, create_labels_if_missing: true) { id } }`;
   const res = await mondayQuery(mutation);
@@ -293,27 +333,71 @@ async function sendTelegram(
   }
 }
 
-async function sendWhatsAppCloud(text: string): Promise<void> {
-  const token = config.waCloudToken;
-  const phoneId = config.waCloudPhoneId;
-  if (!token || !phoneId) return;
-  try {
-    await fetch(`https://graph.facebook.com/v21.0/${phoneId}/messages`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        messaging_product: "whatsapp",
-        to: ALON_WA_PHONE,
-        type: "text",
-        text: { body: text, preview_url: true },
-      }),
-    });
-  } catch (e: any) {
-    log.warn({ err: e.message }, "whatsapp send failed");
+// Send WhatsApp text via Cloud API. Returns true on accepted send.
+// Tries each (token, phoneId) pair until one succeeds. Used to notify Alon.
+async function sendWhatsAppText(
+  to: string,
+  text: string,
+  channels: Array<{ token: string; phoneId: string; label: string }>,
+): Promise<boolean> {
+  for (const ch of channels) {
+    if (!ch.token || !ch.phoneId) continue;
+    try {
+      const res = await fetch(
+        `https://graph.facebook.com/v21.0/${ch.phoneId}/messages`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${ch.token}`,
+          },
+          body: JSON.stringify({
+            messaging_product: "whatsapp",
+            to,
+            type: "text",
+            text: { body: text, preview_url: true },
+          }),
+        },
+      );
+      const data: any = await res.json().catch(() => ({}));
+      if (res.ok && data?.messages?.[0]?.id) {
+        log.info(
+          { channel: ch.label, to, msgId: data.messages[0].id },
+          "whatsapp sent",
+        );
+        return true;
+      }
+      log.warn(
+        {
+          channel: ch.label,
+          to,
+          status: res.status,
+          err: data?.error?.message || data?.error?.code || "no msg id",
+        },
+        "whatsapp send rejected — trying next channel",
+      );
+    } catch (e: any) {
+      log.warn({ channel: ch.label, err: e.message }, "whatsapp send error");
+    }
   }
+  return false;
+}
+
+// Notify Alon via WhatsApp. Try Alon.dev first (he chats with it daily, so
+// the 24h customer-message window stays open), then fall back to Dekel.
+async function sendWhatsAppCloud(text: string): Promise<void> {
+  await sendWhatsAppText(ALON_WA_PHONE, text, [
+    {
+      token: config.waCloudToken2,
+      phoneId: config.waCloudPhoneId2,
+      label: "alon-dev",
+    },
+    {
+      token: config.waCloudToken,
+      phoneId: config.waCloudPhoneId,
+      label: "dekel",
+    },
+  ]);
 }
 
 function verifyWebhookAuth(req: Request): boolean {
@@ -413,6 +497,16 @@ async function handleTransaction(tx: any): Promise<any> {
   try {
     itemId = await findLeadItemId(payerPhone, payerEmail, fullName);
     if (itemId) {
+      // If lead row was created with a placeholder name (common when Meta
+      // form sync ran without name), replace with the payer's real name so
+      // it shows up in Monday search.
+      if (fullName) {
+        const currentName = await getLeadName(itemId);
+        const placeholders = ["unknown", "Unknown", "—", "-", "N/A", ""];
+        if (placeholders.includes((currentName || "").trim())) {
+          await renameLead(itemId, fullName);
+        }
+      }
       await updateLeadPayment(itemId, tx);
     } else {
       log.warn(
