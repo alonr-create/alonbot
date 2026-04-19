@@ -742,7 +742,7 @@ async function handleTransaction(tx: any): Promise<any> {
     monLine;
 
   const itemUrl = itemId
-    ? `https://alonr-7280s-projects.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
+    ? `https://palm530671.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
     : "";
   await sendTelegram(
     tgText,
@@ -759,7 +759,7 @@ async function handleTransaction(tx: any): Promise<any> {
     paymentSum,
     paymentDesc,
     mondayStatus: itemId
-      ? `https://alonr-7280s-projects.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
+      ? `https://palm530671.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
       : `לא נמצא ליד לפי ${payerPhone}`,
   });
   // Notify Dekel (partner) on every payment via his own template.
