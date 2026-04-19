@@ -216,6 +216,16 @@ async function processMessage(c: any, uid: number): Promise<void> {
 
   log.info({ uid, from: fromAddr, subject }, "processing Grow email");
 
+  // Grow sends 2 emails per payment: support@grow.security (payment notice,
+  // invoiceUrl is just "https://grow.business") and invoice@grow.security
+  // (the real invoice with openInvoice URL serving the PDF). Only act on
+  // the invoice email; the support one would just write a bad placeholder
+  // URL and 403 on download.
+  if (!fromAddr.toLowerCase().includes("invoice@grow.security")) {
+    log.info({ uid, from: fromAddr }, "skipping non-invoice Grow email");
+    return;
+  }
+
   // Parse full email with attachments
   const parsed: any = await simpleParser(msg.source);
   const pdfAtt = (parsed.attachments || []).find(
@@ -227,20 +237,50 @@ async function processMessage(c: any, uid: number): Promise<void> {
   const html = parsed.html || "";
   const details = extractFromHtml(typeof html === "string" ? html : "");
 
+  // The invoice email subject contains the invoice number even when the
+  // body extractor missed it (e.g. "...עבור עסקה 41035 ב- ...").
+  if (!details.invoiceNumber) {
+    const subjMatch = subject.match(/עסקה\s+(\d+)/);
+    if (subjMatch) details.invoiceNumber = subjMatch[1];
+  }
+
   log.info({ uid, hasPdf: Boolean(pdfAtt), details }, "extracted details");
 
-  // Find matching lead
-  const itemId = await findLeadByDetails(
+  // Find matching lead. The invoice email itself has no phone/asmachta
+  // (it only has invoice number + URL), so we must look up by the most
+  // recent transaction in the SQLite cache that hasn't had an invoice
+  // attached yet.
+  let itemId = await findLeadByDetails(
     details.payerPhone || "",
     details.asmachta || "",
   );
+  if (!itemId) {
+    const recent: any = db
+      .prepare(
+        `SELECT monday_item_id, full_name, asmachta FROM grow_dekel_transactions
+         WHERE monday_item_id IS NOT NULL
+           AND (invoice_url IS NULL OR invoice_url = '')
+           AND created_at > datetime('now', '+3 hours', '-30 minutes')
+         ORDER BY created_at DESC LIMIT 1`,
+      )
+      .get();
+    if (recent?.monday_item_id) {
+      itemId = recent.monday_item_id;
+      details.asmachta = details.asmachta || recent.asmachta;
+      details.fullName = details.fullName || recent.full_name;
+      log.info(
+        { uid, itemId, fullName: details.fullName },
+        "matched invoice email to recent unattached transaction",
+      );
+    }
+  }
   if (!itemId) {
     log.warn(
       { uid, phone: details.payerPhone, asmachta: details.asmachta },
       "no matching lead found",
     );
     await sendTelegram(
-      `📧 מייל חשבונית מ-Grow התקבל (asmachta: ${details.asmachta}, ${details.fullName}) — לא נמצא ליד תואם במאנדיי`,
+      `📧 מייל חשבונית מ-Grow התקבל (חשבונית: ${details.invoiceNumber}, ${details.fullName}) — לא נמצא ליד תואם במאנדיי`,
     );
     return;
   }

@@ -474,6 +474,8 @@ async function sendWhatsAppCloud(text: string): Promise<void> {
 // Send a WhatsApp template via Dekel's Cloud API number. Templates bypass
 // the 24h customer-message window so they always deliver — this is the
 // primary notification channel for payment events.
+// Meta limit: each body parameter ≤ 1024 chars. Truncating to 60 broke
+// Monday URLs (~80 chars) — pasted but unclickable. Now 200 chars.
 async function sendWaTemplate(args: {
   to: string;
   templateName: string;
@@ -494,7 +496,7 @@ async function sendWaTemplate(args: {
           type: "body",
           parameters: args.parameters.map((t) => ({
             type: "text",
-            text: String(t).slice(0, 60),
+            text: String(t).slice(0, 200),
           })),
         },
       ],
@@ -749,12 +751,15 @@ async function handleTransaction(tx: any): Promise<any> {
 
   // WhatsApp via approved `grow_payment_alert` template (UTILITY, he).
   // Templates bypass the 24h customer-message window so they always deliver.
+  // Body says "סטטוס העדכון במאנדיי: {{4}}" — pass the bare URL so WhatsApp
+  // auto-links it. (Earlier "prefix - URL" got truncated to 60 chars,
+  // breaking the link.)
   const templateOk = await sendGrowPaymentAlertTemplate({
     fullName,
     paymentSum,
     paymentDesc,
     mondayStatus: itemId
-      ? `עודכן בהצלחה - https://alonr-7280s-projects.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
+      ? `https://alonr-7280s-projects.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
       : `לא נמצא ליד לפי ${payerPhone}`,
   });
   // Notify Dekel (partner) on every payment via his own template.
