@@ -245,26 +245,25 @@ async function processMessage(c: any, uid: number): Promise<void> {
     return;
   }
 
-  // Upload PDF to Monday — prefer attachment, fallback to downloading
-  // the invoiceUrl (Meshulam openInvoice serves the PDF directly).
-  let uploaded = false;
+  // Resolve PDF buffer — prefer email attachment, fallback to Meshulam URL
+  let pdfBuf: Buffer | null = null;
   const filename = `חשבונית-${details.invoiceNumber || details.asmachta || "grow"}.pdf`;
   if (pdfAtt?.content) {
-    uploaded = await uploadPdfToMonday(
-      itemId,
-      pdfAtt.content as Buffer,
-      pdfAtt.filename || filename,
-    );
+    pdfBuf = pdfAtt.content as Buffer;
   } else if (details.invoiceUrl) {
-    const pdfBuf = await tryDownloadPdf(details.invoiceUrl);
-    if (pdfBuf) uploaded = await uploadPdfToMonday(itemId, pdfBuf, filename);
+    pdfBuf = await tryDownloadPdf(details.invoiceUrl);
   }
+
+  // Upload to Files column (so it shows under the lead's Files folder)
+  const uploaded = pdfBuf
+    ? await uploadPdfToMonday(itemId, pdfBuf, filename)
+    : false;
   log.info(
     { itemId, invoiceNumber: details.invoiceNumber, uploaded },
     "PDF upload result",
   );
 
-  // Also update invoice number + URL link columns
+  // Update invoice number + URL link columns
   if (details.invoiceNumber || details.invoiceUrl) {
     const values: Record<string, any> = {};
     if (details.invoiceNumber)
@@ -280,9 +279,43 @@ async function processMessage(c: any, uid: number): Promise<void> {
     );
   }
 
+  // Create a human-readable Update on the lead and attach the same PDF
+  // there so it's visible inline in the conversation thread.
+  const sumLine = details.paymentSum ? `על סך ₪${details.paymentSum}` : "";
+  const updateBody = `💰 התקבל תשלום ${sumLine}\\n🧾 חשבונית ${details.invoiceNumber || details.asmachta || ""} ${uploaded ? "מצורפת כאן + שמורה ב-Files של הליד" : "לינק: " + (details.invoiceUrl || "")}`;
+  const updateRes = await mondayQuery(
+    `mutation { create_update(item_id: ${itemId}, body: "${updateBody.replace(/"/g, '\\"')}") { id } }`,
+  );
+  const updateId: string | undefined = updateRes?.data?.create_update?.id;
+  if (updateId && pdfBuf) {
+    try {
+      const form = new FormData();
+      form.append(
+        "query",
+        `mutation ($file: File!) { add_file_to_update(update_id: ${updateId}, file: $file) { id } }`,
+      );
+      form.append("map", '{"fileToUpload":"variables.file"}');
+      form.append(
+        "fileToUpload",
+        new Blob([new Uint8Array(pdfBuf)], { type: "application/pdf" }),
+        filename,
+      );
+      await fetch("https://api.monday.com/v2/file", {
+        method: "POST",
+        headers: {
+          Authorization: config.mondayApiKey,
+          "API-Version": "2024-01",
+        },
+        body: form as any,
+      });
+    } catch (e: any) {
+      log.warn({ err: e.message }, "attach PDF to update failed");
+    }
+  }
+
   const tgText = uploaded
-    ? `📎 חשבונית ${details.invoiceNumber || details.asmachta} הועלתה לליד של *${details.fullName}*`
-    : `📧 מייל חשבונית (${details.fullName}) — ליד עודכן${pdfAtt ? "" : ", אבל אין PDF מצורף"}`;
+    ? `📎 חשבונית ${details.invoiceNumber || details.asmachta} הועלתה לליד של *${details.fullName}* (Files + Update)`
+    : `📧 מייל חשבונית (${details.fullName}) — ליד עודכן${pdfAtt ? "" : ", אבל אין PDF נגיש"}`;
   await sendTelegram(tgText);
 }
 

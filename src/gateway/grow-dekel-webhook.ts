@@ -60,6 +60,7 @@ const INITIAL_PLANNING_LABEL: Record<number, number> = {
 
 const ALON_TG_CHAT = process.env.ALON_TG_CHAT_ID || "1584581543"; // @AliClawIsrael_bot private chat
 const ALON_WA_PHONE = process.env.ALON_PHONE || "972546300783";
+const DEKEL_WA_PHONE = process.env.DEKEL_PHONE || "972526252521"; // partner
 
 // ── helpers ──
 function normalizePhone(raw: string): string[] {
@@ -286,12 +287,45 @@ async function uploadPdfToMondayFileColumn(
   }
 }
 
+// Attach a file to a Monday Update (the conversation thread on a lead).
+// Different mutation than file-column upload — uses add_file_to_update.
+async function uploadPdfToUpdate(
+  updateId: string,
+  pdf: Buffer,
+  filename: string,
+): Promise<boolean> {
+  if (!config.mondayApiKey) return false;
+  try {
+    const form = new FormData();
+    form.append(
+      "query",
+      `mutation ($file: File!) { add_file_to_update(update_id: ${updateId}, file: $file) { id } }`,
+    );
+    form.append("map", '{"fileToUpload":"variables.file"}');
+    form.append(
+      "fileToUpload",
+      new Blob([new Uint8Array(pdf)], { type: "application/pdf" }),
+      filename,
+    );
+    const res = await fetch("https://api.monday.com/v2/file", {
+      method: "POST",
+      headers: { Authorization: config.mondayApiKey, "API-Version": "2024-01" },
+      body: form as any,
+    });
+    const data: any = await res.json();
+    return Boolean(data?.data?.add_file_to_update?.id);
+  } catch (e: any) {
+    log.warn({ err: e.message }, "update file upload error");
+    return false;
+  }
+}
+
 async function attachInvoice(
   itemId: string,
   invoiceUrl: string,
   invoiceNumber: string,
 ): Promise<{ fileUploaded: boolean }> {
-  // Always save link + number (as fallback)
+  // Save link + number to columns (always — even if PDF download fails)
   const linkValue = {
     url: invoiceUrl,
     text: `חשבונית ${invoiceNumber || ""}`.trim(),
@@ -304,26 +338,38 @@ async function attachInvoice(
   const mutation = `mutation { change_multiple_column_values(board_id: ${LEADS_BOARD_ID}, item_id: ${itemId}, column_values: ${valuesJson}) { id } }`;
   await mondayQuery(mutation);
 
-  // Try download + upload PDF (works if Grow URL is public/signed)
+  // Try download + upload PDF
   let fileUploaded = false;
+  let pdfBuf: Buffer | null = null;
   const pdfData = await tryDownloadPdf(invoiceUrl);
   if (pdfData) {
+    pdfBuf = pdfData.buffer;
     const filename = `חשבונית-${invoiceNumber || "grow"}.pdf`;
     fileUploaded = await uploadPdfToMondayFileColumn(
       itemId,
       COLS.invoiceFile,
-      pdfData.buffer,
+      pdfBuf,
       filename,
     );
     log.info({ itemId, invoiceNumber, fileUploaded }, "PDF upload result");
   }
 
+  // Always create an Update on the lead. Attach the PDF to it as well so
+  // it's visible inline in the conversation thread (not just under Files).
   const updateBody = fileUploaded
-    ? `🧾 חשבונית ${invoiceNumber || ""} הועלתה כקובץ (+ לינק לגיבוי): ${invoiceUrl}`
+    ? `🧾 חשבונית ${invoiceNumber || ""} הועלתה — מצורפת כאן ושמורה גם בעמודת Files של הליד.\\nקישור Meshulam: ${invoiceUrl}`
     : `🧾 חשבונית ${invoiceNumber || ""} (לינק בלבד — PDF לא נגיש ללא login): ${invoiceUrl}`;
-  await mondayQuery(
+  const updateRes = await mondayQuery(
     `mutation { create_update(item_id: ${itemId}, body: "${updateBody.replace(/"/g, '\\"')}") { id } }`,
   );
+  const updateId: string | undefined = updateRes?.data?.create_update?.id;
+  if (updateId && pdfBuf) {
+    await uploadPdfToUpdate(
+      updateId,
+      pdfBuf,
+      `חשבונית-${invoiceNumber || "grow"}.pdf`,
+    );
+  }
 
   return { fileUploaded };
 }
@@ -423,6 +469,115 @@ async function sendWhatsAppCloud(text: string): Promise<void> {
       label: "dekel",
     },
   ]);
+}
+
+// Send a WhatsApp template via Dekel's Cloud API number. Templates bypass
+// the 24h customer-message window so they always deliver — this is the
+// primary notification channel for payment events.
+async function sendWaTemplate(args: {
+  to: string;
+  templateName: string;
+  parameters: string[];
+}): Promise<boolean> {
+  const token = config.waCloudToken;
+  const phoneId = config.waCloudPhoneId;
+  if (!token || !phoneId) return false;
+  const body = {
+    messaging_product: "whatsapp",
+    to: args.to,
+    type: "template",
+    template: {
+      name: args.templateName,
+      language: { code: "he" },
+      components: [
+        {
+          type: "body",
+          parameters: args.parameters.map((t) => ({
+            type: "text",
+            text: String(t).slice(0, 60),
+          })),
+        },
+      ],
+    },
+  };
+  try {
+    const res = await fetch(
+      `https://graph.facebook.com/v21.0/${phoneId}/messages`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      },
+    );
+    const data: any = await res.json().catch(() => ({}));
+    if (res.ok && data?.messages?.[0]?.id) {
+      log.info(
+        {
+          template: args.templateName,
+          to: args.to,
+          msgId: data.messages[0].id,
+        },
+        "WA template sent",
+      );
+      return true;
+    }
+    log.warn(
+      {
+        template: args.templateName,
+        to: args.to,
+        status: res.status,
+        err: data?.error?.message || data?.error?.code,
+      },
+      "WA template send failed",
+    );
+  } catch (e: any) {
+    log.warn(
+      { template: args.templateName, err: e.message },
+      "WA template send error",
+    );
+  }
+  return false;
+}
+
+async function sendGrowPaymentAlertTemplate(args: {
+  fullName: string;
+  paymentSum: string | number;
+  paymentDesc: string;
+  mondayStatus: string;
+}): Promise<boolean> {
+  return sendWaTemplate({
+    to: ALON_WA_PHONE,
+    templateName: "grow_payment_alert",
+    parameters: [
+      args.fullName || "—",
+      String(args.paymentSum),
+      args.paymentDesc || "תכנון",
+      args.mondayStatus,
+    ],
+  });
+}
+
+// Notify Dekel (the partner) via his own template. Doesn't mention Telegram
+// since Dekel doesn't use the Telegram bot. Template is PENDING Meta review
+// until approved — sends will fail silently with a 132xxx error and we log
+// the rejection. Once approved, this starts working automatically.
+async function sendDekelPaymentAlert(args: {
+  fullName: string;
+  paymentSum: string | number;
+  paymentDesc: string;
+}): Promise<boolean> {
+  return sendWaTemplate({
+    to: DEKEL_WA_PHONE,
+    templateName: "grow_payment_alert_dekel",
+    parameters: [
+      args.fullName || "—",
+      String(args.paymentSum),
+      args.paymentDesc || "תכנון",
+    ],
+  });
 }
 
 function verifyWebhookAuth(req: Request): boolean {
@@ -592,15 +747,30 @@ async function handleTransaction(tx: any): Promise<any> {
     itemId ? { label: "👁 פתח ליד", url: itemUrl } : undefined,
   );
 
-  const waText =
-    `💰 תשלום נכנס - Grow\n\n` +
-    `${fullName} | ${payerPhone}\n` +
-    `₪${paymentSum} | אסמכתא ${asmachta}\n` +
-    `${paymentDesc}\n\n` +
-    (itemId
-      ? `✅ עודכן בלידים\n${itemUrl}`
-      : `⚠️ לא נמצא ליד — יש להוסיף ידנית`);
-  await sendWhatsAppCloud(waText);
+  // WhatsApp via approved `grow_payment_alert` template (UTILITY, he).
+  // Templates bypass the 24h customer-message window so they always deliver.
+  const templateOk = await sendGrowPaymentAlertTemplate({
+    fullName,
+    paymentSum,
+    paymentDesc,
+    mondayStatus: itemId
+      ? `עודכן בהצלחה - https://alonr-7280s-projects.monday.com/boards/${LEADS_BOARD_ID}/pulses/${itemId}`
+      : `לא נמצא ליד לפי ${payerPhone}`,
+  });
+  // Notify Dekel (partner) on every payment via his own template.
+  await sendDekelPaymentAlert({ fullName, paymentSum, paymentDesc });
+  // If alon's template fails for any reason, try free-form text via Alon.dev/Dekel as fallback.
+  if (!templateOk) {
+    const waText =
+      `💰 תשלום נכנס - Grow\n\n` +
+      `${fullName} | ${payerPhone}\n` +
+      `₪${paymentSum} | אסמכתא ${asmachta}\n` +
+      `${paymentDesc}\n\n` +
+      (itemId
+        ? `✅ עודכן בלידים\n${itemUrl}`
+        : `⚠️ לא נמצא ליד — יש להוסיף ידנית`);
+    await sendWhatsAppCloud(waText);
+  }
 
   return { itemId, transactionCode, lookupError, payerPhone, fullName };
 }
