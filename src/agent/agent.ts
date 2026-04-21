@@ -297,11 +297,21 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       } catch (e: any) { log.debug({ err: e.message }, 'knowledge search failed'); }
     }
 
+    // Cache tool definitions — attach cache_control to last tool caches all tools above it.
+    // Tools rarely change; removes ~10-15K tokens of schema from every invocation.
+    const toolDefs = getToolDefinitions();
+    const cachedTools = toolDefs.length > 0
+      ? [
+          ...toolDefs.slice(0, -1),
+          { ...toolDefs[toolDefs.length - 1], cache_control: { type: 'ephemeral' } } as any,
+        ]
+      : toolDefs;
+
     const createParams: any = {
       model: modelId,
       max_tokens: useOpus ? 16000 : 8192,
       system: systemPrompt,
-      tools: getToolDefinitions(),
+      tools: cachedTools,
       messages,
     };
     if (useThinking) {
@@ -316,7 +326,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
       const tokenCount = await client.messages.countTokens({
         model: modelId,
         system: systemPrompt,
-        tools: getToolDefinitions() as any,
+        tools: cachedTools as any,
         messages,
       });
       const contextLimit = useOpus ? 200000 : 200000;
@@ -403,7 +413,7 @@ export async function handleMessage(msg: UnifiedMessage, onStream?: StreamCallba
         model: modelId,
         max_tokens: useOpus ? 16000 : 8192,
         system: systemPrompt,
-        tools: getToolDefinitions(),
+        tools: cachedTools,
         messages,
       };
       if (useThinking) {
