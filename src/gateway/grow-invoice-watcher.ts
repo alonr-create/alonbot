@@ -255,13 +255,16 @@ async function processMessage(c: any, uid: number): Promise<void> {
     details.asmachta || "",
   );
   if (!itemId) {
+    // Pick the OLDEST unattached transaction — when multiple invoices arrive
+    // in a single poll, invoice emails appear in the order the payments were
+    // made, so matching oldest-first pairs each email to the correct lead.
     const recent: any = db
       .prepare(
         `SELECT monday_item_id, full_name, asmachta FROM grow_dekel_transactions
          WHERE monday_item_id IS NOT NULL
            AND (invoice_url IS NULL OR invoice_url = '')
            AND created_at > datetime('now', '+3 hours', '-24 hours')
-         ORDER BY created_at DESC LIMIT 1`,
+         ORDER BY created_at ASC LIMIT 1`,
       )
       .get();
     if (recent?.monday_item_id) {
@@ -270,7 +273,7 @@ async function processMessage(c: any, uid: number): Promise<void> {
       details.fullName = details.fullName || recent.full_name;
       log.info(
         { uid, itemId, fullName: details.fullName },
-        "matched invoice email to recent unattached transaction",
+        "matched invoice email to oldest unattached transaction",
       );
     }
   }
@@ -302,6 +305,26 @@ async function processMessage(c: any, uid: number): Promise<void> {
     { itemId, invoiceNumber: details.invoiceNumber, uploaded },
     "PDF upload result",
   );
+
+  // Mark the matched transaction as attached so the next invoice email in
+  // this poll does not re-match the same lead. Prefer asmachta to target a
+  // single row; otherwise scope by monday_item_id + empty invoice_url.
+  if (uploaded) {
+    const markerUrl =
+      details.invoiceUrl ||
+      `attached:${details.invoiceNumber || details.asmachta || "unknown"}`;
+    if (details.asmachta) {
+      db.prepare(
+        `UPDATE grow_dekel_transactions SET invoice_url = ? WHERE asmachta = ?`,
+      ).run(markerUrl, details.asmachta);
+    } else {
+      db.prepare(
+        `UPDATE grow_dekel_transactions SET invoice_url = ?
+         WHERE monday_item_id = ?
+           AND (invoice_url IS NULL OR invoice_url = '')`,
+      ).run(markerUrl, itemId);
+    }
+  }
 
   // Update invoice number + URL link columns
   if (details.invoiceNumber || details.invoiceUrl) {
