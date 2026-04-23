@@ -383,11 +383,18 @@ export async function runImapPoll(): Promise<void> {
 
   try {
     await client.connect();
-    await client.mailboxOpen("INBOX");
+    // Search across all mail (covers cases where Gmail filters skip INBOX or
+    // a label routes the message away). All Mail UIDs are stable and unique.
+    const mailbox = process.env.IMAP_MAILBOX || "[Gmail]/All Mail";
+    await client.mailboxOpen(mailbox);
     const lastUid = getLastUid();
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24h
     const searchResult = await client.search({ from: "grow.security", since });
     const uids: number[] = Array.isArray(searchResult) ? searchResult : [];
+    log.info(
+      { mailbox, lastUid, totalFound: uids.length, uids: uids.slice(-10) },
+      "IMAP search result",
+    );
     const newUids = uids.filter((u: number) => u > lastUid);
     if (newUids.length > 0) {
       log.info({ count: newUids.length, newUids }, "found new Grow emails");
@@ -406,6 +413,14 @@ export async function runImapPoll(): Promise<void> {
   } finally {
     running = false;
   }
+}
+
+// Reset last_uid so next poll reprocesses everything in the search window.
+export function resetLastUid(): void {
+  db.prepare(
+    `UPDATE grow_imap_state SET last_uid = 0, updated_at = datetime('now', '+3 hours') WHERE id = 1`,
+  ).run();
+  log.info("reset grow_imap_state.last_uid to 0");
 }
 
 export function startImapWatcher(intervalMs = 60_000): void {

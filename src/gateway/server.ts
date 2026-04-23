@@ -12,7 +12,7 @@ import { createLogger } from '../utils/logger.js';
 import { getAllWorkspaces, getWorkspace, createWorkspace, updateWorkspace, deleteWorkspace } from '../utils/workspaces.js';
 import { LEAD_STATUS, PIPELINE_STAGES, TERMINAL_STATUSES } from '../utils/lead-status.js';
 import { registerGrowDekelWebhook } from './grow-dekel-webhook.js';
-import { startImapWatcher } from './grow-invoice-watcher.js';
+import { startImapWatcher, runImapPoll, resetLastUid } from './grow-invoice-watcher.js';
 
 const log = createLogger('server');
 
@@ -2917,6 +2917,17 @@ export function wsBroadcast(event: { type: string; [key: string]: any }) {
 // Register Grow Dekel webhook route
 registerGrowDekelWebhook(app);
 startImapWatcher();
+
+app.post('/api/grow-imap-debug', async (req, res) => {
+  const token = (req.query?.token as string) || (req.headers['x-token'] as string) || '';
+  if (token !== (process.env.GROW_DEKEL_WEBHOOK_SECRET || '')) {
+    res.status(401).json({ ok: false });
+    return;
+  }
+  if (req.query?.reset === '1') resetLastUid();
+  await runImapPoll();
+  res.json({ ok: true, reset: req.query?.reset === '1' });
+});
 
 export function startServer() {
   httpServer.listen(config.port, () => {
