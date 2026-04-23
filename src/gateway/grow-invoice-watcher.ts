@@ -260,7 +260,7 @@ async function processMessage(c: any, uid: number): Promise<void> {
         `SELECT monday_item_id, full_name, asmachta FROM grow_dekel_transactions
          WHERE monday_item_id IS NOT NULL
            AND (invoice_url IS NULL OR invoice_url = '')
-           AND created_at > datetime('now', '+3 hours', '-30 minutes')
+           AND created_at > datetime('now', '+3 hours', '-24 hours')
          ORDER BY created_at DESC LIMIT 1`,
       )
       .get();
