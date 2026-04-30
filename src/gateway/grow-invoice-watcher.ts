@@ -246,47 +246,98 @@ async function processMessage(c: any, uid: number): Promise<void> {
 
   log.info({ uid, hasPdf: Boolean(pdfAtt), details }, "extracted details");
 
-  // Find matching lead. The invoice email itself has no phone/asmachta
-  // (it only has invoice number + URL), so we must look up by the most
-  // recent transaction in the SQLite cache that hasn't had an invoice
-  // attached yet.
+  // Find matching lead. Tries (in order): asmachta cache → phone search →
+  // invoice_number cache (set by webhook flow). The invoice email itself
+  // usually has neither phone nor asmachta — only invoice number + URL.
   let itemId = await findLeadByDetails(
     details.payerPhone || "",
     details.asmachta || "",
   );
-  if (!itemId) {
-    // Pick the OLDEST unattached transaction — when multiple invoices arrive
-    // in a single poll, invoice emails appear in the order the payments were
-    // made, so matching oldest-first pairs each email to the correct lead.
-    const recent: any = db
+  let matchSource: string = itemId ? "phone-or-asmachta" : "";
+
+  // Match by invoice_number cached from webhook (handleInvoice in
+  // grow-dekel-webhook.ts writes the number when the JSON webhook fires).
+  if (!itemId && details.invoiceNumber) {
+    const byNumber: any = db
       .prepare(
         `SELECT monday_item_id, full_name, asmachta FROM grow_dekel_transactions
-         WHERE monday_item_id IS NOT NULL
-           AND (invoice_url IS NULL OR invoice_url = '')
-           AND created_at > datetime('now', '+3 hours', '-24 hours')
-         ORDER BY created_at ASC LIMIT 1`,
+         WHERE invoice_number = ? AND monday_item_id IS NOT NULL
+         ORDER BY created_at DESC LIMIT 1`,
       )
-      .get();
-    if (recent?.monday_item_id) {
-      itemId = recent.monday_item_id;
-      details.asmachta = details.asmachta || recent.asmachta;
-      details.fullName = details.fullName || recent.full_name;
+      .get(details.invoiceNumber);
+    if (byNumber?.monday_item_id) {
+      itemId = byNumber.monday_item_id;
+      details.asmachta = details.asmachta || byNumber.asmachta;
+      details.fullName = details.fullName || byNumber.full_name;
+      matchSource = "invoice-number";
       log.info(
-        { uid, itemId, fullName: details.fullName },
-        "matched invoice email to oldest unattached transaction",
+        { uid, itemId, invoiceNumber: details.invoiceNumber },
+        "matched invoice email by cached invoice_number",
       );
     }
   }
+
+  // Tight-window single-candidate fallback. The previous logic picked the
+  // OLDEST unattached transaction in the last 24h — that misattributed
+  // invoices when an earlier transaction's invoice email was missed/lost
+  // and a later transaction's invoice arrived. Now we only auto-attach
+  // if (a) exactly ONE unattached candidate exists, AND (b) it was created
+  // in the last 10 minutes (matches typical Grow invoice email lag).
+  if (!itemId) {
+    const candidates: any[] = db
+      .prepare(
+        `SELECT monday_item_id, full_name, asmachta, payment_sum,
+                datetime(created_at) AS created_at
+         FROM grow_dekel_transactions
+         WHERE monday_item_id IS NOT NULL
+           AND (invoice_url IS NULL OR invoice_url = '')
+           AND created_at > datetime('now', '+3 hours', '-10 minutes')
+         ORDER BY created_at DESC`,
+      )
+      .all();
+
+    if (candidates.length === 1) {
+      const only = candidates[0];
+      itemId = only.monday_item_id;
+      details.asmachta = details.asmachta || only.asmachta;
+      details.fullName = details.fullName || only.full_name;
+      matchSource = "single-recent-candidate";
+      log.info(
+        { uid, itemId, fullName: details.fullName },
+        "matched invoice email to single recent unattached transaction",
+      );
+    } else if (candidates.length > 1) {
+      // Ambiguous — multiple unattached transactions in the window.
+      // Surface the candidates to Alon and stop. Manual decision required.
+      const list = candidates
+        .slice(0, 5)
+        .map(
+          (c) =>
+            `• ${c.full_name || "—"} (₪${c.payment_sum}, אסמכתא ${c.asmachta}, ${c.created_at})`,
+        )
+        .join("\n");
+      await sendTelegram(
+        `⚠️ חשבונית ${details.invoiceNumber} הגיעה במייל אבל יש ${candidates.length} עסקאות פתוחות בלי חשבונית ב-10 דק׳ האחרונות:\n${list}\n\n*לא צירפתי אוטומטית* — צרף ידנית לליד הנכון.`,
+      );
+      log.warn(
+        { uid, candidateCount: candidates.length, invoiceNumber: details.invoiceNumber },
+        "ambiguous invoice match — skipped auto-attach",
+      );
+      return;
+    }
+  }
+
   if (!itemId) {
     log.warn(
       { uid, phone: details.payerPhone, asmachta: details.asmachta },
       "no matching lead found",
     );
     await sendTelegram(
-      `📧 מייל חשבונית מ-Grow התקבל (חשבונית: ${details.invoiceNumber}, ${details.fullName}) — לא נמצא ליד תואם במאנדיי`,
+      `📧 חשבונית ${details.invoiceNumber || ""} מ-Grow התקבלה — לא נמצא ליד תואם (אין עסקה פתוחה ב-10 דק׳ האחרונות, ולא הצלחתי להצליב לפי טלפון/אסמכתא/מס׳ חשבונית). צרף ידנית.`,
     );
     return;
   }
+  log.info({ uid, itemId, matchSource }, "invoice → lead match resolved");
 
   // Resolve PDF buffer — prefer email attachment, fallback to Meshulam URL
   let pdfBuf: Buffer | null = null;
