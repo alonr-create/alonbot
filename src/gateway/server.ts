@@ -2761,23 +2761,27 @@ function saveOrder(name: string, phone: string, email: string | undefined, plan:
 // POSTs here and AlonBot (Render — SMTP works) sends the mail using the same
 // Gmail creds already used by WA reports.
 app.post('/api/relay-email', combinedAuth, async (req, res) => {
-  const { to, subject, html, text, from } = req.body || {};
+  const { to, subject, html, text, from, gmailUser: bodyUser, gmailPass: bodyPass } = req.body || {};
   if (!to || !subject || (!html && !text)) {
     res.status(400).json({ success: false, error: 'Missing to/subject/html|text' });
     return;
   }
-  if (!config.gmailUser || !config.gmailAppPassword) {
-    res.status(500).json({ success: false, error: 'Gmail credentials not configured on AlonBot' });
+  // Prefer body-provided creds (caller already authenticated via x-api-secret),
+  // fall back to AlonBot's own GMAIL_USER/GMAIL_APP_PASSWORD env if set.
+  const user = bodyUser || config.gmailUser;
+  const pass = bodyPass || config.gmailAppPassword;
+  if (!user || !pass) {
+    res.status(500).json({ success: false, error: 'Gmail credentials not configured (neither in body nor on AlonBot env)' });
     return;
   }
   try {
     const { createTransport } = await import('nodemailer');
     const transporter = createTransport({
       service: 'gmail',
-      auth: { user: config.gmailUser, pass: config.gmailAppPassword },
+      auth: { user, pass },
     });
     const info = await transporter.sendMail({
-      from: from || `"דקל לפרישה" <${config.gmailUser}>`,
+      from: from || `"דקל לפרישה" <${user}>`,
       to,
       subject,
       ...(html ? { html } : {}),
