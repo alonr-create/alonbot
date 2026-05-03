@@ -2757,6 +2757,40 @@ function saveOrder(name: string, phone: string, email: string | undefined, plan:
     .run(name, normalizedPhone, email || '', plan, price, discount ? 1 : 0, status, growProcessId || '', priceTier || '', now, now);
 }
 
+// Relay endpoint: voice-agent (Railway) is blocked from outbound SMTP, so it
+// POSTs here and AlonBot (Render — SMTP works) sends the mail using the same
+// Gmail creds already used by WA reports.
+app.post('/api/relay-email', combinedAuth, async (req, res) => {
+  const { to, subject, html, text, from } = req.body || {};
+  if (!to || !subject || (!html && !text)) {
+    res.status(400).json({ success: false, error: 'Missing to/subject/html|text' });
+    return;
+  }
+  if (!config.gmailUser || !config.gmailAppPassword) {
+    res.status(500).json({ success: false, error: 'Gmail credentials not configured on AlonBot' });
+    return;
+  }
+  try {
+    const { createTransport } = await import('nodemailer');
+    const transporter = createTransport({
+      service: 'gmail',
+      auth: { user: config.gmailUser, pass: config.gmailAppPassword },
+    });
+    const info = await transporter.sendMail({
+      from: from || `"דקל לפרישה" <${config.gmailUser}>`,
+      to,
+      subject,
+      ...(html ? { html } : {}),
+      ...(text ? { text } : {}),
+    });
+    transporter.close();
+    res.json({ success: true, messageId: info.messageId });
+  } catch (e: any) {
+    log.error({ err: e?.message }, 'relay-email failed');
+    res.status(500).json({ success: false, error: e?.message || 'send failed' });
+  }
+});
+
 app.post('/api/send-whatsapp-voice', externalAuth, async (req, res) => {
   const { phone, audio, leadName } = req.body;
   if (!phone || !audio) {
