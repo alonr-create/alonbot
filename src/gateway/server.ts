@@ -2274,6 +2274,28 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
     chatPhone = chatPhone.replace(/^\+/, '');
     const chatId = `${chatPhone}@s.whatsapp.net`;
 
+    // ── Opt-out / handoff guard ──
+    // Don't send templates or marketing messages to leads that already opted out
+    // or were handed off to a human. Manual messages from the dashboard pass `force: true`.
+    if (!req.body.force) {
+      try {
+        const existing = db
+          .prepare('SELECT lead_status, bot_paused FROM leads WHERE phone = ?')
+          .get(chatPhone) as any;
+        const blockedStatuses = new Set(['not_relevant', 'refused']);
+        if (existing && (blockedStatuses.has(existing.lead_status) || existing.bot_paused === 1)) {
+          log.info(
+            { phone: chatPhone, status: existing.lead_status, paused: existing.bot_paused, template },
+            'send-whatsapp blocked — lead opted-out or handed off',
+          );
+          res.json({ success: false, skipped: true, reason: 'lead_opted_out_or_handoff' });
+          return;
+        }
+      } catch (e: any) {
+        log.warn({ err: e.message }, 'opt-out guard check failed — continuing');
+      }
+    }
+
     // Register/update lead in DB for sales follow-up
     if (leadContext || leadName) {
       try {
