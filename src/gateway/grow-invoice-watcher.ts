@@ -53,7 +53,12 @@ function extractFromHtml(html: string): {
   if (asmachta) out.asmachta = asmachta[1];
   const sum = text.match(/(\d[\d,]*\.?\d*)\s*ש["״]?ח|₪\s*(\d[\d,]*\.?\d*)/);
   if (sum) out.paymentSum = (sum[1] || sum[2]).replace(/,/g, "");
-  const name = text.match(/שם:\s*([^\s](?:[^\n]{0,50}?))\s+(?:טלפון|מייל)/);
+  // Two name patterns observed in Grow emails:
+  //   - "שם: <name> טלפון: ..."  (older transaction emails)
+  //   - "מאושר לצרכי מס עבור <name> להורדת המסמך" (invoice/receipt emails)
+  const name =
+    text.match(/שם:\s*([^\s](?:[^\n]{0,50}?))\s+(?:טלפון|מייל)/) ||
+    text.match(/עבור\s+([^\n]{1,60}?)\s+להורדת/);
   if (name) out.fullName = name[1].trim();
   const phone = text.match(/טלפון:\s*(\d[\d\-+]*)/);
   if (phone) out.payerPhone = phone[1].replace(/[^\d+]/g, "");
@@ -273,6 +278,38 @@ async function processMessage(c: any, uid: number): Promise<void> {
       log.info(
         { uid, itemId, invoiceNumber: details.invoiceNumber },
         "matched invoice email by cached invoice_number",
+      );
+    }
+  }
+
+  // Match by full name from email body. Receipt emails carry the payer's
+  // name ("...עבור X להורדת..."). When several unmatched transactions are
+  // pending in the same window (3 sales arriving within 2 minutes triggers
+  // this path), the time-window fallback below would bail with "ambiguous"
+  // and Alon has to upload PDFs manually. Name matching disambiguates them.
+  if (!itemId && details.fullName) {
+    const byName: any[] = db
+      .prepare(
+        `SELECT monday_item_id, full_name, asmachta
+         FROM grow_dekel_transactions
+         WHERE monday_item_id IS NOT NULL
+           AND (invoice_url IS NULL OR invoice_url = '')
+           AND full_name = ?
+         ORDER BY created_at DESC LIMIT 2`,
+      )
+      .all(details.fullName);
+    if (byName.length === 1) {
+      itemId = byName[0].monday_item_id;
+      details.asmachta = details.asmachta || byName[0].asmachta;
+      matchSource = "full-name-exact";
+      log.info(
+        { uid, itemId, fullName: details.fullName },
+        "matched invoice email by exact full_name to single unattached transaction",
+      );
+    } else if (byName.length > 1) {
+      log.warn(
+        { uid, fullName: details.fullName, count: byName.length },
+        "multiple unattached transactions with same name — falling back to time-window",
       );
     }
   }
