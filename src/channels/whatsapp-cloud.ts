@@ -2,6 +2,7 @@ import { config } from '../utils/config.js';
 import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
 import { createMondayLead } from '../utils/monday-leads.js';
+import { handleQuicklyIncomingMedia } from '../utils/quickly-files.js';
 import { withRetry } from '../utils/retry.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
@@ -41,6 +42,17 @@ function buildPhoneMap(): Map<string, PhoneConfig> {
       token: config.waCloudToken2,
       workspaceId: 'alon_dev',
       source: 'alon_dev_whatsapp',
+    });
+  }
+  // Tertiary: Quickly file-capture line (053-323-7337, "דקל לפרישה") — listen-only.
+  // Routes incoming media → Monday Files column on the matching Dekel lead.
+  const quicklyToken = config.fbAccessToken || config.waCloudToken;
+  if (quicklyToken) {
+    map.set('253725301162046', {
+      phoneNumberId: '253725301162046',
+      token: quicklyToken,
+      workspaceId: 'quickly_files',
+      source: 'quickly',
     });
   }
   return map;
@@ -205,6 +217,44 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
 
     // Normalize phone number
     let senderId = from.replace(/^\+/, '');
+
+    // Quickly file-capture line: listen-only, ship media to Monday Files column.
+    // Skip lead upsert, AI agent, and replies — Quickly's UI is the human surface.
+    if (phoneCfg.workspaceId === 'quickly_files') {
+      const t = msg.type;
+      let mediaId: string | undefined;
+      let mimeType = 'application/octet-stream';
+      let filename = `quickly_${Date.now()}`;
+      if (t === 'image') {
+        mediaId = msg.image?.id;
+        mimeType = msg.image?.mime_type || 'image/jpeg';
+        filename += mimeType === 'image/png' ? '.png' : mimeType === 'image/webp' ? '.webp' : '.jpg';
+      } else if (t === 'document') {
+        mediaId = msg.document?.id;
+        mimeType = msg.document?.mime_type || 'application/octet-stream';
+        filename = msg.document?.filename || filename;
+      } else if (t === 'video') {
+        mediaId = msg.video?.id;
+        mimeType = msg.video?.mime_type || 'video/mp4';
+        filename += '.mp4';
+      } else if (t === 'audio') {
+        mediaId = msg.audio?.id;
+        mimeType = msg.audio?.mime_type || 'audio/ogg';
+        filename += '.ogg';
+      }
+      if (!mediaId) {
+        log.debug({ from: senderId, type: t }, 'Quickly line: non-media message ignored');
+        return;
+      }
+      const buffer = await downloadCloudMedia(mediaId, phoneCfg.token);
+      if (!buffer) {
+        log.warn({ from: senderId, mediaId }, 'Quickly line: media download failed');
+        return;
+      }
+      log.info({ from: senderId, type: t, filename, bytes: buffer.byteLength }, 'Quickly media received → Monday upload');
+      await handleQuicklyIncomingMedia({ phone: senderId, buffer, mimeType, filename });
+      return;
+    }
 
     // Get sender name from contacts array or fallback
     let senderName = senderId;
