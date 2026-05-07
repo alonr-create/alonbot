@@ -117,6 +117,43 @@ interface QuicklyMediaInput {
   filename: string;
 }
 
+// Per-phone debounce: aggregate all files from same sender, send a single
+// Telegram summary 15 min after the last upload. Resets on every new file.
+// In-memory only — Render restart drops pending timers (acceptable).
+const DEBOUNCE_MS = parseInt(process.env.QUICKLY_NOTIFY_DEBOUNCE_MS || '900000', 10); // 15 min
+
+interface PendingNotification {
+  phone: string;
+  senderName: string;
+  itemId: string;
+  isNewLead: boolean;
+  files: { name: string; sizeKb: number }[];
+  timer: NodeJS.Timeout;
+}
+const pending = new Map<string, PendingNotification>();
+
+function scheduleSummary(phone: string): void {
+  const entry = pending.get(phone);
+  if (!entry) return;
+  clearTimeout(entry.timer);
+  entry.timer = setTimeout(() => {
+    pending.delete(phone);
+    sendSummary(entry).catch(e => log.error({ err: e.message, phone }, 'summary send threw'));
+  }, DEBOUNCE_MS);
+}
+
+async function sendSummary(entry: PendingNotification): Promise<void> {
+  const { phone, senderName, itemId, isNewLead, files } = entry;
+  const fileList = files.map(f => `  • ${f.name} (${f.sizeKb} KB)`).join('\n');
+  const link = `[פתח ב-Monday](https://palm530671.monday.com/boards/${DEKEL_LEADS_BOARD_ID}/pulses/${itemId})`;
+  const headline = isNewLead
+    ? `🆕 *ליד חדש מ-Quickly*\nשם: ${senderName}\nטלפון: \`${phone}\``
+    : `📎 *מסמכים חדשים מ-Quickly*\nשם: ${senderName}\nטלפון: \`${phone}\``;
+  const text = `${headline}\n\n${files.length} מסמכים עלו לליד:\n${fileList}\n\n${link}`;
+  await notifyAlon(text);
+  log.info({ phone, itemId, count: files.length, isNewLead }, 'Quickly summary notification sent');
+}
+
 export async function handleQuicklyIncomingMedia(input: QuicklyMediaInput): Promise<void> {
   const { phone, senderName, filename, buffer, mimeType } = input;
   const sizeKb = Math.round(buffer.byteLength / 1024);
@@ -141,7 +178,24 @@ export async function handleQuicklyIncomingMedia(input: QuicklyMediaInput): Prom
 
   log.info({ phone, itemId, filename, newAssetId, createdNew }, 'WhatsApp media uploaded to Monday Files column');
 
-  if (createdNew) {
-    await notifyAlon(`🆕 *ליד חדש נוצר מ-Quickly*\nשם: ${senderName}\nטלפון: \`${phone}\`\nקובץ ראשון: ${filename} (${sizeKb} KB)\n[פתח ב-Monday](https://palm530671.monday.com/boards/${DEKEL_LEADS_BOARD_ID}/pulses/${itemId})`);
+  // Buffer the success — single Telegram summary will fire 15 min after the last file.
+  let entry = pending.get(phone);
+  if (!entry) {
+    entry = {
+      phone,
+      senderName,
+      itemId,
+      isNewLead: createdNew,
+      files: [],
+      timer: setTimeout(() => {}, 0),
+    };
+    pending.set(phone, entry);
+  } else {
+    // If somehow the lead changed mid-burst (shouldn't), prefer the latest itemId
+    entry.itemId = itemId;
+    if (createdNew) entry.isNewLead = true;
+    if (senderName && senderName !== phone) entry.senderName = senderName;
   }
+  entry.files.push({ name: filename, sizeKb });
+  scheduleSummary(phone);
 }
