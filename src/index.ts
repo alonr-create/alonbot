@@ -5,6 +5,7 @@ import { createWhatsAppAdapter } from './channels/whatsapp.js';
 import { createWhatsAppCloudAdapter } from './channels/whatsapp-cloud.js';
 import { startAllCronJobs } from './cron/scheduler.js';
 import { runSalesManagerCheck } from './cron/sales-manager.js';
+import { sendWeeklyCommissionReport, checkNewCommissionsAndAlert } from './cron/commission-report.js';
 import { config } from './utils/config.js';
 import { setupGitAuth } from './utils/git-auth.js';
 import { embedUnembeddedMemories, runMemoryMaintenance } from './agent/memory.js';
@@ -101,6 +102,33 @@ cron.schedule('0 8 * * *', async () => {
 **חוקים**: אם אין שינוי בקטגוריה — תדלג עליה. תן סיכום קצר ותכליתי, לא רשימות ארוכות.`;
   await sendAgentMessage('telegram', targetId, briefMsg);
 }, { timezone: 'Asia/Jerusalem' });
+
+// Weekly commission report — every Friday 09:00 Israel time (cloud only)
+// Recipients are gated by COMMISSION_REPORT_RECIPIENTS env var (CSV phones).
+// Default during the test/approval phase: Alon only. Add Dekel after Alon approves.
+cron.schedule('0 9 * * 5', async () => {
+  if (config.mode !== 'cloud') return;
+  const recipients = (process.env.COMMISSION_REPORT_RECIPIENTS || '972546300783')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  log.info({ recipients }, 'weekly commission report firing');
+  try {
+    await sendWeeklyCommissionReport(recipients, process.env.COMMISSION_REPORT_IMAGE_URL);
+  } catch (e: any) {
+    log.error({ err: e.message }, 'weekly commission report failed');
+  }
+}, { timezone: 'Asia/Jerusalem' });
+
+// New-commission threshold alert — every 5 minutes (cloud only)
+cron.schedule('*/5 * * * *', async () => {
+  if (config.mode !== 'cloud') return;
+  const recipients = (process.env.COMMISSION_ALERT_RECIPIENTS || '972546300783')
+    .split(',').map(s => s.trim()).filter(Boolean);
+  try {
+    await checkNewCommissionsAndAlert(recipients);
+  } catch (e: any) {
+    log.error({ err: e.message }, 'commission alert check failed');
+  }
+});
 
 // Embed any memories that don't have vectors yet (background)
 embedUnembeddedMemories().catch(err =>
