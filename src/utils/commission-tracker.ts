@@ -1,6 +1,8 @@
 import { config } from './config.js';
 import { db } from './db.js';
 import { createLogger } from './logger.js';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const log = createLogger('commission');
 
@@ -19,8 +21,11 @@ const ALON_PHONE = '972546300783';
 const DEKEL_PHONE = '972526252521';
 const RECIPIENTS = [ALON_PHONE, DEKEL_PHONE];
 
-const TEMPLATE_NAME = 'dprisha_general_v1';
 const TEMPLATE_LANG = 'he';
+const TEMPLATE_REPORT_IMAGE = 'dprisha_commission_report_image_v1'; // UTILITY + IMAGE header
+const TEMPLATE_REPORT_TEXT = 'dprisha_commission_report_v1';        // UTILITY text-only fallback
+const TEMPLATE_ALERT = 'dprisha_commission_alert_v1';               // UTILITY alert
+const TEMPLATE_FALLBACK = 'dprisha_general_v1';                     // MARKETING last resort
 
 const GRAPH_API = 'https://graph.facebook.com/v21.0';
 const DPRISHA_PHONE_ID = '1080047101853955'; // sends from 0559566148 (Dekel WABA, has approved templates)
@@ -224,7 +229,160 @@ export function formatWeeklyReport(t: CommissionTotals): string {
   return parts.join(SEP);
 }
 
-// === WhatsApp send ===
+// === Image generation (Gemini Nano Banana 2 Pro) ===
+function loadFaceRefs(): { alon: string; dekel: string } | null {
+  try {
+    const dir = process.cwd();
+    const candidates = [
+      join(dir, 'assets'),
+      join(dir, 'dist', 'assets'),
+      '/app/assets',
+    ];
+    for (const d of candidates) {
+      try {
+        const a = readFileSync(join(d, 'face-alon.jpg')).toString('base64');
+        const k = readFileSync(join(d, 'face-dekel.jpg')).toString('base64');
+        return { alon: a, dekel: k };
+      } catch { /* try next */ }
+    }
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'face refs load failed');
+  }
+  return null;
+}
+
+export async function generateProgressImage(t: CommissionTotals): Promise<Buffer | null> {
+  if (!config.geminiApiKey) {
+    log.warn('GEMINI_API_KEY missing — skipping image generation');
+    return null;
+  }
+  const refs = loadFaceRefs();
+  if (!refs) {
+    log.warn('face refs not bundled — skipping image generation');
+    return null;
+  }
+
+  const target = t.targetNis.toLocaleString('en-US');
+  const achieved = Math.round(t.monthTotal).toLocaleString('en-US');
+  const pct = t.progressPct;
+
+  const prompt = `CRITICAL: The two reference photos provided are the EXACT faces of the two characters. Preserve facial structure, beard, hair, skin tone with maximum accuracy. Translate ONLY the rendering style into Disney Pixar 3D animation. Do NOT generic-ify the faces.
+
+CRITICAL COMPOSITION: Both men climbing SIDE BY SIDE at exactly the SAME height on the mountain path. Equal partners. Walking shoulder-to-shoulder up the path together with determination.
+
+Reference 1 (FIRST IMAGE) is ALON: completely bald shaved head — NO HAIR AT ALL on top, very thick dense full dark brown/black beard covering entire jaw and chin (long, voluminous), warm brown eyes, gentle smile, very solid stocky robust build, mid-30s. Wearing dark navy hiking shirt, beige cargo pants, small adventure backpack.
+
+Reference 2 (SECOND IMAGE) is DEKEL: short dark brown/black curly hair (medium volume, well-groomed curls), very light stubble (NOT full beard), big broad warm genuine smile, kind brown eyes, slim athletic build, mid-30s. Wearing light grey zip-up hiking jacket over white t-shirt, hiking pants.
+
+Setting: Disney Pixar 3D movie still. Both walking SIDE BY SIDE at exactly ${pct}% of the way up the mountain path (visualize this clearly — they are ${pct}% of the way to the summit). At the summit: a tall white triangular flag on a flagpole displaying ONLY the bold black Hebrew text "₪${target}". Partway along the path on a wooden trail sign: the Hebrew text "₪${achieved}". Beautiful golden hour lighting, painted clouds, snow-capped distant peak, lush vegetation. NO English title. Square 1:1.`;
+
+  const body = {
+    contents: [{
+      parts: [
+        { text: prompt },
+        { inline_data: { mime_type: 'image/jpeg', data: refs.alon } },
+        { inline_data: { mime_type: 'image/jpeg', data: refs.dekel } },
+      ],
+    }],
+    generationConfig: { responseModalities: ['IMAGE'] },
+  };
+
+  try {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image-preview:generateContent?key=${config.geminiApiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json() as any;
+    if (data.error) {
+      log.error({ error: data.error }, 'Gemini image error');
+      return null;
+    }
+    const parts = data?.candidates?.[0]?.content?.parts || [];
+    for (const p of parts) {
+      const inline = p.inlineData || p.inline_data;
+      if (inline?.data) return Buffer.from(inline.data, 'base64');
+    }
+    log.warn({ resp: JSON.stringify(data).slice(0, 300) }, 'Gemini returned no image');
+    return null;
+  } catch (e: any) {
+    log.error({ err: e.message }, 'Gemini call threw');
+    return null;
+  }
+}
+
+// === Meta media upload — returns media_id valid 30 days ===
+async function uploadMediaToWhatsApp(buffer: Buffer, mimeType: string, filename: string): Promise<string | null> {
+  if (!config.fbAccessToken) return null;
+  try {
+    const fd = new FormData();
+    fd.append('messaging_product', 'whatsapp');
+    fd.append('type', mimeType);
+    fd.append('file', new Blob([new Uint8Array(buffer)], { type: mimeType }), filename);
+    const res = await fetch(`${GRAPH_API}/${DPRISHA_PHONE_ID}/media`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.fbAccessToken}` },
+      body: fd,
+    });
+    const data = await res.json() as any;
+    if (!res.ok || data.error) {
+      log.error({ status: res.status, error: data.error }, 'media upload failed');
+      return null;
+    }
+    return data.id || null;
+  } catch (e: any) {
+    log.error({ err: e.message }, 'media upload threw');
+    return null;
+  }
+}
+
+// === Send template with optional image header ===
+async function sendTemplate(to: string, templateName: string, body: string, mediaId?: string): Promise<boolean> {
+  if (!config.fbAccessToken) {
+    log.warn('FB_ACCESS_TOKEN missing; skipping send');
+    return false;
+  }
+  const components: any[] = [];
+  if (mediaId) {
+    components.push({
+      type: 'header',
+      parameters: [{ type: 'image', image: { id: mediaId } }],
+    });
+  }
+  components.push({
+    type: 'body',
+    parameters: [{ type: 'text', text: body }],
+  });
+  const payload = {
+    messaging_product: 'whatsapp',
+    to,
+    type: 'template',
+    template: {
+      name: templateName,
+      language: { code: TEMPLATE_LANG },
+      components,
+    },
+  };
+  try {
+    const res = await fetch(`${GRAPH_API}/${DPRISHA_PHONE_ID}/messages`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${config.fbAccessToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json() as any;
+    if (!res.ok || data.error) {
+      log.error({ to, template: templateName, status: res.status, error: data.error }, 'template send failed');
+      return false;
+    }
+    log.info({ to, template: templateName, hasImage: !!mediaId, msgId: data.messages?.[0]?.id }, 'template sent');
+    return true;
+  } catch (e: any) {
+    log.error({ err: e.message, to, template: templateName }, 'template send threw');
+    return false;
+  }
+}
+
+// === WhatsApp send (legacy fallback for body-only templates) ===
 async function sendWhatsApp(to: string, body: string): Promise<boolean> {
   if (!config.fbAccessToken) {
     log.warn('FB_ACCESS_TOKEN missing; skipping WhatsApp send');
@@ -235,7 +393,7 @@ async function sendWhatsApp(to: string, body: string): Promise<boolean> {
     to,
     type: 'template',
     template: {
-      name: TEMPLATE_NAME,
+      name: TEMPLATE_FALLBACK,
       language: { code: TEMPLATE_LANG },
       components: [
         {
@@ -277,8 +435,31 @@ export async function runWeeklyReport(): Promise<void> {
 
   const body = formatWeeklyReport(totals);
   log.info({ monthTotal: totals.monthTotal, pct: totals.progressPct }, 'weekly report computed');
+
+  // Generate fresh image with current numbers + upload once, reuse media_id for both recipients
+  let mediaId: string | null = null;
+  try {
+    const imgBuf = await generateProgressImage(totals);
+    if (imgBuf) {
+      mediaId = await uploadMediaToWhatsApp(imgBuf, 'image/png', 'commission-progress.png');
+      log.info({ mediaId, bytes: imgBuf.byteLength }, 'progress image generated + uploaded');
+    }
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'progress image step failed — sending text-only');
+  }
+
   for (const phone of RECIPIENTS) {
-    await sendWhatsApp(phone, body);
+    let sent = false;
+    if (mediaId) {
+      sent = await sendTemplate(phone, TEMPLATE_REPORT_IMAGE, body, mediaId);
+    }
+    if (!sent) {
+      sent = await sendTemplate(phone, TEMPLATE_REPORT_TEXT, body);
+    }
+    if (!sent) {
+      // Last resort — try the old MARKETING template (may be filtered)
+      await sendWhatsApp(phone, body);
+    }
   }
 }
 
