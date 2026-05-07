@@ -204,24 +204,24 @@ function fmtNis(n: number): string {
   return '₪' + Math.round(n).toLocaleString('en-US');
 }
 
+// Meta WhatsApp templates reject \n and 4+ consecutive spaces in {{1}} — must be single-line with bullet separators.
+const SEP = '  •  ';
 export function formatWeeklyReport(t: CommissionTotals): string {
   const dateStr = todayInIsrael().toLocaleDateString('he-IL');
-  const trend = t.last7daysTotal > 0 ? `\n📈 *השבוע נכנסו:* ${fmtNis(t.last7daysTotal)} (${t.last7daysItemCount} עסקאות)` : '';
-  const prevLine = t.prevMonthTotal > 0 ? `\n📅 *חודש קודם:* ${fmtNis(t.prevMonthTotal)}` : '';
   const onTrack = t.progressPct >= (t.dayOfMonth / t.daysInMonth) * 100;
-  const status = onTrack ? '✅ בקצב מצוין!' : '⚠️ צריך להאיץ';
-
-  return `דוח עמלות שבועי — ${dateStr}\n` +
-    `יום ${t.dayOfMonth}/${t.daysInMonth} בחודש ${t.monthLabelHe}\n\n` +
-    `🎯 *יעד חודשי:* ${fmtNis(t.targetNis)}\n` +
-    `💰 *הושג עד כה:* ${fmtNis(t.monthTotal)} (${t.progressPct}%)\n` +
-    `   • עמלות: ${fmtNis(t.monthCommissions)}\n` +
-    `   • שכ"ט: ${fmtNis(t.monthSalaries)}\n` +
-    `\n${status}` +
-    trend +
-    prevLine +
-    `\n\n🔥 נדרש: ${fmtNis(t.remainingNis)} ב-${t.daysLeft} ימים נותרים\n` +
-    `   = ${fmtNis(t.perDayNeeded)}/יום`;
+  const status = onTrack ? '✅ בקצב טוב' : '⚠️ צריך להאיץ';
+  const parts = [
+    `📊 דוח שבועי עמלות — ${t.monthLabelHe}`,
+    `📅 ${dateStr} (יום ${t.dayOfMonth}/${t.daysInMonth})`,
+    `🎯 יעד: ${fmtNis(t.targetNis)}`,
+    `💰 הושג: ${fmtNis(t.monthTotal)} (${t.progressPct}%) ${status}`,
+    `עמלות: ${fmtNis(t.monthCommissions)}`,
+    `שכ״ט: ${fmtNis(t.monthSalaries)}`,
+  ];
+  if (t.last7daysTotal > 0) parts.push(`📈 השבוע: ${fmtNis(t.last7daysTotal)} (${t.last7daysItemCount} עסקאות)`);
+  if (t.prevMonthTotal > 0) parts.push(`חודש קודם: ${fmtNis(t.prevMonthTotal)}`);
+  parts.push(`🔥 חסר: ${fmtNis(t.remainingNis)} ב-${t.daysLeft} ימים = ${fmtNis(t.perDayNeeded)}/יום`);
+  return parts.join(SEP);
 }
 
 // === WhatsApp send ===
@@ -316,12 +316,14 @@ export async function checkNewCommissionsForAlerts(): Promise<void> {
 
     const dateStr = (it.column_values.find((c: any) => c.id === DATE_COL_COMMISSIONS)?.date) || '';
     const link = `https://palm530671.monday.com/boards/${COMMISSIONS_BOARD_ID}/pulses/${it.id}`;
-    const body =
-      `💰 עמלה חדשה!\n\n` +
-      `שם: ${it.name}\n` +
-      `סכום: ${fmtNis(amount)}\n` +
-      (dateStr ? `תאריך: ${dateStr}\n` : '') +
-      `\n${link}`;
+    const parts = [
+      `💰 עמלה חדשה מעל ${fmtNis(ALERT_THRESHOLD_NIS)}`,
+      `שם: ${it.name}`,
+      `סכום: ${fmtNis(amount)}`,
+    ];
+    if (dateStr) parts.push(`תאריך: ${dateStr}`);
+    parts.push(link);
+    const body = parts.join(SEP);
 
     log.info({ itemId: it.id, name: it.name, amount }, 'sending threshold alert');
     let ok = true;
