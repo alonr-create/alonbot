@@ -509,7 +509,9 @@ export async function checkNewCommissionsForAlerts(): Promise<void> {
     log.info({ itemId: it.id, name: it.name, amount }, 'sending threshold alert');
     let ok = true;
     for (const phone of RECIPIENTS) {
-      const sent = await sendWhatsApp(phone, body);
+      // Try approved UTILITY alert template first; fall back to MARKETING legacy if it fails
+      let sent = await sendTemplate(phone, TEMPLATE_ALERT, body);
+      if (!sent) sent = await sendWhatsApp(phone, body);
       if (!sent) ok = false;
     }
     if (ok) stmtMark.run(it.id, amount, new Date().toISOString());
