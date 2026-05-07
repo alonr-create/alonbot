@@ -134,20 +134,18 @@ function fmtIls(n: number): string {
   return Math.round(n).toLocaleString('en-US');
 }
 
+/** Single-line format — Meta WhatsApp templates reject \n and 4+ consecutive spaces in {{1}}. */
 export function buildWeeklyReportText(d: MonthlyData): string {
   const pct = d.progressPct.toFixed(1);
+  const SEP = '  •  ';
   return [
-    `📊 *דוח שבועי עמלות — ${d.monthLabel}*`,
-    ``,
-    `🎯 *יעד חודשי:* ₪${fmtIls(d.target)}`,
-    `✅ *הושג עד כה:* ₪${fmtIls(d.total)} (${pct}%)`,
-    `🔥 *השלמה נדרשת:* ₪${fmtIls(d.remaining)} ב-${d.daysLeft} ימים`,
-    `   = ₪${fmtIls(d.dailyNeeded)} ליום`,
-    ``,
-    `📈 *פירוט:*`,
-    `• עמלות (בורד עמלות): ₪${fmtIls(d.commissionsTotal)}`,
-    `• שכ״ט (משכורות): ₪${fmtIls(d.salariesTotal)}`,
-  ].join('\n');
+    `📊 דוח שבועי עמלות — ${d.monthLabel}`,
+    `🎯 יעד חודשי: ₪${fmtIls(d.target)}`,
+    `✅ הושג: ₪${fmtIls(d.total)} (${pct}%)`,
+    `🔥 חסר: ₪${fmtIls(d.remaining)} ב-${d.daysLeft} ימים = ₪${fmtIls(d.dailyNeeded)}/יום`,
+    `עמלות: ₪${fmtIls(d.commissionsTotal)}`,
+    `שכ״ט: ₪${fmtIls(d.salariesTotal)}`,
+  ].join(SEP);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -267,15 +265,13 @@ export async function checkNewCommissionsAndAlert(toPhones: string[]): Promise<v
     const seen = db.prepare('SELECT 1 FROM commission_alerts_seen WHERE item_id = ?').get(String(it.id)) as any;
     if (seen) continue;
 
+    const SEP = '  •  ';
     const body = [
-      `💰 *עמלה חדשה מעל ₪${fmtIls(ALERT_THRESHOLD)}*`,
-      ``,
+      `💰 עמלה חדשה מעל ₪${fmtIls(ALERT_THRESHOLD)}`,
       `שם: ${it.name}`,
       `סכום: ₪${fmtIls(amount)}`,
-      `נכנס לבורד: ${new Date(createdMs).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' })}`,
-      ``,
-      `🔗 https://palm530671.monday.com/boards/${COMMISSIONS_BOARD_ID}/pulses/${it.id}`,
-    ].join('\n');
+      `https://palm530671.monday.com/boards/${COMMISSIONS_BOARD_ID}/pulses/${it.id}`,
+    ].join(SEP);
 
     for (const phone of toPhones) await waSendTemplate(phone, body);
 
