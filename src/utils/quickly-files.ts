@@ -6,12 +6,12 @@ const log = createLogger('quickly-files');
 const DEKEL_LEADS_BOARD_ID = 1443236269;
 const FILES_COLUMN_ID = 'file_mm34mxvy'; // "קבצים מ-WhatsApp"
 const PHONE_COLUMN_ID = 'phone';
+const DEFAULT_GROUP_ID = 'topics'; // "חדשים (פייסבוק/יו טיוב)"
 const MONDAY_API = 'https://api.monday.com/v2';
 const MONDAY_FILE_API = 'https://api.monday.com/v2/file';
 
 export async function findDekelLeadByPhone(phone: string): Promise<string | null> {
   if (!config.mondayApiKey) return null;
-  // Try multiple phone formats: 972XXX, +972XXX, 0XXX (local Israeli)
   const variants = new Set<string>();
   variants.add(phone);
   variants.add('+' + phone);
@@ -36,6 +36,34 @@ export async function findDekelLeadByPhone(phone: string): Promise<string | null
     }
   }
   return null;
+}
+
+export async function createDekelLeadFromPhone(phone: string, name: string): Promise<string | null> {
+  if (!config.mondayApiKey) return null;
+  const itemName = name && name !== phone ? name : `WhatsApp ${phone}`;
+  // Phone column value: Monday accepts {"phone":"...", "countryShortName":"IL"}
+  const columnValues = JSON.stringify({
+    [PHONE_COLUMN_ID]: { phone, countryShortName: 'IL' },
+  });
+  const mutation = `mutation { create_item(board_id: ${DEKEL_LEADS_BOARD_ID}, group_id: "${DEFAULT_GROUP_ID}", item_name: ${JSON.stringify(itemName)}, column_values: ${JSON.stringify(columnValues)}) { id } }`;
+  try {
+    const res = await fetch(MONDAY_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: mutation }),
+    });
+    const data = await res.json() as any;
+    if (data.errors) {
+      log.error({ errors: data.errors, phone }, 'Dekel lead creation failed');
+      return null;
+    }
+    const itemId = data?.data?.create_item?.id ?? null;
+    if (itemId) log.info({ phone, name: itemName, itemId }, 'Dekel lead auto-created from Quickly file');
+    return itemId;
+  } catch (e: any) {
+    log.error({ err: e.message, phone }, 'Dekel lead create threw');
+    return null;
+  }
 }
 
 export async function uploadToFilesColumn(itemId: string, filename: string, content: Buffer, mimeType: string): Promise<string | null> {
@@ -63,21 +91,57 @@ export async function uploadToFilesColumn(itemId: string, filename: string, cont
   }
 }
 
+async function notifyAlon(text: string): Promise<void> {
+  if (!config.telegramBotToken) return;
+  try {
+    await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: process.env.ALON_TG_CHAT_ID || '1584581543',
+        text,
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+      }),
+    });
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'Telegram notify failed');
+  }
+}
+
 interface QuicklyMediaInput {
   phone: string;
+  senderName: string;
   buffer: Buffer;
   mimeType: string;
   filename: string;
 }
 
 export async function handleQuicklyIncomingMedia(input: QuicklyMediaInput): Promise<void> {
-  const itemId = await findDekelLeadByPhone(input.phone);
+  const { phone, senderName, filename, buffer, mimeType } = input;
+  const sizeKb = Math.round(buffer.byteLength / 1024);
+
+  let itemId = await findDekelLeadByPhone(phone);
+  let createdNew = false;
+
   if (!itemId) {
-    log.info({ phone: input.phone, filename: input.filename }, 'no matching Dekel lead — skipping file upload');
+    itemId = await createDekelLeadFromPhone(phone, senderName);
+    createdNew = !!itemId;
+    if (!itemId) {
+      await notifyAlon(`❌ *Quickly file capture* — לא הצלחתי ליצור ליד\nטלפון: \`${phone}\`\nשם: ${senderName}\nקובץ: ${filename} (${sizeKb} KB)\n\nהקובץ לא הועלה ל-Monday.`);
+      return;
+    }
+  }
+
+  const newAssetId = await uploadToFilesColumn(itemId, filename, buffer, mimeType);
+  if (!newAssetId) {
+    await notifyAlon(`❌ *Quickly file capture* — העלאה ל-Monday נכשלה\nליד: \`${itemId}\`\nטלפון: \`${phone}\`\nקובץ: ${filename} (${sizeKb} KB)`);
     return;
   }
-  const newAssetId = await uploadToFilesColumn(itemId, input.filename, input.buffer, input.mimeType);
-  if (newAssetId) {
-    log.info({ phone: input.phone, itemId, filename: input.filename, newAssetId }, 'WhatsApp media uploaded to Monday Files column');
+
+  log.info({ phone, itemId, filename, newAssetId, createdNew }, 'WhatsApp media uploaded to Monday Files column');
+
+  if (createdNew) {
+    await notifyAlon(`🆕 *ליד חדש נוצר מ-Quickly*\nשם: ${senderName}\nטלפון: \`${phone}\`\nקובץ ראשון: ${filename} (${sizeKb} KB)\n[פתח ב-Monday](https://palm530671.monday.com/boards/${DEKEL_LEADS_BOARD_ID}/pulses/${itemId})`);
   }
 }

@@ -218,6 +218,13 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     // Normalize phone number
     let senderId = from.replace(/^\+/, '');
 
+    // WhatsApp profile name (for lead naming on auto-create)
+    let senderName = senderId;
+    if (contacts) {
+      const c = contacts.find((x: any) => x.wa_id === from);
+      if (c?.profile?.name) senderName = c.profile.name;
+    }
+
     // Quickly file-capture line: listen-only, ship media to Monday Files column.
     // Skip lead upsert, AI agent, and replies — Quickly's UI is the human surface.
     if (phoneCfg.workspaceId === 'quickly_files') {
@@ -252,16 +259,11 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
         return;
       }
       log.info({ from: senderId, type: t, filename, bytes: buffer.byteLength }, 'Quickly media received → Monday upload');
-      await handleQuicklyIncomingMedia({ phone: senderId, buffer, mimeType, filename });
+      await handleQuicklyIncomingMedia({ phone: senderId, senderName, buffer, mimeType, filename });
       return;
     }
 
-    // Get sender name from contacts array or fallback
-    let senderName = senderId;
-    if (contacts) {
-      const contact = contacts.find((c: any) => c.wa_id === from);
-      if (contact?.profile?.name) senderName = contact.profile.name;
-    }
+
 
     log.debug({ from: senderId, type: msg.type, workspace: phoneCfg.workspaceId, receivingPhone: receivingPhoneId }, 'Cloud API message received');
 
