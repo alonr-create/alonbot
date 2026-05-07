@@ -436,16 +436,28 @@ export async function runWeeklyReport(): Promise<void> {
   const body = formatWeeklyReport(totals);
   log.info({ monthTotal: totals.monthTotal, pct: totals.progressPct }, 'weekly report computed');
 
-  // Generate fresh image with current numbers + upload once, reuse media_id for both recipients
+  // Use the static branding image (assets/commission-mountain.png).
+  // Dynamic Gemini-generated images failed Meta's similarity-with-example check at delivery,
+  // so we ship the same approved image every week with current numbers in the body text.
   let mediaId: string | null = null;
   try {
-    const imgBuf = await generateProgressImage(totals);
+    const candidates = [
+      join(process.cwd(), 'assets', 'commission-mountain.png'),
+      join(process.cwd(), 'dist', 'assets', 'commission-mountain.png'),
+      '/app/assets/commission-mountain.png',
+    ];
+    let imgBuf: Buffer | null = null;
+    for (const p of candidates) {
+      try { imgBuf = readFileSync(p); break; } catch { /* try next */ }
+    }
     if (imgBuf) {
-      mediaId = await uploadMediaToWhatsApp(imgBuf, 'image/png', 'commission-progress.png');
-      log.info({ mediaId, bytes: imgBuf.byteLength }, 'progress image generated + uploaded');
+      mediaId = await uploadMediaToWhatsApp(imgBuf, 'image/png', 'commission-mountain.png');
+      log.info({ mediaId, bytes: imgBuf.byteLength }, 'static commission image uploaded');
+    } else {
+      log.warn('commission-mountain.png not found — sending text-only');
     }
   } catch (e: any) {
-    log.warn({ err: e.message }, 'progress image step failed — sending text-only');
+    log.warn({ err: e.message }, 'static image step failed — sending text-only');
   }
 
   for (const phone of RECIPIENTS) {
