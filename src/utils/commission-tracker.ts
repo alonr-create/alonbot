@@ -25,7 +25,8 @@ const DEKEL_PHONE = '972526252521';
 const RECIPIENTS = [ALON_PHONE, DEKEL_PHONE];
 
 const TEMPLATE_LANG = 'he';
-const TEMPLATE_REPORT_IMAGE = 'dprisha_commission_report_image_v1'; // UTILITY + IMAGE header
+const TEMPLATE_REPORT_V3 = 'dprisha_weekly_commission_v3';          // UTILITY + IMAGE + 5-param multi-line body (preferred)
+const TEMPLATE_REPORT_IMAGE = 'dprisha_commission_report_image_v1'; // UTILITY + IMAGE + 1-param wrapper (legacy)
 const TEMPLATE_REPORT_TEXT = 'dprisha_commission_report_v1';        // UTILITY text-only fallback
 const TEMPLATE_ALERT = 'dprisha_commission_alert_v1';               // UTILITY alert
 const TEMPLATE_FALLBACK = 'dprisha_general_v1';                     // MARKETING last resort
@@ -212,23 +213,28 @@ function fmtNis(n: number): string {
   return '₪' + Math.round(n).toLocaleString('en-US');
 }
 
-// Meta WhatsApp templates reject \n and 4+ consecutive spaces in {{1}} — must be single-line with bullet separators.
-const SEP = '  •  ';
+// Meta rule: no more than 2 consecutive newlines, no 4+ consecutive spaces. Single \n is fine.
+// Multi-line is more readable for humans; bullet/single-line was overly cautious.
+const SEP = '\n';
 export function formatWeeklyReport(t: CommissionTotals): string {
   const dateStr = todayInIsrael().toLocaleDateString('he-IL');
   const onTrack = t.progressPct >= (t.dayOfMonth / t.daysInMonth) * 100;
   const status = onTrack ? '✅ בקצב טוב' : '⚠️ צריך להאיץ';
   const parts = [
-    `📊 דוח שבועי עמלות — ${t.monthLabelHe}`,
-    `📅 ${dateStr} (יום ${t.dayOfMonth}/${t.daysInMonth})`,
-    `🎯 יעד: ${fmtNis(t.targetNis)}`,
-    `💰 הושג: ${fmtNis(t.monthTotal)} (${t.progressPct}%) ${status}`,
-    `עמלות: ${fmtNis(t.monthCommissions)}`,
-    `שכ״ט: ${fmtNis(t.monthSalaries)}`,
+    `📅 ${dateStr} (יום ${t.dayOfMonth}/${t.daysInMonth} ב${t.monthLabelHe})`,
+    ``,
+    `🎯 יעד חודשי: ${fmtNis(t.targetNis)}`,
+    `💰 הושג: ${fmtNis(t.monthTotal)} (${t.progressPct}%)`,
+    `   • עמלות: ${fmtNis(t.monthCommissions)}`,
+    `   • שכ״ט: ${fmtNis(t.monthSalaries)}`,
+    ``,
+    `${status}`,
   ];
   if (t.last7daysTotal > 0) parts.push(`📈 השבוע: ${fmtNis(t.last7daysTotal)} (${t.last7daysItemCount} עסקאות)`);
-  if (t.prevMonthTotal > 0) parts.push(`חודש קודם: ${fmtNis(t.prevMonthTotal)}`);
-  parts.push(`🔥 חסר: ${fmtNis(t.remainingNis)} ב-${t.daysLeft} ימים = ${fmtNis(t.perDayNeeded)}/יום`);
+  if (t.prevMonthTotal > 0) parts.push(`📅 חודש קודם: ${fmtNis(t.prevMonthTotal)}`);
+  parts.push(``);
+  parts.push(`🔥 חסר: ${fmtNis(t.remainingNis)}`);
+  parts.push(`⚡ נדרש: ${fmtNis(t.perDayNeeded)}/יום (${t.daysLeft} ימים)`);
   return parts.join(SEP);
 }
 
@@ -342,7 +348,7 @@ async function uploadMediaToWhatsApp(buffer: Buffer, mimeType: string, filename:
 }
 
 // === Send template with optional image header ===
-async function sendTemplate(to: string, templateName: string, body: string, mediaId?: string): Promise<boolean> {
+async function sendTemplate(to: string, templateName: string, body: string | string[], mediaId?: string): Promise<boolean> {
   if (!config.fbAccessToken) {
     log.warn('FB_ACCESS_TOKEN missing; skipping send');
     return false;
@@ -354,9 +360,10 @@ async function sendTemplate(to: string, templateName: string, body: string, medi
       parameters: [{ type: 'image', image: { id: mediaId } }],
     });
   }
+  const bodyParams = Array.isArray(body) ? body : [body];
   components.push({
     type: 'body',
-    parameters: [{ type: 'text', text: body }],
+    parameters: bodyParams.map(text => ({ type: 'text', text })),
   });
   const payload = {
     messaging_product: 'whatsapp',
@@ -470,16 +477,35 @@ export async function runWeeklyReport(): Promise<void> {
     log.warn({ err: e.message }, 'static image step failed — sending text-only');
   }
 
+  // Build 5 multi-param strings for the v3 template (each on its own line in the body):
+  // {{1}}=date, {{2}}=target, {{3}}=achieved (with %), {{4}}=remaining (with days), {{5}}=daily-needed
+  const dateLabel = `${todayInIsrael().toLocaleDateString('he-IL')} (יום ${totals.dayOfMonth}/${totals.daysInMonth} ב${totals.monthLabelHe})`;
+  const achievedLabel = `${fmtNis(totals.monthTotal)} (${totals.progressPct}%) — עמלות ${fmtNis(totals.monthCommissions)}, שכט ${fmtNis(totals.monthSalaries)}`;
+  const remainingLabel = `${fmtNis(totals.remainingNis)} ב-${totals.daysLeft} ימים`;
+  const v3Params = [
+    dateLabel,
+    fmtNis(totals.targetNis),
+    achievedLabel,
+    remainingLabel,
+    `${fmtNis(totals.perDayNeeded)}/יום`,
+  ];
+
   for (const phone of RECIPIENTS) {
     let sent = false;
+    // Preferred: v3 multi-line + image
     if (mediaId) {
+      sent = await sendTemplate(phone, TEMPLATE_REPORT_V3, v3Params, mediaId);
+    }
+    // Fallback 1: legacy single-{{1}} image template (text wrapped in single line via SEP)
+    if (!sent && mediaId) {
       sent = await sendTemplate(phone, TEMPLATE_REPORT_IMAGE, body, mediaId);
     }
+    // Fallback 2: text-only UTILITY
     if (!sent) {
       sent = await sendTemplate(phone, TEMPLATE_REPORT_TEXT, body);
     }
+    // Last resort: MARKETING (may be filtered)
     if (!sent) {
-      // Last resort — try the old MARKETING template (may be filtered)
       await sendWhatsApp(phone, body);
     }
   }
