@@ -2,7 +2,10 @@ import { config } from './config.js';
 import { db } from './db.js';
 import { createLogger } from './logger.js';
 import { readFileSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const log = createLogger('commission');
 
@@ -232,11 +235,13 @@ export function formatWeeklyReport(t: CommissionTotals): string {
 // === Image generation (Gemini Nano Banana 2 Pro) ===
 function loadFaceRefs(): { alon: string; dekel: string } | null {
   try {
-    const dir = process.cwd();
     const candidates = [
-      join(dir, 'assets'),
-      join(dir, 'dist', 'assets'),
-      '/app/assets',
+      join(__dirname, '..', 'assets'),
+      join(__dirname, '..', '..', 'assets'),
+      join(process.cwd(), 'assets'),
+      join(process.cwd(), 'dist', 'assets'),
+      '/opt/render/project/src/dist/assets',
+      '/opt/render/project/src/assets',
     ];
     for (const d of candidates) {
       try {
@@ -441,10 +446,15 @@ export async function runWeeklyReport(): Promise<void> {
   // so we ship the same approved image every week with current numbers in the body text.
   let mediaId: string | null = null;
   try {
+    // Resolve relative to this script's location (works on Render regardless of cwd)
+    // dist/utils/commission-tracker.js → ../assets/commission-mountain.png
     const candidates = [
+      join(__dirname, '..', 'assets', 'commission-mountain.png'),
+      join(__dirname, '..', '..', 'assets', 'commission-mountain.png'),
       join(process.cwd(), 'assets', 'commission-mountain.png'),
       join(process.cwd(), 'dist', 'assets', 'commission-mountain.png'),
-      '/app/assets/commission-mountain.png',
+      '/opt/render/project/src/dist/assets/commission-mountain.png',
+      '/opt/render/project/src/assets/commission-mountain.png',
     ];
     let imgBuf: Buffer | null = null;
     for (const p of candidates) {
