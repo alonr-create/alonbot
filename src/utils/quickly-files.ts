@@ -10,6 +10,22 @@ const DEFAULT_GROUP_ID = 'topics'; // "חדשים (פייסבוק/יו טיוב)
 const MONDAY_API = 'https://api.monday.com/v2';
 const MONDAY_FILE_API = 'https://api.monday.com/v2/file';
 
+// Names that mean "we don't know who this is yet" — created by inbound voice
+// agent (Camille), Quickly first-touch, or other auto-capture paths. Always
+// prefer a real named lead over these when both exist for the same phone.
+const PLACEHOLDER_NAME_RE = /^(unknown|whatsapp\s|לא ידוע|אנונימי)/i;
+
+function scoreCandidate(item: { id: string; name: string; column_values?: any[] }): number {
+  let score = 0;
+  if (item.name && !PLACEHOLDER_NAME_RE.test(item.name.trim())) score += 100;
+  const email = item.column_values?.find((c: any) => c.id === 'email')?.text;
+  if (email) score += 20;
+  const status = item.column_values?.find((c: any) => c.id === 'status')?.text;
+  // Any status assigned (not blank/"new") is a sign of human triage
+  if (status && status.trim() && status !== 'חדש') score += 10;
+  return score;
+}
+
 export async function findDekelLeadByPhone(phone: string): Promise<string | null> {
   if (!config.mondayApiKey) return null;
   const variants = new Set<string>();
@@ -17,8 +33,12 @@ export async function findDekelLeadByPhone(phone: string): Promise<string | null
   variants.add('+' + phone);
   if (phone.startsWith('972')) variants.add('0' + phone.slice(3));
 
+  // Collect ALL candidates across phone variants, then pick the best match.
+  // Avoids the prior bug where limit:1 + non-deterministic order returned an
+  // "unknown" placeholder lead while a real named lead existed for the same phone.
+  const candidates = new Map<string, { id: string; name: string; column_values?: any[] }>();
   for (const v of variants) {
-    const query = `query { items_page_by_column_values(board_id: ${DEKEL_LEADS_BOARD_ID}, columns: [{column_id: "${PHONE_COLUMN_ID}", column_values: ["${v}"]}], limit: 1) { items { id name } } }`;
+    const query = `query { items_page_by_column_values(board_id: ${DEKEL_LEADS_BOARD_ID}, columns: [{column_id: "${PHONE_COLUMN_ID}", column_values: ["${v}"]}], limit: 25) { items { id name column_values(ids: ["email","status"]) { id text } } } }`;
     try {
       const res = await fetch(MONDAY_API, {
         method: 'POST',
@@ -26,16 +46,23 @@ export async function findDekelLeadByPhone(phone: string): Promise<string | null
         body: JSON.stringify({ query }),
       });
       const data = await res.json() as any;
-      const item = data?.data?.items_page_by_column_values?.items?.[0];
-      if (item?.id) {
-        log.debug({ phone: v, itemId: item.id, name: item.name }, 'lead matched');
-        return item.id;
-      }
+      const items = data?.data?.items_page_by_column_values?.items ?? [];
+      for (const it of items) candidates.set(it.id, it);
     } catch (e: any) {
       log.warn({ err: e.message, variant: v }, 'phone search failed');
     }
   }
-  return null;
+
+  if (candidates.size === 0) return null;
+
+  const ranked = [...candidates.values()].sort((a, b) => scoreCandidate(b) - scoreCandidate(a));
+  const winner = ranked[0];
+  if (candidates.size > 1) {
+    log.info({ phone, picked: winner.id, pickedName: winner.name, total: candidates.size, all: ranked.map(r => ({ id: r.id, name: r.name, score: scoreCandidate(r) })) }, 'multiple lead candidates — picked best');
+  } else {
+    log.debug({ phone, itemId: winner.id, name: winner.name }, 'lead matched');
+  }
+  return winner.id;
 }
 
 export async function createDekelLeadFromPhone(phone: string, name: string): Promise<string | null> {
