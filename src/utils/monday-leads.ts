@@ -11,6 +11,102 @@ function nowIsrael(): string {
 }
 
 const ALON_DEV_BOARD_ID = 5092777389;
+const DEKEL_LEADS_BOARD_ID = 1443236269;
+
+/**
+ * Auto-create a Dekel lead on the main "לידים" board (1443236269) when an
+ * unknown phone sends a message to the 148 WhatsApp line. Used by the
+ * inbound flow in whatsapp-cloud.ts and by the wa-light "צור ליד" button.
+ * Returns the Monday.com item ID, or null on failure.
+ */
+export async function createDekelLead(
+  phone: string,
+  name: string,
+  firstMessage: string,
+): Promise<string | null> {
+  if (!config.mondayApiKey) {
+    log.warn('MONDAY_API_KEY not configured — skipping Dekel lead creation');
+    return null;
+  }
+
+  try {
+    const existing = db.prepare('SELECT monday_item_id FROM leads WHERE phone = ?').get(phone) as any;
+    if (existing?.monday_item_id) return existing.monday_item_id;
+  } catch { /* continue */ }
+
+  // Search by phone on the Dekel board first (avoid duplicates from Voice/Quickly)
+  try {
+    const variants = Array.from(new Set([
+      phone,
+      phone.startsWith('972') ? '0' + phone.slice(3) : phone,
+      phone.startsWith('972') ? phone.slice(3) : phone,
+    ])).map(v => `"${v.replace(/"/g, '')}"`).join(',');
+    const searchQuery = `query { items_page_by_column_values(board_id: ${DEKEL_LEADS_BOARD_ID}, limit: 5, columns: [{column_id: "phone", column_values: [${variants}]}]) { items { id name } } }`;
+    const searchRes = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: searchQuery }),
+    });
+    const searchData = await searchRes.json() as any;
+    const existingItem = searchData.data?.items_page_by_column_values?.items?.[0];
+    if (existingItem?.id) {
+      const now = nowIsrael();
+      db.prepare(`
+        INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
+        VALUES (?, ?, 'dekel', ?, 'active', ?, ?)
+        ON CONFLICT(phone) DO UPDATE SET
+          monday_item_id = excluded.monday_item_id,
+          name = COALESCE(NULLIF(excluded.name, ''), leads.name),
+          updated_at = ?
+      `).run(phone, name !== phone ? name : null, existingItem.id, now, now, now);
+      log.info({ phone, itemId: existingItem.id }, 'existing Dekel Monday lead linked to local DB');
+      return existingItem.id;
+    }
+  } catch (e: any) {
+    log.debug({ err: e.message, phone }, 'Dekel Monday search failed, will create new');
+  }
+
+  const itemName = name && name !== phone ? `${name} — ${phone}` : phone;
+  const displayPhone = phone.startsWith('972') ? '0' + phone.slice(3) : phone;
+  const columnValues = JSON.stringify({
+    phone: { phone: displayPhone, countryShortName: 'IL' },
+    long_text: { text: firstMessage.slice(0, 500) },
+  });
+
+  const mutation = `mutation { create_item(board_id: ${DEKEL_LEADS_BOARD_ID}, item_name: ${JSON.stringify(itemName)}, column_values: ${JSON.stringify(columnValues)}) { id } }`;
+
+  try {
+    const res = await withRetry(() => fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: mutation }),
+    }));
+    const data = await res.json() as any;
+    if (data.errors) {
+      log.error({ errors: data.errors, phone }, 'Dekel create_item failed');
+      return null;
+    }
+    const itemId = data.data?.create_item?.id;
+    if (!itemId) {
+      log.error({ data, phone }, 'Dekel create_item returned no id');
+      return null;
+    }
+    const now = nowIsrael();
+    db.prepare(`
+      INSERT INTO leads (phone, name, source, monday_item_id, lead_status, created_at, updated_at)
+      VALUES (?, ?, 'dekel', ?, '${LEAD_STATUS.NEW}', ?, ?)
+      ON CONFLICT(phone) DO UPDATE SET
+        monday_item_id = excluded.monday_item_id,
+        name = COALESCE(NULLIF(excluded.name, ''), leads.name),
+        updated_at = ?
+    `).run(phone, name !== phone ? name : null, itemId, now, now, now);
+    log.info({ phone, name, itemId }, 'Dekel lead auto-created in Monday + SQLite');
+    return itemId;
+  } catch (e: any) {
+    log.error({ err: e.message, phone }, 'failed to create Dekel Monday lead');
+    return null;
+  }
+}
 
 /**
  * Auto-create a lead in Monday.com "לידים אלון" board + SQLite.

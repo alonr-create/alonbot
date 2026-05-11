@@ -1,7 +1,7 @@
 import { config } from '../utils/config.js';
 import { db } from '../utils/db.js';
 import { createLogger } from '../utils/logger.js';
-import { createMondayLead } from '../utils/monday-leads.js';
+import { createMondayLead, createDekelLead } from '../utils/monday-leads.js';
 import { handleQuicklyIncomingMedia } from '../utils/quickly-files.js';
 import { withRetry } from '../utils/retry.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
@@ -288,10 +288,14 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
     // Ensure lead exists for dashboard tracking (even allowed users)
     if (!isLead) {
       const msgText = msg.text?.body || '[media]';
-      const itemId = await createMondayLead(senderId, senderName, msgText);
+      const src = phoneCfg.source;
+      const isDekel = src === 'voice_agent' || src === 'dekel';
+      const itemId = isDekel
+        ? await createDekelLead(senderId, senderName, msgText)
+        : await createMondayLead(senderId, senderName, msgText);
       if (itemId) {
         isLead = true;
-        log.info({ senderId, senderName, itemId }, 'new lead auto-created');
+        log.info({ senderId, senderName, itemId, board: isDekel ? 'dekel' : 'alon_dev' }, 'new lead auto-created');
       } else if (!isAllowed) {
         log.debug({ senderId }, 'blocked — not allowed and lead creation failed');
         return;

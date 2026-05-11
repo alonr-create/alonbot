@@ -1318,6 +1318,35 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
   }
 });
 
+app.post('/api/wa-manager/monday-create-lead/:phone', dashAuth, async (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const lead = db.prepare('SELECT phone, name, source, monday_item_id FROM leads WHERE phone = ?').get(phone) as any;
+    if (lead?.monday_item_id) {
+      res.json({ success: true, monday_item_id: lead.monday_item_id, existed: true });
+      return;
+    }
+    const firstMsg = db.prepare(`
+      SELECT content FROM messages WHERE sender_id = ? AND channel IN ('whatsapp','whatsapp-inbound') AND role = 'user'
+      ORDER BY id ASC LIMIT 1
+    `).get(phone) as any;
+    const name = lead?.name || phone;
+    const src = (lead?.source || '').toLowerCase();
+    const isAlonDev = src === 'alon_dev' || src === 'alon_dev_whatsapp';
+    const { createDekelLead, createMondayLead } = await import('../utils/monday-leads.js');
+    const itemId = isAlonDev
+      ? await createMondayLead(phone, name, firstMsg?.content || '[נוצר ידנית מ-wa-light]')
+      : await createDekelLead(phone, name, firstMsg?.content || '[נוצר ידנית מ-wa-light]');
+    if (!itemId) {
+      res.status(500).json({ success: false, error: 'יצירת ליד במאנדי נכשלה — בדוק לוגים' });
+      return;
+    }
+    res.json({ success: true, monday_item_id: itemId, board: isAlonDev ? 'alon_dev' : 'dekel' });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.patch('/api/wa-manager/leads/:phone', dashAuth, (req, res) => {
   try {
     const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');

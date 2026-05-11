@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="referrer" content="no-referrer">
 <title>WA Light — נכנס/יוצא</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
@@ -20,12 +21,12 @@
   .row.active{background:#2a3942}
   .row .top{display:flex;align-items:baseline;gap:8px}
   .row .name{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .row .time{font-size:11px;color:#8696a0;flex-shrink:0}
+  .row .time{font-size:11px;color:#8696a0;flex-shrink:0;direction:ltr;unicode-bidi:isolate}
   .row .preview{display:flex;align-items:center;gap:6px;font-size:13px;color:#8696a0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .row .preview .arrow{font-size:11px;flex-shrink:0}
   .row .preview .arrow.in{color:#00a884}
   .row .preview .arrow.out{color:#53bdeb}
-  .row .preview .text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .preview .text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;unicode-bidi:plaintext}
   .row.unread .name{color:#fff}
   .row.unread .preview{color:#d1d7db;font-weight:500}
   .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00a884;flex-shrink:0}
@@ -33,18 +34,28 @@
   #conv-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#202c33;border-bottom:1px solid #2a3942;flex-shrink:0}
   #back{display:none;background:none;border:none;color:#e9edef;font-size:22px;cursor:pointer;padding:0 4px}
   #conv-title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  #conv-sub{font-size:12px;color:#8696a0;margin-inline-start:auto;flex-shrink:0}
-  #thread{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px}
-  .msg{max-width:72%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap;box-shadow:0 1px 0.5px rgba(0,0,0,.13);position:relative}
-  .msg.in{align-self:flex-start;background:#202c33;border-top-right-radius:0}
-  .msg.out{align-self:flex-end;background:#005c4b;border-top-left-radius:0}
-  .msg .ts{display:block;font-size:10.5px;color:#8696a0;margin-top:4px;text-align:end}
+  #conv-sub{font-size:12px;color:#8696a0;flex-shrink:0;unicode-bidi:plaintext}
+  #conv-actions{margin-inline-start:auto;display:flex;gap:6px}
+  .btn{background:#2a3942;color:#e9edef;border:none;padding:6px 10px;border-radius:6px;font-size:12px;cursor:pointer;font-family:inherit}
+  .btn:hover{background:#374247}
+  .btn.primary{background:#005c4b}
+  .btn.primary:hover{background:#077265}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  #thread{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px;direction:ltr}
+  #thread > *{direction:rtl}
+  .msg{max-width:72%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap;box-shadow:0 1px 0.5px rgba(0,0,0,.13);position:relative;unicode-bidi:plaintext}
+  .msg.in{margin-right:auto;background:#202c33;border-top-right-radius:0}
+  .msg.out{margin-left:auto;background:#005c4b;border-top-left-radius:0}
+  .msg .ts{display:block;font-size:10.5px;color:#8696a0;margin-top:4px;text-align:end;direction:ltr;unicode-bidi:isolate}
   .msg.template{opacity:.85;font-style:italic}
   .msg .meta-tag{display:inline-block;font-size:10px;color:#8696a0;background:rgba(0,0,0,.2);padding:1px 6px;border-radius:8px;margin-bottom:4px}
   #empty{flex:1;display:flex;align-items:center;justify-content:center;color:#667781;font-size:14px;text-align:center;padding:20px}
-  .day-sep{align-self:center;font-size:11px;color:#8696a0;background:#1f2c33;padding:4px 10px;border-radius:8px;margin:8px 0}
+  .day-sep{align-self:center;font-size:11px;color:#8696a0;background:#1f2c33;padding:4px 10px;border-radius:8px;margin:8px 0;direction:rtl}
   #refreshing{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#005c4b;color:#fff;padding:4px 12px;border-radius:12px;font-size:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:5}
   #refreshing.on{opacity:1}
+  #toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#005c4b;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:6;max-width:80%;text-align:center}
+  #toast.on{opacity:1}
+  #toast.err{background:#a13838}
   @media (max-width:720px){
     #app{grid-template-columns:1fr}
     #main{display:none}
@@ -66,50 +77,71 @@
       <button id="back" aria-label="חזרה">→</button>
       <div id="conv-title">בחר שיחה</div>
       <div id="conv-sub"></div>
+      <div id="conv-actions"></div>
     </div>
     <div id="thread"><div id="empty">בחר שיחה מהרשימה כדי לראות הודעות נכנסות ויוצאות</div></div>
   </section>
 </div>
 <div id="refreshing">מתעדכן…</div>
+<div id="toast"></div>
 
 <script>
-const TOKEN = new URLSearchParams(location.search).get('token') || '';
+(() => {
+const url = new URL(location.href);
+let TOKEN = url.searchParams.get('token') || '';
+if (TOKEN) {
+  url.searchParams.delete('token');
+  history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
+}
+
 const qs = (s)=>document.querySelector(s);
 const list = qs('#list'), thread = qs('#thread'), countEl = qs('#count');
-const convTitle = qs('#conv-title'), convSub = qs('#conv-sub'), refreshing = qs('#refreshing');
+const convTitle = qs('#conv-title'), convSub = qs('#conv-sub'), convActions = qs('#conv-actions');
+const refreshing = qs('#refreshing'), toastEl = qs('#toast');
+
 let leads = [], active = null, searchTerm = '';
+let leadsReqId = 0, convReqId = 0;
+let leadsInflight = null, convInflight = null;
+let userScrolledUp = false;
 
 function flash(){ refreshing.classList.add('on'); setTimeout(()=>refreshing.classList.remove('on'), 600); }
+function toast(msg, err){
+  toastEl.textContent = msg;
+  toastEl.classList.toggle('err', !!err);
+  toastEl.classList.add('on');
+  setTimeout(()=>toastEl.classList.remove('on'), 2500);
+}
 
-function api(path){
-  const sep = path.includes('?') ? '&' : '?';
-  return fetch(path + sep + 'token=' + encodeURIComponent(TOKEN)).then(r => {
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    return r.json();
-  });
+async function api(path, opts){
+  const init = Object.assign({ credentials: 'same-origin', headers: {} }, opts || {});
+  if (TOKEN) init.headers['x-dashboard-token'] = TOKEN;
+  const r = await fetch(path, init);
+  if (r.status === 401) throw new Error('Unauthorized — token missing/expired');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
 }
 
 function timeShort(iso){
-  if (!iso) return '';
-  const d = new Date(iso.replace(' ', 'T'));
+  const d = parseDate(iso); if (!d) return '';
   const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  if (sameDay) return d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
-  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
-  if (d.toDateString() === yesterday.toDateString()) return 'אתמול';
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  const y = new Date(now); y.setDate(now.getDate()-1);
+  if (d.toDateString() === y.toDateString()) return 'אתמול';
   const diff = (now - d) / (1000*60*60*24);
   if (diff < 7) return ['א','ב','ג','ד','ה','ו','ש'][d.getDay()];
   return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'});
 }
 
-function fullTime(iso){
-  if (!iso) return '';
-  const d = new Date(iso.replace(' ', 'T'));
-  return d.toLocaleString('he-IL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+function parseDate(iso){
+  if (!iso) return null;
+  const s = typeof iso === 'string' ? iso : String(iso);
+  const norm = s.includes('T') || s.endsWith('Z') ? s : s.replace(' ', 'T');
+  const d = new Date(norm);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 function dayLabel(iso){
-  const d = new Date(iso.replace(' ', 'T'));
+  const d = parseDate(iso); if (!d) return '';
   const now = new Date();
   if (d.toDateString() === now.toDateString()) return 'היום';
   const y = new Date(now); y.setDate(now.getDate()-1);
@@ -118,113 +150,192 @@ function dayLabel(iso){
 }
 
 function cleanContent(c){
-  if (!c) return '';
-  let s = c;
-  const tmpl = s.match(/\[template:([^\]\n]+)\]/);
-  const interact = s.match(/\[interactive:[^\]]*\]/);
-  s = s.replace(/\[template:[^\]\n]+\]\s*/, '').replace(/\[interactive:[^\]]*\]\s*/g, '').trim();
-  return { text: s, template: tmpl ? tmpl[1] : null, interactive: !!interact };
-}
-
-function leadDisplayName(l){
-  return l.name || ('+' + l.phone);
-}
-
-function isUnread(l){
-  return l.last_message_role === 'user';
-}
-
-function renderList(){
-  const term = searchTerm.trim();
-  const filtered = term
-    ? leads.filter(l => (l.name||'').toLowerCase().includes(term.toLowerCase()) || l.phone.includes(term))
-    : leads;
-  countEl.textContent = filtered.length + ' שיחות';
-  list.innerHTML = filtered.map(l => {
-    const inMsg = l.last_message_role === 'user';
-    const c = cleanContent(l.last_message);
-    const preview = c.template ? '[' + c.template + ']' : (c.interactive ? (c.text || '[כפתורים]') : (c.text || ''));
-    const cls = ['row', isUnread(l) ? 'unread' : '', active === l.phone ? 'active' : ''].filter(Boolean).join(' ');
-    return `<div class="${cls}" data-phone="${l.phone}">
-      <div class="top">
-        <span class="name">${escapeHtml(leadDisplayName(l))}</span>
-        <span class="time">${timeShort(l.last_message_at)}</span>
-      </div>
-      <div class="preview">
-        ${inMsg ? '<span class="dot"></span>' : ''}
-        <span class="arrow ${inMsg?'in':'out'}">${inMsg?'⬅':'➡'}</span>
-        <span class="text">${escapeHtml(preview).slice(0,80)}</span>
-      </div>
-    </div>`;
-  }).join('') || '<div style="padding:20px;color:#667781;text-align:center;font-size:13px">אין שיחות</div>';
-  list.querySelectorAll('.row').forEach(el => {
-    el.addEventListener('click', () => openConv(el.dataset.phone));
-  });
+  if (!c) return { text: '', template: null, interactive: false };
+  let s = String(c);
+  const tmpl = s.match(/^\[template:([^\]\n]+)\]/);
+  if (tmpl) s = s.slice(tmpl[0].length);
+  const interact = /\[interactive:[^\]\n]*\]/.test(s);
+  s = s.replace(/\[interactive:[^\]\n]*\]/g, '').trim();
+  return { text: s, template: tmpl ? tmpl[1] : null, interactive: interact };
 }
 
 function escapeHtml(s){
-  return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+  return String(s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+function leadDisplayName(l){ return l && l.name ? l.name : ('+' + (l && l.phone ? l.phone : '')); }
+function isUnread(l){ return l.last_message_role === 'user'; }
+function mondayUrl(l){
+  if (!l || !l.monday_item_id) return null;
+  const src = (l.source || '').toLowerCase();
+  const isAlonDev = src === 'alon_dev' || src === 'alon_dev_whatsapp';
+  const boardId = isAlonDev ? '5092777389' : '1443236269';
+  return 'https://palm530671.monday.com/boards/' + boardId + '/pulses/' + encodeURIComponent(l.monday_item_id);
+}
+
+function renderList(){
+  const term = searchTerm.trim().toLowerCase();
+  const filtered = term
+    ? leads.filter(l => (l.name||'').toLowerCase().includes(term) || (l.phone||'').includes(term))
+    : leads;
+  countEl.textContent = filtered.length + ' שיחות';
+  const frag = document.createDocumentFragment();
+  for (const l of filtered) {
+    const inMsg = l.last_message_role === 'user';
+    const c = cleanContent(l.last_message);
+    const previewRaw = c.template ? '[' + c.template + ']' : (c.text || (c.interactive ? '[כפתורים]' : ''));
+    const preview = previewRaw.slice(0, 80);
+    const row = document.createElement('div');
+    row.className = ['row', isUnread(l) ? 'unread' : '', active === l.phone ? 'active' : ''].filter(Boolean).join(' ');
+    row.dataset.phone = l.phone;
+    row.innerHTML =
+      '<div class="top"><span class="name" dir="auto">' + escapeHtml(leadDisplayName(l)) + '</span>' +
+      '<span class="time">' + escapeHtml(timeShort(l.last_message_at)) + '</span></div>' +
+      '<div class="preview">' +
+        (inMsg ? '<span class="dot"></span>' : '') +
+        '<span class="arrow ' + (inMsg ? 'in' : 'out') + '">' + (inMsg ? '⬅' : '➡') + '</span>' +
+        '<span class="text" dir="auto">' + escapeHtml(preview) + '</span>' +
+      '</div>';
+    row.addEventListener('click', () => openConv(l.phone));
+    frag.appendChild(row);
+  }
+  list.innerHTML = '';
+  if (!filtered.length) {
+    list.innerHTML = '<div style="padding:20px;color:#667781;text-align:center;font-size:13px">אין שיחות</div>';
+  } else {
+    list.appendChild(frag);
+  }
+}
+
+function nearBottom(el){ return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
+
+function renderConvActions(lead){
+  convActions.innerHTML = '';
+  if (!lead) return;
+  const mUrl = mondayUrl(lead);
+  if (mUrl) {
+    const a = document.createElement('a');
+    a.className = 'btn primary'; a.href = mUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
+    a.textContent = '📋 פתח במאנדי';
+    convActions.appendChild(a);
+  } else {
+    const b = document.createElement('button');
+    b.className = 'btn'; b.textContent = '➕ צור ליד במאנדי';
+    b.addEventListener('click', () => createMondayFromUI(lead.phone, b));
+    convActions.appendChild(b);
+  }
+}
+
+async function createMondayFromUI(phone, btn){
+  btn.disabled = true; const original = btn.textContent; btn.textContent = 'יוצר…';
+  try {
+    const r = await api('/api/wa-manager/monday-create-lead/' + encodeURIComponent(phone), { method: 'POST' });
+    if (r && r.success && r.monday_item_id) {
+      toast('נוצר במאנדי ✓');
+      await loadLeads(true);
+    } else {
+      throw new Error((r && r.error) || 'יצירה נכשלה');
+    }
+  } catch (e) {
+    toast('שגיאה: ' + e.message, true);
+    btn.disabled = false; btn.textContent = original;
+  }
 }
 
 async function openConv(phone){
   active = phone;
   document.body.classList.add('viewing');
+  userScrolledUp = false;
   renderList();
   const lead = leads.find(l => l.phone === phone);
-  convTitle.textContent = lead ? leadDisplayName(lead) : '+' + phone;
+  convTitle.textContent = leadDisplayName(lead || { phone });
   convSub.textContent = lead ? (lead.source || '') : '';
+  renderConvActions(lead);
   thread.innerHTML = '<div id="empty">טוען…</div>';
+  await refreshConv(phone, true);
+}
+
+async function refreshConv(phone, scrollEnd){
+  if (convInflight) convInflight.abort();
+  const ctrl = new AbortController(); convInflight = ctrl;
+  const myId = ++convReqId;
   try {
-    const data = await api('/api/wa-manager/conversations/' + encodeURIComponent(phone));
-    renderMessages(data.messages || [], data.deliveryStatus);
+    const data = await api('/api/wa-manager/conversations/' + encodeURIComponent(phone), { signal: ctrl.signal });
+    if (myId !== convReqId || active !== phone) return;
+    renderMessages(data.messages || [], scrollEnd);
   } catch (e) {
-    thread.innerHTML = '<div id="empty">שגיאה בטעינה: ' + escapeHtml(e.message) + '</div>';
+    if (e.name === 'AbortError') return;
+    if (myId === convReqId) thread.innerHTML = '<div id="empty">שגיאה בטעינה: ' + escapeHtml(e.message) + '</div>';
+  } finally {
+    if (convInflight === ctrl) convInflight = null;
   }
 }
 
-function renderMessages(messages, deliveryStatus){
-  if (!messages.length){
-    thread.innerHTML = '<div id="empty">אין הודעות עדיין</div>';
-    return;
-  }
-  let html = '', lastDay = '';
+function renderMessages(messages, scrollEnd){
+  if (!messages.length){ thread.innerHTML = '<div id="empty">אין הודעות עדיין</div>'; return; }
+  const wasNearBottom = scrollEnd || (!userScrolledUp && nearBottom(thread));
+  const prevHeight = thread.scrollHeight, prevTop = thread.scrollTop;
+  const frag = document.createDocumentFragment();
+  let lastDay = '';
   for (const m of messages){
-    const day = m.created_at ? new Date(m.created_at.replace(' ','T')).toDateString() : '';
-    if (day && day !== lastDay){
-      html += `<div class="day-sep">${dayLabel(m.created_at)}</div>`;
-      lastDay = day;
+    const d = parseDate(m.created_at);
+    const dayKey = d ? d.toDateString() : '';
+    if (dayKey && dayKey !== lastDay){
+      const sep = document.createElement('div');
+      sep.className = 'day-sep'; sep.textContent = dayLabel(m.created_at);
+      frag.appendChild(sep); lastDay = dayKey;
     }
     const out = m.role === 'assistant';
     const c = cleanContent(m.content);
-    const tag = c.template ? `<span class="meta-tag">📋 תבנית: ${escapeHtml(c.template)}</span><br>` : (c.interactive ? '<span class="meta-tag">🔘 כפתורים</span><br>' : '');
-    const cls = ['msg', out?'out':'in', c.template?'template':''].filter(Boolean).join(' ');
-    const ts = m.created_at ? new Date(m.created_at.replace(' ','T')).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : '';
-    html += `<div class="${cls}">${tag}${escapeHtml(c.text)}<span class="ts">${ts}</span></div>`;
+    const el = document.createElement('div');
+    el.className = ['msg', out ? 'out' : 'in', c.template ? 'template' : ''].filter(Boolean).join(' ');
+    el.setAttribute('dir', 'auto');
+    let inner = '';
+    if (c.template) inner += '<span class="meta-tag">📋 תבנית: ' + escapeHtml(c.template) + '</span><br>';
+    else if (c.interactive) inner += '<span class="meta-tag">🔘 כפתורים</span><br>';
+    inner += escapeHtml(c.text);
+    const ts = d ? d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : '';
+    inner += '<span class="ts">' + escapeHtml(ts) + '</span>';
+    el.innerHTML = inner;
+    frag.appendChild(el);
   }
-  thread.innerHTML = html;
-  thread.scrollTop = thread.scrollHeight;
+  thread.innerHTML = '';
+  thread.appendChild(frag);
+  if (wasNearBottom) thread.scrollTop = thread.scrollHeight;
+  else thread.scrollTop = prevTop + (thread.scrollHeight - prevHeight);
 }
 
-async function loadLeads(){
+thread.addEventListener('scroll', () => { userScrolledUp = !nearBottom(thread); });
+
+async function loadLeads(silent){
+  if (leadsInflight) return;
+  const ctrl = new AbortController(); leadsInflight = ctrl;
+  const myId = ++leadsReqId;
   try {
-    flash();
-    const data = await api('/api/wa-manager/leads');
+    if (!silent) flash();
+    const data = await api('/api/wa-manager/leads', { signal: ctrl.signal });
+    if (myId !== leadsReqId) return;
     leads = (data.leads || []).filter(l => l.last_message_at);
     renderList();
-    if (active){
-      const data2 = await api('/api/wa-manager/conversations/' + encodeURIComponent(active));
-      renderMessages(data2.messages || [], data2.deliveryStatus);
+    if (active && leads.find(l => l.phone === active)) {
+      renderConvActions(leads.find(l => l.phone === active));
+      await refreshConv(active, false);
     }
-  } catch (e){
-    countEl.textContent = 'שגיאה: ' + e.message;
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (myId === leadsReqId) countEl.textContent = 'שגיאה: ' + e.message;
+  } finally {
+    if (leadsInflight === ctrl) leadsInflight = null;
   }
 }
 
 qs('#q').addEventListener('input', e => { searchTerm = e.target.value; renderList(); });
-qs('#back').addEventListener('click', () => { document.body.classList.remove('viewing'); active = null; renderList(); });
+qs('#back').addEventListener('click', () => { document.body.classList.remove('viewing'); active = null; renderConvActions(null); renderList(); });
+
+document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLeads(true); });
 
 loadLeads();
-setInterval(loadLeads, 15000);
+setInterval(() => { if (!document.hidden) loadLeads(true); }, 15000);
+})();
 </script>
 </body>
 </html>
