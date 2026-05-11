@@ -45,6 +45,7 @@ const dashboardHTML = readFileSync(join(import.meta.dirname, '../views/dashboard
 const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), 'utf-8');
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const waMobileHTML = readFileSync(join(import.meta.dirname, '../views/wa-mobile.html'), 'utf-8');
+const waLightHTML = readFileSync(join(import.meta.dirname, '../views/wa-light.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const waManagerManifestJSON = readFileSync(join(import.meta.dirname, '../views/wa-manager-manifest.json'), 'utf-8');
@@ -2075,6 +2076,14 @@ app.get('/wa-inbox', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.send(waInboxHTML);
+});
+
+// WA Light — minimal RTL inbox showing inbound/outbound only
+app.get('/wa-light', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.send(waLightHTML);
 });
 
 // WA Mobile PWA (iPhone app) — served without dashAuth so PWA home screen launch works

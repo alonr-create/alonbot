@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>WA Light — נכנס/יוצא</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:-apple-system,'Segoe UI',Rubik,Arial,sans-serif;background:#0b141a;color:#e9edef;font-size:15px;-webkit-font-smoothing:antialiased}
+  a{color:#53bdeb;text-decoration:none}
+  #app{display:grid;grid-template-columns:340px 1fr;height:100vh;height:100dvh}
+  header{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#202c33;border-bottom:1px solid #2a3942;font-weight:600}
+  header .badge{margin-inline-start:auto;font-size:12px;color:#8696a0;font-weight:400}
+  #side{display:flex;flex-direction:column;background:#111b21;border-inline-end:1px solid #2a3942;min-width:0}
+  #search{padding:8px 12px;background:#111b21;border-bottom:1px solid #2a3942}
+  #search input{width:100%;padding:8px 12px;border:1px solid #2a3942;background:#202c33;color:#e9edef;border-radius:20px;font-size:14px;outline:none}
+  #list{flex:1;overflow-y:auto}
+  .row{display:flex;flex-direction:column;gap:2px;padding:10px 14px;border-bottom:1px solid #1f2c33;cursor:pointer;transition:background .12s}
+  .row:hover{background:#202c33}
+  .row.active{background:#2a3942}
+  .row .top{display:flex;align-items:baseline;gap:8px}
+  .row .name{font-weight:600;font-size:15px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .time{font-size:11px;color:#8696a0;flex-shrink:0}
+  .row .preview{display:flex;align-items:center;gap:6px;font-size:13px;color:#8696a0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row .preview .arrow{font-size:11px;flex-shrink:0}
+  .row .preview .arrow.in{color:#00a884}
+  .row .preview .arrow.out{color:#53bdeb}
+  .row .preview .text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .row.unread .name{color:#fff}
+  .row.unread .preview{color:#d1d7db;font-weight:500}
+  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#00a884;flex-shrink:0}
+  #main{display:flex;flex-direction:column;min-width:0;background:#0b141a;background-image:linear-gradient(135deg,#0c1418 25%,#0b141a 25%,#0b141a 50%,#0c1418 50%,#0c1418 75%,#0b141a 75%,#0b141a)}
+  #conv-header{display:flex;align-items:center;gap:10px;padding:10px 14px;background:#202c33;border-bottom:1px solid #2a3942;flex-shrink:0}
+  #back{display:none;background:none;border:none;color:#e9edef;font-size:22px;cursor:pointer;padding:0 4px}
+  #conv-title{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  #conv-sub{font-size:12px;color:#8696a0;margin-inline-start:auto;flex-shrink:0}
+  #thread{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:6px}
+  .msg{max-width:72%;padding:8px 12px;border-radius:8px;font-size:14.5px;line-height:1.4;word-wrap:break-word;white-space:pre-wrap;box-shadow:0 1px 0.5px rgba(0,0,0,.13);position:relative}
+  .msg.in{align-self:flex-start;background:#202c33;border-top-right-radius:0}
+  .msg.out{align-self:flex-end;background:#005c4b;border-top-left-radius:0}
+  .msg .ts{display:block;font-size:10.5px;color:#8696a0;margin-top:4px;text-align:end}
+  .msg.template{opacity:.85;font-style:italic}
+  .msg .meta-tag{display:inline-block;font-size:10px;color:#8696a0;background:rgba(0,0,0,.2);padding:1px 6px;border-radius:8px;margin-bottom:4px}
+  #empty{flex:1;display:flex;align-items:center;justify-content:center;color:#667781;font-size:14px;text-align:center;padding:20px}
+  .day-sep{align-self:center;font-size:11px;color:#8696a0;background:#1f2c33;padding:4px 10px;border-radius:8px;margin:8px 0}
+  #refreshing{position:fixed;top:10px;left:50%;transform:translateX(-50%);background:#005c4b;color:#fff;padding:4px 12px;border-radius:12px;font-size:12px;opacity:0;transition:opacity .25s;pointer-events:none;z-index:5}
+  #refreshing.on{opacity:1}
+  @media (max-width:720px){
+    #app{grid-template-columns:1fr}
+    #main{display:none}
+    body.viewing #side{display:none}
+    body.viewing #main{display:flex}
+    #back{display:inline-block}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <aside id="side">
+    <header>WhatsApp — קו 148 <span class="badge" id="count"></span></header>
+    <div id="search"><input id="q" type="search" placeholder="חיפוש לפי שם או טלפון…" autocomplete="off"></div>
+    <div id="list"></div>
+  </aside>
+  <section id="main">
+    <div id="conv-header">
+      <button id="back" aria-label="חזרה">→</button>
+      <div id="conv-title">בחר שיחה</div>
+      <div id="conv-sub"></div>
+    </div>
+    <div id="thread"><div id="empty">בחר שיחה מהרשימה כדי לראות הודעות נכנסות ויוצאות</div></div>
+  </section>
+</div>
+<div id="refreshing">מתעדכן…</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get('token') || '';
+const qs = (s)=>document.querySelector(s);
+const list = qs('#list'), thread = qs('#thread'), countEl = qs('#count');
+const convTitle = qs('#conv-title'), convSub = qs('#conv-sub'), refreshing = qs('#refreshing');
+let leads = [], active = null, searchTerm = '';
+
+function flash(){ refreshing.classList.add('on'); setTimeout(()=>refreshing.classList.remove('on'), 600); }
+
+function api(path){
+  const sep = path.includes('?') ? '&' : '?';
+  return fetch(path + sep + 'token=' + encodeURIComponent(TOKEN)).then(r => {
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  });
+}
+
+function timeShort(iso){
+  if (!iso) return '';
+  const d = new Date(iso.replace(' ', 'T'));
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  if (sameDay) return d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'});
+  const yesterday = new Date(now); yesterday.setDate(now.getDate()-1);
+  if (d.toDateString() === yesterday.toDateString()) return 'אתמול';
+  const diff = (now - d) / (1000*60*60*24);
+  if (diff < 7) return ['א','ב','ג','ד','ה','ו','ש'][d.getDay()];
+  return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit'});
+}
+
+function fullTime(iso){
+  if (!iso) return '';
+  const d = new Date(iso.replace(' ', 'T'));
+  return d.toLocaleString('he-IL',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+function dayLabel(iso){
+  const d = new Date(iso.replace(' ', 'T'));
+  const now = new Date();
+  if (d.toDateString() === now.toDateString()) return 'היום';
+  const y = new Date(now); y.setDate(now.getDate()-1);
+  if (d.toDateString() === y.toDateString()) return 'אתמול';
+  return d.toLocaleDateString('he-IL',{day:'2-digit',month:'2-digit',year:'numeric'});
+}
+
+function cleanContent(c){
+  if (!c) return '';
+  let s = c;
+  const tmpl = s.match(/\[template:([^\]\n]+)\]/);
+  const interact = s.match(/\[interactive:[^\]]*\]/);
+  s = s.replace(/\[template:[^\]\n]+\]\s*/, '').replace(/\[interactive:[^\]]*\]\s*/g, '').trim();
+  return { text: s, template: tmpl ? tmpl[1] : null, interactive: !!interact };
+}
+
+function leadDisplayName(l){
+  return l.name || ('+' + l.phone);
+}
+
+function isUnread(l){
+  return l.last_message_role === 'user';
+}
+
+function renderList(){
+  const term = searchTerm.trim();
+  const filtered = term
+    ? leads.filter(l => (l.name||'').toLowerCase().includes(term.toLowerCase()) || l.phone.includes(term))
+    : leads;
+  countEl.textContent = filtered.length + ' שיחות';
+  list.innerHTML = filtered.map(l => {
+    const inMsg = l.last_message_role === 'user';
+    const c = cleanContent(l.last_message);
+    const preview = c.template ? '[' + c.template + ']' : (c.interactive ? (c.text || '[כפתורים]') : (c.text || ''));
+    const cls = ['row', isUnread(l) ? 'unread' : '', active === l.phone ? 'active' : ''].filter(Boolean).join(' ');
+    return `<div class="${cls}" data-phone="${l.phone}">
+      <div class="top">
+        <span class="name">${escapeHtml(leadDisplayName(l))}</span>
+        <span class="time">${timeShort(l.last_message_at)}</span>
+      </div>
+      <div class="preview">
+        ${inMsg ? '<span class="dot"></span>' : ''}
+        <span class="arrow ${inMsg?'in':'out'}">${inMsg?'⬅':'➡'}</span>
+        <span class="text">${escapeHtml(preview).slice(0,80)}</span>
+      </div>
+    </div>`;
+  }).join('') || '<div style="padding:20px;color:#667781;text-align:center;font-size:13px">אין שיחות</div>';
+  list.querySelectorAll('.row').forEach(el => {
+    el.addEventListener('click', () => openConv(el.dataset.phone));
+  });
+}
+
+function escapeHtml(s){
+  return (s||'').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function openConv(phone){
+  active = phone;
+  document.body.classList.add('viewing');
+  renderList();
+  const lead = leads.find(l => l.phone === phone);
+  convTitle.textContent = lead ? leadDisplayName(lead) : '+' + phone;
+  convSub.textContent = lead ? (lead.source || '') : '';
+  thread.innerHTML = '<div id="empty">טוען…</div>';
+  try {
+    const data = await api('/api/wa-manager/conversations/' + encodeURIComponent(phone));
+    renderMessages(data.messages || [], data.deliveryStatus);
+  } catch (e) {
+    thread.innerHTML = '<div id="empty">שגיאה בטעינה: ' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderMessages(messages, deliveryStatus){
+  if (!messages.length){
+    thread.innerHTML = '<div id="empty">אין הודעות עדיין</div>';
+    return;
+  }
+  let html = '', lastDay = '';
+  for (const m of messages){
+    const day = m.created_at ? new Date(m.created_at.replace(' ','T')).toDateString() : '';
+    if (day && day !== lastDay){
+      html += `<div class="day-sep">${dayLabel(m.created_at)}</div>`;
+      lastDay = day;
+    }
+    const out = m.role === 'assistant';
+    const c = cleanContent(m.content);
+    const tag = c.template ? `<span class="meta-tag">📋 תבנית: ${escapeHtml(c.template)}</span><br>` : (c.interactive ? '<span class="meta-tag">🔘 כפתורים</span><br>' : '');
+    const cls = ['msg', out?'out':'in', c.template?'template':''].filter(Boolean).join(' ');
+    const ts = m.created_at ? new Date(m.created_at.replace(' ','T')).toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : '';
+    html += `<div class="${cls}">${tag}${escapeHtml(c.text)}<span class="ts">${ts}</span></div>`;
+  }
+  thread.innerHTML = html;
+  thread.scrollTop = thread.scrollHeight;
+}
+
+async function loadLeads(){
+  try {
+    flash();
+    const data = await api('/api/wa-manager/leads');
+    leads = (data.leads || []).filter(l => l.last_message_at);
+    renderList();
+    if (active){
+      const data2 = await api('/api/wa-manager/conversations/' + encodeURIComponent(active));
+      renderMessages(data2.messages || [], data2.deliveryStatus);
+    }
+  } catch (e){
+    countEl.textContent = 'שגיאה: ' + e.message;
+  }
+}
+
+qs('#q').addEventListener('input', e => { searchTerm = e.target.value; renderList(); });
+qs('#back').addEventListener('click', () => { document.body.classList.remove('viewing'); active = null; renderList(); });
+
+loadLeads();
+setInterval(loadLeads, 15000);
+</script>
+</body>
+</html>
