@@ -165,6 +165,57 @@ async function findLeadByDetails(
   return null;
 }
 
+// Spouse-payer fallback. The actual lead may have a meeting today/yesterday
+// but the receipt carries the spouse's name/phone (different household
+// member paid). Query leads whose meeting date (date4) is today or yesterday
+// in Israel time. Prefers surname overlap, then falls back to single-meeting.
+function israelDateString(offsetDays = 0): string {
+  const d = new Date(Date.now() + 3 * 3600 * 1000 + offsetDays * 86400 * 1000);
+  return d.toISOString().slice(0, 10);
+}
+
+async function findLeadByRecentMeeting(payerName: string): Promise<{
+  itemId: string | null;
+  candidates: Array<{ id: string; name: string }>;
+  reason?: string;
+}> {
+  if (!config.mondayApiKey) return { itemId: null, candidates: [] };
+  const today = israelDateString(0);
+  const yest = israelDateString(-1);
+  const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 100, columns: [{column_id: "date4", column_values: ["${today}", "${yest}"]}]) { items { id name } } }`;
+  const data = await mondayQuery(q);
+  const items: any[] = data?.data?.items_page_by_column_values?.items || [];
+  if (items.length === 0) return { itemId: null, candidates: [] };
+
+  const payerTokens = (payerName || "")
+    .split(/\s+/)
+    .map((t) => t.trim())
+    .filter((t) => t.length >= 2);
+
+  if (payerTokens.length > 0) {
+    const overlap = items.filter((l) => {
+      const leadTokens = String(l.name || "").split(/\s+/);
+      return leadTokens.some((lt: string) => payerTokens.includes(lt));
+    });
+    if (overlap.length === 1) {
+      return {
+        itemId: overlap[0].id,
+        candidates: items,
+        reason: "shared-name-token-with-recent-meeting",
+      };
+    }
+  }
+
+  if (items.length === 1) {
+    return {
+      itemId: items[0].id,
+      candidates: items,
+      reason: "single-recent-meeting",
+    };
+  }
+  return { itemId: null, candidates: items };
+}
+
 async function uploadPdfToMonday(
   itemId: string,
   pdf: Buffer,
@@ -364,13 +415,42 @@ async function processMessage(c: any, uid: number): Promise<void> {
     }
   }
 
+  // Spouse-payer fallback. When phone/name/asmachta/invoice-number/recent-tx
+  // all miss, the payer may be the spouse of a lead who just had a planning
+  // meeting (e.g., husband paid for wife Ofra's planning session). Match by
+  // leads whose meeting date (date4) is today or yesterday in Israel time.
+  if (!itemId) {
+    const meeting = await findLeadByRecentMeeting(details.fullName || "");
+    if (meeting.itemId) {
+      itemId = meeting.itemId;
+      matchSource = meeting.reason || "recent-meeting-spouse-payer";
+      log.info(
+        { uid, itemId, payerName: details.fullName, reason: matchSource },
+        "matched invoice to lead with recent meeting (likely spouse payment)",
+      );
+    } else if (meeting.candidates.length > 0) {
+      const list = meeting.candidates
+        .slice(0, 8)
+        .map((c) => `• ${c.name} (id ${c.id})`)
+        .join("\n");
+      await sendTelegram(
+        `📧 חשבונית ${details.invoiceNumber || ""} מ-Grow (משלם: ${details.fullName || "—"}) — לא נמצא ליד לפי טלפון/שם/אסמכתא.\n\nיש ${meeting.candidates.length} פגישות תכנון היום/אתמול — אולי בן/בת זוג שילם:\n${list}\n\n*לא צירפתי אוטומטית* — צרף ידנית לליד הנכון.`,
+      );
+      log.warn(
+        { uid, candidateCount: meeting.candidates.length, payerName: details.fullName },
+        "spouse-payer fallback: multiple recent meetings — manual review",
+      );
+      return;
+    }
+  }
+
   if (!itemId) {
     log.warn(
       { uid, phone: details.payerPhone, asmachta: details.asmachta },
       "no matching lead found",
     );
     await sendTelegram(
-      `📧 חשבונית ${details.invoiceNumber || ""} מ-Grow התקבלה — לא נמצא ליד תואם (אין עסקה פתוחה ב-10 דק׳ האחרונות, ולא הצלחתי להצליב לפי טלפון/אסמכתא/מס׳ חשבונית). צרף ידנית.`,
+      `📧 חשבונית ${details.invoiceNumber || ""} מ-Grow התקבלה — לא נמצא ליד תואם (אין עסקה פתוחה ב-10 דק׳ האחרונות, אין פגישות תכנון היום/אתמול, ולא הצלחתי להצליב לפי טלפון/אסמכתא/מס׳ חשבונית). צרף ידנית.`,
     );
     return;
   }
