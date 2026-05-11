@@ -136,6 +136,44 @@ async function notifyAlon(text: string): Promise<void> {
   }
 }
 
+// Sapir gets a WA template ping for every Quickly upload batch so she can
+// verify the docs in Monday. Uses dprisha_internal_report_v1 (UTILITY) — works
+// outside the 24h window. Meta forbids newlines/tabs/4+ spaces in template
+// params; caller must pass a single-line, pre-sanitised string.
+const SAPIR_WA = process.env.SAPIR_WA || '972522281914';
+const DEKEL_WA_PHONE_ID = process.env.DEKEL_WA_PHONE_ID || '1080047101853955';
+const FB_TOKEN = process.env.FB_ACCESS_TOKEN || process.env.WA_CLOUD_TOKEN || '';
+
+async function notifySapirWA(line: string): Promise<void> {
+  if (!FB_TOKEN || !SAPIR_WA) return;
+  // Hard sanitize for Meta template constraints (error 132018).
+  const safe = line.replace(/[\n\t]/g, ' ').replace(/ {2,}/g, ' ').slice(0, 1000);
+  try {
+    const r = await fetch(`https://graph.facebook.com/v21.0/${DEKEL_WA_PHONE_ID}/messages`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${FB_TOKEN}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messaging_product: 'whatsapp',
+        to: SAPIR_WA,
+        type: 'template',
+        template: {
+          name: 'dprisha_internal_report_v1',
+          language: { code: 'he' },
+          components: [{ type: 'body', parameters: [{ type: 'text', text: safe }] }],
+        },
+      }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      log.warn({ status: r.status, err: err.slice(0, 200) }, 'Sapir WA notify failed');
+    } else {
+      log.info({ to: SAPIR_WA }, 'Sapir WA notify sent');
+    }
+  } catch (e: any) {
+    log.warn({ err: e.message }, 'Sapir WA notify threw');
+  }
+}
+
 interface QuicklyMediaInput {
   phone: string;
   senderName: string;
@@ -178,6 +216,14 @@ async function sendSummary(entry: PendingNotification): Promise<void> {
     : `📎 *מסמכים חדשים מ-Quickly*\nשם: ${senderName}\nטלפון: \`${phone}\``;
   const text = `${headline}\n\n${files.length} מסמכים עלו לליד:\n${fileList}\n\n${link}`;
   await notifyAlon(text);
+
+  // Sapir parallel ping — single-line WA template so she can verify in Monday.
+  const sapirHead = isNewLead ? 'ליד חדש מ-Quickly' : 'מסמכים חדשים מ-Quickly';
+  const sapirLine = `${sapirHead} | ${senderName} (${phone}) | ${files.length} קבצים: ` +
+    files.map(f => f.name).join(', ') +
+    ` | פתח: https://palm530671.monday.com/boards/${DEKEL_LEADS_BOARD_ID}/pulses/${itemId}`;
+  await notifySapirWA(sapirLine);
+
   log.info({ phone, itemId, count: files.length, isNewLead }, 'Quickly summary notification sent');
 }
 
