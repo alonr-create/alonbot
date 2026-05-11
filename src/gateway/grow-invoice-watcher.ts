@@ -16,6 +16,10 @@ const LEADS_BOARD_ID = 1443236269;
 const INVOICE_FILE_COL = "file_mm2g3bcb";
 const INVOICE_URL_COL = "link_mm2gh2mr";
 const INVOICE_NUMBER_COL = "text_mm2gb630";
+// Meeting-date columns on the Dekel leads board. date__1 = scheduled
+// introduction (היכרות), date0__1 = scheduled planning (תכנון). NOT date4 —
+// that one is the lead's birthdate on this board.
+const MEETING_DATE_COLS = ["date__1", "date0__1"] as const;
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS grow_imap_state (
@@ -182,9 +186,18 @@ async function findLeadByRecentMeeting(payerName: string): Promise<{
   if (!config.mondayApiKey) return { itemId: null, candidates: [] };
   const today = israelDateString(0);
   const yest = israelDateString(-1);
-  const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 100, columns: [{column_id: "date4", column_values: ["${today}", "${yest}"]}]) { items { id name } } }`;
-  const data = await mondayQuery(q);
-  const items: any[] = data?.data?.items_page_by_column_values?.items || [];
+  // Search both meeting-date columns (introduction + planning). Each call
+  // hits one column; merge and dedupe by item id.
+  const seen = new Map<string, { id: string; name: string }>();
+  for (const colId of MEETING_DATE_COLS) {
+    const q = `query { items_page_by_column_values(board_id: ${LEADS_BOARD_ID}, limit: 100, columns: [{column_id: "${colId}", column_values: ["${today}", "${yest}"]}]) { items { id name } } }`;
+    const data = await mondayQuery(q);
+    const items: any[] = data?.data?.items_page_by_column_values?.items || [];
+    for (const it of items) {
+      if (!seen.has(it.id)) seen.set(it.id, { id: it.id, name: it.name });
+    }
+  }
+  const items = [...seen.values()];
   if (items.length === 0) return { itemId: null, candidates: [] };
 
   const payerTokens = (payerName || "")
