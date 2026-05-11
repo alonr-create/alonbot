@@ -63,6 +63,10 @@
     body.viewing #main{display:flex}
     #back{display:inline-block}
   }
+  html.embed #app{grid-template-columns:1fr}
+  html.embed #side{display:none}
+  html.embed #main{display:flex}
+  html.embed #back{display:none}
 </style>
 </head>
 <body>
@@ -89,10 +93,13 @@
 (() => {
 const url = new URL(location.href);
 let TOKEN = url.searchParams.get('token') || '';
+const REQUESTED_PHONE = url.searchParams.get('phone') || '';
+const EMBED = url.searchParams.get('embed') === '1' || window.self !== window.top;
 if (TOKEN) {
   url.searchParams.delete('token');
   history.replaceState(null, '', url.pathname + (url.search || '') + url.hash);
 }
+if (EMBED) document.documentElement.classList.add('embed');
 
 const qs = (s)=>document.querySelector(s);
 const list = qs('#list'), thread = qs('#thread'), countEl = qs('#count');
@@ -208,6 +215,15 @@ function renderList(){
 
 function nearBottom(el){ return el.scrollHeight - el.scrollTop - el.clientHeight < 80; }
 
+function normalizePhone(raw){
+  if (!raw) return '';
+  const d = String(raw).replace(/[^\d+]/g, '').replace(/^\+/, '');
+  if (d.startsWith('972')) return d;
+  if (d.startsWith('0')) return '972' + d.slice(1);
+  if (d.length === 9) return '972' + d;
+  return d;
+}
+
 function renderConvActions(lead){
   convActions.innerHTML = '';
   if (!lead) return;
@@ -217,11 +233,30 @@ function renderConvActions(lead){
     a.className = 'btn primary'; a.href = mUrl; a.target = '_blank'; a.rel = 'noopener noreferrer';
     a.textContent = '📋 פתח במאנדי';
     convActions.appendChild(a);
+
+    const sync = document.createElement('button');
+    sync.className = 'btn'; sync.textContent = '🔄 סנכרן למאנדי';
+    sync.title = 'פוסט עדכון במאנדי עם 10 ההודעות האחרונות';
+    sync.addEventListener('click', () => syncToMonday(lead.phone, sync));
+    convActions.appendChild(sync);
   } else {
     const b = document.createElement('button');
     b.className = 'btn'; b.textContent = '➕ צור ליד במאנדי';
     b.addEventListener('click', () => createMondayFromUI(lead.phone, b));
     convActions.appendChild(b);
+  }
+}
+
+async function syncToMonday(phone, btn){
+  btn.disabled = true; const original = btn.textContent; btn.textContent = 'מסנכרן…';
+  try {
+    const r = await api('/api/wa-manager/monday-sync-chat/' + encodeURIComponent(phone), { method: 'POST' });
+    if (r && r.success) toast('עדכון נוסף למאנדי ✓');
+    else throw new Error((r && r.error) || 'סנכרון נכשל');
+  } catch (e) {
+    toast('שגיאה: ' + e.message, true);
+  } finally {
+    btn.disabled = false; btn.textContent = original;
   }
 }
 
@@ -319,6 +354,9 @@ async function loadLeads(silent){
     if (active && leads.find(l => l.phone === active)) {
       renderConvActions(leads.find(l => l.phone === active));
       await refreshConv(active, false);
+    } else if (!active && REQUESTED_PHONE) {
+      const target = normalizePhone(REQUESTED_PHONE);
+      if (target) await openConv(target);
     }
   } catch (e) {
     if (e.name === 'AbortError') return;

@@ -1318,6 +1318,53 @@ app.post('/api/wa-manager/broadcast', dashAuth, async (req, res) => {
   }
 });
 
+app.post('/api/wa-manager/monday-sync-chat/:phone', dashAuth, async (req, res) => {
+  try {
+    const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
+    const lead = db.prepare('SELECT phone, name, source, monday_item_id FROM leads WHERE phone = ?').get(phone) as any;
+    if (!lead?.monday_item_id) {
+      res.status(400).json({ success: false, error: 'אין monday_item_id לליד הזה — צור קודם ליד במאנדי' });
+      return;
+    }
+    if (!config.mondayApiKey) {
+      res.status(500).json({ success: false, error: 'MONDAY_API_KEY חסר' });
+      return;
+    }
+    const msgs = db.prepare(`
+      SELECT role, content, created_at FROM messages
+      WHERE sender_id = ? AND channel IN ('whatsapp','whatsapp-inbound','whatsapp-outbound')
+      ORDER BY id DESC LIMIT 10
+    `).all(phone).reverse() as any[];
+    if (!msgs.length) {
+      res.status(400).json({ success: false, error: 'אין הודעות לסנכרן' });
+      return;
+    }
+    const name = lead.name || phone;
+    const lines = msgs.map(m => {
+      const t = new Date((m.created_at || '').replace(' ', 'T')).toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem' });
+      const who = m.role === 'user' ? `📩 ${name}` : `🤖 הבוט`;
+      const txt = (m.content || '').replace(/\[template:[^\]\n]+\]\s*/, '').replace(/\[interactive:[^\]\n]*\]/g, '').slice(0, 500);
+      return `${who} (${t}):\n${txt}`;
+    });
+    const body = `💬 סנכרון שיחת WhatsApp (${msgs.length} הודעות אחרונות)\n\n${lines.join('\n\n')}`;
+    const escaped = body.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n');
+    const mutation = `mutation { create_update(item_id: ${lead.monday_item_id}, body: "${escaped}") { id } }`;
+    const mres = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: config.mondayApiKey },
+      body: JSON.stringify({ query: mutation }),
+    });
+    const mdata = await mres.json() as any;
+    if (mdata.errors) {
+      res.status(500).json({ success: false, error: 'Monday: ' + JSON.stringify(mdata.errors) });
+      return;
+    }
+    res.json({ success: true, monday_update_id: mdata.data?.create_update?.id, count: msgs.length });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/wa-manager/monday-create-lead/:phone', dashAuth, async (req, res) => {
   try {
     const phone = req.params.phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
