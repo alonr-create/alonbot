@@ -263,7 +263,45 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       return;
     }
 
-
+    // Dekel main line (148): mirror Quickly's behavior — also auto-upload incoming media
+    // to the matched lead's Monday Files column. Continues to AI processing afterwards.
+    if (phoneCfg.source === 'voice_agent' && ['image', 'document', 'audio', 'video'].includes(msg.type)) {
+      try {
+        const t = msg.type;
+        let mediaId: string | undefined;
+        let mimeType = 'application/octet-stream';
+        let filename = `dekel148_${Date.now()}`;
+        if (t === 'image') {
+          mediaId = msg.image?.id;
+          mimeType = msg.image?.mime_type || 'image/jpeg';
+          filename += mimeType === 'image/png' ? '.png' : '.jpg';
+        } else if (t === 'document') {
+          mediaId = msg.document?.id;
+          mimeType = msg.document?.mime_type || 'application/octet-stream';
+          filename = msg.document?.filename || filename;
+        } else if (t === 'video') {
+          mediaId = msg.video?.id;
+          mimeType = msg.video?.mime_type || 'video/mp4';
+          filename += '.mp4';
+        } else if (t === 'audio') {
+          mediaId = msg.audio?.id;
+          mimeType = msg.audio?.mime_type || 'audio/ogg';
+          filename += '.ogg';
+        }
+        if (mediaId) {
+          const buffer = await downloadCloudMedia(mediaId, phoneCfg.token);
+          if (buffer) {
+            log.info({ from: senderId, type: t, filename, bytes: buffer.byteLength }, 'Dekel 148 media received → Monday upload');
+            // Fire-and-forget — don't block AI agent processing
+            handleQuicklyIncomingMedia({ phone: senderId, senderName, buffer, mimeType, filename }).catch((e: any) => {
+              log.error({ err: e?.message, senderId, filename }, 'Dekel 148 → Monday upload failed');
+            });
+          }
+        }
+      } catch (e: any) {
+        log.error({ err: e?.message, senderId }, '148 media-to-Monday capture threw');
+      }
+    }
 
     log.debug({ from: senderId, type: msg.type, workspace: phoneCfg.workspaceId, receivingPhone: receivingPhoneId }, 'Cloud API message received');
 
