@@ -492,7 +492,9 @@ async function sendWhatsAppTemplate(phone: string, templateName: string, params:
     throw new Error(`Template API error: ${resp.status} ${err}`);
   }
 
-  const bodyText = `[Template: ${templateName}] ${params.join(' | ')}`;
+  const { getTemplateBodies, renderTemplate } = await import('../utils/template-cache.js');
+  await getTemplateBodies().catch(() => {});
+  const bodyText = renderTemplate(templateName, params);
   db.prepare("INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)").run(phone, bodyText, nowIsrael());
 }
 

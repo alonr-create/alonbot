@@ -2012,6 +2012,19 @@ app.get('/api/wa-manager/costs', dashAuth, (req, res) => {
 });
 
 // WA Templates API — proxy to Meta Graph API (both WABAs)
+// Lightweight template body map for the wa-light renderer (cached 10min)
+app.get('/api/wa-manager/template-bodies', dashAuth, async (_req, res) => {
+  try {
+    const { getTemplateBodies } = await import('../utils/template-cache.js');
+    const bodies = await getTemplateBodies();
+    const out: Record<string, string> = {};
+    for (const [k, v] of bodies) out[k] = v;
+    res.json({ success: true, bodies: out, count: bodies.size });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/wa-manager/templates', dashAuth, async (req, res) => {
   try {
     const workspace = (req.query as any).workspace as string | undefined;
@@ -2420,18 +2433,9 @@ app.post('/api/send-whatsapp', combinedAuth, async (req, res) => {
       replyPayload
     );
     // Log outbound WA message for flow tracking + 360Shmikley CRM visibility
-    const expandTemplate = (name: string, params: string[]): string => {
-      const bodies: Record<string, string> = {
-        'dprisha_postcall_webinar':
-          'שלום {{1}} 👋\n\nתודה על השיחה! נשמח להיות לשירותך.\n\n🎥 ווביינר חינמי על תכנון פרישה:\nצפייה בהקלטה: https://www.youtube.com/live/5p_8hX1QhlE\nזום בשידור חי (כל שלישי 19:00): https://zoom.us/j/96752752908\n\nלפרטים נוספים: https://dprisha.co.il\n\nדקל לפרישה 🏡',
-        'dprisha_postcall_booked':
-          'שלום {{1}} 👋\n\nהפגישה נקבעה בהצלחה! נחזור אליך לאישור.\n\n🎥 בינתיים, ווביינר חינמי על תכנון פרישה:\nhttps://www.youtube.com/live/5p_8hX1QhlE\n\nדקל לפרישה 🏡',
-      };
-      const body = bodies[name];
-      if (!body) return `[template:${name}] ${params.join(', ')}`;
-      return body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? `{{${n}}}`);
-    };
-    const logContent = template ? expandTemplate(template, templateParams || []) : message;
+    const { getTemplateBodies, renderTemplate } = await import('../utils/template-cache.js');
+    if (template) await getTemplateBodies().catch(() => {});
+    const logContent = template ? renderTemplate(template, templateParams || []) : message;
     try {
       db.prepare(`INSERT INTO messages (channel, sender_id, role, content, created_at) VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`).run(chatPhone, logContent, nowIsrael());
     } catch (e) { log.warn({ err: (e as Error).message }, 'outbound WA message log failed'); }

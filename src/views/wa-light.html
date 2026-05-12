@@ -122,6 +122,7 @@ let leads = [], active = null, searchTerm = '';
 let leadsReqId = 0, convReqId = 0;
 let leadsInflight = null, convInflight = null;
 let userScrolledUp = false;
+let templateBodies = {};
 
 function flash(){ refreshing.classList.add('on'); setTimeout(()=>refreshing.classList.remove('on'), 600); }
 function toast(msg, err){
@@ -169,7 +170,7 @@ function dayLabel(iso){
 }
 
 function cleanContent(c){
-  if (!c) return { text: '', template: null, interactive: false };
+  if (!c) return { text: '', template: null, interactive: false, rendered: '' };
   let s = String(c);
   const tmpl = s.match(/^\[template:([^\]\n]+)\]/);
   if (tmpl) s = s.slice(tmpl[0].length);
@@ -177,7 +178,16 @@ function cleanContent(c){
   const interact = idx !== -1;
   if (interact) s = s.slice(0, idx);
   s = s.trim();
-  return { text: s, template: tmpl ? tmpl[1] : null, interactive: interact };
+  let rendered = '';
+  if (tmpl) {
+    const name = tmpl[1].trim();
+    const body = templateBodies[name];
+    if (body) {
+      const params = s.split(',').map(p => p.trim()).filter(Boolean);
+      rendered = body.replace(/\{\{(\d+)\}\}/g, (_, n) => params[Number(n) - 1] ?? `{{${n}}}`);
+    }
+  }
+  return { text: s, template: tmpl ? tmpl[1].trim() : null, interactive: interact, rendered };
 }
 
 function dedupeMessages(messages){
@@ -198,6 +208,7 @@ function dedupeMessages(messages){
 
 function previewText(c){
   if (!c) return '';
+  if (c.rendered) return c.rendered.replace(/\n+/g, ' ');
   if (c.text) return c.text;
   if (c.template) return '📋 ' + c.template;
   if (c.interactive) return '🔘 כפתורים';
@@ -364,9 +375,9 @@ function renderMessages(messages, scrollEnd){
     el.className = ['msg', out ? 'out' : 'in', c.template ? 'template' : ''].filter(Boolean).join(' ');
     el.setAttribute('dir', 'auto');
     let inner = '';
-    if (c.template) inner += '<span class="meta-tag">📋 תבנית: ' + escapeHtml(c.template) + '</span><br>';
+    if (c.template) inner += '<span class="meta-tag">📋 ' + escapeHtml(c.template) + '</span><br>';
     else if (c.interactive) inner += '<span class="meta-tag">🔘 כפתורים</span><br>';
-    inner += escapeHtml(c.text);
+    inner += escapeHtml(c.rendered || c.text);
     const ts = d ? d.toLocaleTimeString('he-IL',{hour:'2-digit',minute:'2-digit'}) : '';
     inner += '<span class="ts">' + escapeHtml(ts) + '</span>';
     el.innerHTML = inner;
@@ -453,7 +464,15 @@ async function sendMessage(){
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLeads(true); });
 
-loadLeads();
+async function loadTemplateBodies(){
+  try {
+    const data = await api('/api/wa-manager/template-bodies');
+    if (data && data.bodies) templateBodies = data.bodies;
+  } catch (e) { /* non-fatal */ }
+}
+
+loadTemplateBodies().finally(() => loadLeads());
+setInterval(loadTemplateBodies, 10 * 60 * 1000);
 setInterval(() => { if (!document.hidden) loadLeads(true); }, 15000);
 })();
 </script>
