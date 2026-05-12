@@ -768,7 +768,7 @@ app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any)
   dashAuth(req, res, next);
 }, (req: any, res: any) => {
   try {
-    const { phone, message, direction, sender_name } = req.body || {};
+    const { phone, message, direction, sender_name, monday_item_id, force_source } = req.body || {};
     if (!phone || !message) {
       res.status(400).json({ success: false, error: 'phone and message required' });
       return;
@@ -776,18 +776,28 @@ app.post('/api/wa-manager/log-external-message', (req: any, res: any, next: any)
     const normalizedPhone = phone.replace(/[\s\-\(\)]/g, '').replace(/^0/, '972').replace(/^\+/, '');
     const channel = direction === 'inbound' ? 'whatsapp-inbound' : 'whatsapp-outbound';
     const role = direction === 'inbound' ? 'user' : 'assistant';
-    // Ensure lead exists in leads table
     const source = req.body.source || 'alon_dev';
     const now = nowIsrael();
-    db.prepare(`INSERT INTO leads (phone, name, source, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?)
-      ON CONFLICT(phone) DO UPDATE SET updated_at = ?`)
-      .run(normalizedPhone, sender_name || normalizedPhone, source, now, now, now);
+    // Build the ON CONFLICT clause: only force source/monday_item_id when the caller asked us to.
+    const overrideSource = !!force_source;
+    const setMonday = monday_item_id != null;
+    const updates = ['updated_at = ?'];
+    const params: any[] = [now];
+    if (overrideSource) { updates.push('source = ?'); params.push(source); }
+    if (setMonday)      { updates.push('monday_item_id = ?'); params.push(String(monday_item_id)); }
+    const sql = `INSERT INTO leads (phone, name, source, monday_item_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+      ON CONFLICT(phone) DO UPDATE SET ${updates.join(', ')}`;
+    db.prepare(sql).run(
+      normalizedPhone, sender_name || normalizedPhone, source,
+      setMonday ? String(monday_item_id) : null,
+      now, now, ...params
+    );
     bumpLeadScore(normalizedPhone, 'message');
     db.prepare(`INSERT INTO messages (channel, sender_id, sender_name, role, content, created_at)
       VALUES (?, ?, ?, ?, ?, ?)`)
       .run(channel, normalizedPhone, sender_name || normalizedPhone, role, message, now);
-    log.info({ phone: normalizedPhone, direction }, 'external message logged');
+    log.info({ phone: normalizedPhone, direction, source, monday_item_id, force_source }, 'external message logged');
     res.json({ success: true });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
