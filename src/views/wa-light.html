@@ -172,27 +172,25 @@ function cleanContent(c){
   let s = String(c);
   const tmpl = s.match(/^\[template:([^\]\n]+)\]/);
   if (tmpl) s = s.slice(tmpl[0].length);
-  const interact = /\[interactive:[^\]\n]*\]/.test(s);
-  s = s.replace(/\[interactive:[^\]\n]*\]/g, '').trim();
+  const idx = s.indexOf('[interactive:');
+  const interact = idx !== -1;
+  if (interact) s = s.slice(0, idx);
+  s = s.trim();
   return { text: s, template: tmpl ? tmpl[1] : null, interactive: interact };
 }
 
 function dedupeMessages(messages){
   const out = [];
+  const recent = { user: [], assistant: [] };
   for (const m of messages) {
-    const d = parseDate(m.created_at);
-    const t = d ? d.getTime() : 0;
     const c = cleanContent(m.content);
-    const key = (m.role || '') + '|' + (c.template || '') + '|' + (c.text || '').trim();
-    let dup = false;
-    for (let i = out.length - 1; i >= 0 && i >= out.length - 8; i--) {
-      const prev = out[i];
-      if (prev._key === key) {
-        const td = Math.abs(prev._t - t);
-        if (td < 5 * 60 * 1000) { dup = true; break; }
-      }
-    }
-    if (!dup) out.push(Object.assign({}, m, { _key: key, _t: t }));
+    const key = (c.template || '') + '|' + (c.text || '').trim();
+    const role = m.role === 'user' ? 'user' : 'assistant';
+    const list = recent[role];
+    if (list.indexOf(key) !== -1) continue;
+    out.push(m);
+    list.push(key);
+    if (list.length > 5) list.shift();
   }
   return out;
 }
@@ -389,7 +387,7 @@ async function loadLeads(silent){
     if (!silent) flash();
     const data = await api('/api/wa-manager/leads', { signal: ctrl.signal });
     if (myId !== leadsReqId) return;
-    leads = (data.leads || []).filter(l => l.last_message_at);
+    leads = (data.leads || []).filter(l => l.last_message_at).slice(0, 300);
     renderList();
     if (active && leads.find(l => l.phone === active)) {
       renderConvActions(leads.find(l => l.phone === active));
