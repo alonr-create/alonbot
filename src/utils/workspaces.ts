@@ -37,6 +37,8 @@ export function getWorkspaceForSource(source: string): Workspace | null {
     'alon_dev': 'alon_dev',
     'voice_agent': 'dekel',  // יעל = הסוכנת הדיגיטלית של דקל לפרישה
     'dekel': 'dekel',
+    'dekel_webinar': 'dekel', // follow-up אחרי וובינר → יעל / פרסונת דקל
+    'webinar-followup': 'dekel', // legacy source name from earlier runs
   };
   const wsId = map[source] || source;
   return getWorkspace(wsId);
