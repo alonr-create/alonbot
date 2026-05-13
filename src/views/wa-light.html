@@ -222,10 +222,9 @@ function leadDisplayName(l){ return l && l.name ? l.name : ('+' + (l && l.phone 
 function isUnread(l){ return l.last_message_role === 'user'; }
 function mondayUrl(l){
   if (!l || !l.monday_item_id) return null;
-  const src = (l.source || '').toLowerCase();
-  const isAlonDev = src === 'alon_dev' || src === 'alon_dev_whatsapp';
-  const boardId = isAlonDev ? '5092777389' : '1443236269';
-  return 'https://palm530671.monday.com/boards/' + boardId + '/pulses/' + encodeURIComponent(l.monday_item_id);
+  // Use the server's /m/:itemId redirect — it queries Monday for the actual board
+  // (lead source can be misleading: some voice_agent leads live on Alon.dev's board).
+  return '/m/' + encodeURIComponent(l.monday_item_id);
 }
 
 function renderList(){

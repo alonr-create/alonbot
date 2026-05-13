@@ -2185,6 +2185,42 @@ app.get('/wa-light', (_req, res) => {
   res.send(waLightHTML);
 });
 
+// Monday item → board redirect. Used by wa-light's "פתח במאנדי" button.
+// Looks up the item's actual board via Monday API (lead `source` is unreliable —
+// some voice_agent leads live on Alon.dev's board, etc.) and 302-redirects.
+const _mondayBoardCache = new Map<string, { boardId: string; cachedAt: number }>();
+app.get('/m/:itemId', async (req, res) => {
+  const itemId = String(req.params.itemId || '').replace(/\D/g, '');
+  if (!itemId) { res.status(400).send('bad item id'); return; }
+  const PALM_URL = 'https://palm530671.monday.com';
+
+  // 7-day cache
+  const cached = _mondayBoardCache.get(itemId);
+  if (cached && Date.now() - cached.cachedAt < 7 * 24 * 60 * 60 * 1000) {
+    res.redirect(302, `${PALM_URL}/boards/${cached.boardId}/pulses/${itemId}`);
+    return;
+  }
+
+  try {
+    const r = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': config.mondayApiKey, 'API-Version': '2024-10' },
+      body: JSON.stringify({ query: `query { items(ids: [${itemId}]) { board { id } } }` }),
+    });
+    const j = await r.json() as any;
+    const boardId = j?.data?.items?.[0]?.board?.id;
+    if (boardId) {
+      _mondayBoardCache.set(itemId, { boardId: String(boardId), cachedAt: Date.now() });
+      res.redirect(302, `${PALM_URL}/boards/${boardId}/pulses/${itemId}`);
+      return;
+    }
+  } catch (e: any) {
+    console.error('m/:itemId lookup failed:', e?.message);
+  }
+  // Fallback — open Monday with item ID as search query
+  res.redirect(302, `${PALM_URL}/?q=${itemId}`);
+});
+
 // WA Mobile PWA (iPhone app) — served without dashAuth so PWA home screen launch works
 // Auth is enforced on API calls; the HTML shell itself contains no sensitive data
 app.get('/wa-mobile', (_req, res) => {
