@@ -189,22 +189,62 @@ async function sendWhatsAppVoice(phone: string, text: string, voice: string) {
   }
 }
 
-// Trigger flows by event (called from router)
+// Trigger flows by event (called from router).
+// IMPORTANT: The seeded Alon.dev follow-up flow ("פולואפ ללידים שלא ענו") must NOT fire for
+// Dekel customers — they have nothing to do with website sales. We filter by lead source:
+// flows containing Alon.dev pitch language only fire for alon_dev sources.
 export function triggerFlows(triggerType: string, triggerValue: string, phone: string) {
   try {
     const flows = db.prepare('SELECT * FROM chatbot_flows WHERE trigger_type = ? AND enabled = 1').all(triggerType) as any[];
+    if (flows.length === 0) return;
+
+    // Look up lead source once per call
+    let leadSource = '';
+    try {
+      const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
+      leadSource = (lead?.source || '').toLowerCase();
+    } catch { /* no-op */ }
+    const isDekelLead = leadSource === 'voice_agent' || leadSource === 'voice-agent' || leadSource === 'dekel' || leadSource === 'quickly';
+
     for (const flow of flows) {
       if (triggerType === 'keyword') {
-        const keywords = (flow.trigger_value || '').split(',').map((k: string) => k.trim().toLowerCase());
+        const keywords = (flow.trigger_value || '').split(',').map((k: string) => k.trim().toLowerCase()).filter(Boolean);
         if (!keywords.some((kw: string) => triggerValue.toLowerCase().includes(kw))) continue;
-      } else if (triggerType === 'new_lead' || triggerType === 'status_change') {
-        // These match all flows of that trigger_type
       }
-      // Fire and forget
+      // Skip Alon.dev sales flows for Dekel customers (cross-workspace contamination guard).
+      // Detect by flow content — if it pitches website/Alon.dev services, it's alon_dev only.
+      if (isDekelLead) {
+        const stepsStr = String(flow.steps || '');
+        const isAlonDevFlow = /אתר מקצועי|48 שעות|alondev|alon\.dev|checkout\.alondev/i.test(stepsStr);
+        if (isAlonDevFlow) {
+          log.debug({ flowId: flow.id, phone, source: leadSource }, 'skipped alon_dev flow for dekel lead');
+          continue;
+        }
+      }
       executeFlow(flow.id, phone).catch(e => log.error({ err: e.message, flowId: flow.id }, 'flow execution failed'));
     }
   } catch (e: any) {
     log.debug({ err: e.message }, 'triggerFlows error');
+  }
+}
+
+// One-time migration: remove over-broad keywords like "כן" and "אני רוצה" from
+// the seeded Alon.dev follow-up flow. Customers say "כן תודה" to confirm
+// meetings — we don't want that to trigger a website sales pitch.
+// Discovered 13/05/2026 (Orly + voice_agent + "כן תודה" → unwanted Alon.dev pitch).
+export function migrateNarrowFollowupKeywords() {
+  try {
+    const flow = db.prepare(
+      "SELECT id, trigger_value FROM chatbot_flows WHERE trigger_type = 'keyword' AND name LIKE '%פולואפ%'"
+    ).get() as any;
+    if (!flow) return;
+    const kws = (flow.trigger_value || '').split(',').map((k: string) => k.trim()).filter(Boolean);
+    const narrowed = kws.filter((k: string) => k !== 'כן' && k !== 'אני רוצה');
+    if (narrowed.length === kws.length) return; // already narrowed
+    db.prepare('UPDATE chatbot_flows SET trigger_value = ? WHERE id = ?').run(narrowed.join(','), flow.id);
+    log.info({ flowId: flow.id, before: kws, after: narrowed }, 'migrated: narrowed followup keywords');
+  } catch (e: any) {
+    log.debug({ err: e.message }, 'migrateNarrowFollowupKeywords failed');
   }
 }
 
@@ -231,7 +271,7 @@ export function seedExampleFlows() {
     { type: 'add_tag', params: { tag: 'followup_sent' }, delay_ms: 0 },
   ];
   db.prepare('INSERT INTO chatbot_flows (name, trigger_type, trigger_value, steps) VALUES (?, ?, ?, ?)').run(
-    '🔄 פולואפ ללידים שלא ענו', 'keyword', 'מעוניין,אני רוצה,כן', JSON.stringify(followupSteps)
+    '🔄 פולואפ ללידים שלא ענו', 'keyword', 'מעוניין', JSON.stringify(followupSteps)
   );
 
   log.info('seeded 2 example chatbot flows');
