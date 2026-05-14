@@ -93,6 +93,7 @@
     </div>
     <div id="thread"><div id="empty">בחר שיחה מהרשימה כדי לראות הודעות נכנסות ויוצאות</div></div>
     <div id="composer">
+      <div id="window-banner" style="display:none;font-size:11.5px;padding:4px 10px;border-radius:12px;flex-basis:100%;text-align:center;direction:rtl"></div>
       <textarea id="compose-text" rows="1" placeholder="כתוב הודעה…" dir="auto"></textarea>
       <button id="send-btn" aria-label="שלח" title="שלח (Enter)">➤</button>
     </div>
@@ -123,6 +124,9 @@ let leadsReqId = 0, convReqId = 0;
 let leadsInflight = null, convInflight = null;
 let userScrolledUp = false;
 let templateBodies = {};
+let lastIncomingAt = null; // ms timestamp of latest customer-incoming msg in active conv
+const WA_24H_MS = 24 * 60 * 60 * 1000;
+const FALLBACK_TEMPLATE = 'dprisha_general_v1'; // {{1}} placeholder pattern with דקל לפרישה signature
 
 function flash(){ refreshing.classList.add('on'); setTimeout(()=>refreshing.classList.remove('on'), 600); }
 function toast(msg, err){
@@ -353,8 +357,46 @@ async function refreshConv(phone, scrollEnd){
   }
 }
 
+function updateWindowBanner(){
+  const banner = qs('#window-banner');
+  if (!banner) return;
+  if (!active) { banner.style.display = 'none'; return; }
+  if (!lastIncomingAt) {
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(161,56,56,.18)';
+    banner.style.color = '#f3a8a8';
+    banner.textContent = '⚠️ אין הודעה נכנסת — חלון 24h סגור. ההודעה תישלח כ-template ' + FALLBACK_TEMPLATE;
+    return;
+  }
+  const ageMs = Date.now() - lastIncomingAt;
+  if (ageMs <= WA_24H_MS) {
+    const minutesLeft = Math.floor((WA_24H_MS - ageMs) / 60000);
+    const hoursLeft = Math.floor(minutesLeft / 60);
+    const minsLeft = minutesLeft % 60;
+    const remaining = hoursLeft > 0 ? `${hoursLeft}h ${minsLeft}m` : `${minutesLeft}m`;
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(0,92,75,.25)';
+    banner.style.color = '#a7e0d0';
+    banner.textContent = `✅ חלון 24h פתוח — נשארו ${remaining}`;
+  } else {
+    banner.style.display = 'block';
+    banner.style.background = 'rgba(161,56,56,.18)';
+    banner.style.color = '#f3a8a8';
+    banner.textContent = `⚠️ מחוץ ל-24h — ההודעה תישלח כ-template ${FALLBACK_TEMPLATE}`;
+  }
+}
+
 function renderMessages(messages, scrollEnd){
   messages = dedupeMessages(messages || []);
+  // Track latest incoming (role='user') for 24h window calculation
+  lastIncomingAt = null;
+  for (const m of messages) {
+    if (m.role !== 'assistant') {
+      const d = parseDate(m.created_at);
+      if (d && (!lastIncomingAt || d.getTime() > lastIncomingAt)) lastIncomingAt = d.getTime();
+    }
+  }
+  updateWindowBanner();
   if (!messages.length){ thread.innerHTML = '<div id="empty">אין הודעות עדיין</div>'; return; }
   const wasNearBottom = scrollEnd || (!userScrolledUp && nearBottom(thread));
   const prevHeight = thread.scrollHeight, prevTop = thread.scrollTop;
@@ -431,26 +473,48 @@ composeText.addEventListener('keydown', e => {
 });
 sendBtn.addEventListener('click', sendMessage);
 
+function isWindowOpen(){
+  if (!lastIncomingAt) return false;
+  return (Date.now() - lastIncomingAt) <= WA_24H_MS;
+}
+
 async function sendMessage(){
   const text = composeText.value.trim();
   if (!text || !active) return;
   sendBtn.disabled = true;
   composeText.disabled = true;
   try {
-    const r = await api('/api/wa-manager/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: active, message: text }),
-    });
+    const useTemplate = !isWindowOpen();
+    let r;
+    if (useTemplate) {
+      // Outside 24h window — send as approved template with text as {{1}} param.
+      r = await api('/api/wa-manager/send-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone: active,
+          templateName: FALLBACK_TEMPLATE,
+          language: 'he',
+          bodyParams: [text],
+        }),
+      });
+    } else {
+      r = await api('/api/wa-manager/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: active, message: text }),
+      });
+    }
     if (!r || r.success === false) throw new Error((r && r.error) || 'שליחה נכשלה');
     composeText.value = '';
     autoSizeTextarea();
+    if (useTemplate) toast('נשלח כ-template (' + FALLBACK_TEMPLATE + ')');
     await refreshConv(active, true);
     await loadLeads(true);
   } catch (e) {
     const msg = String(e.message || '');
     if (/24|window|template/i.test(msg)) {
-      toast('חלון 24h סגור — צריך template', true);
+      toast('חלון 24h סגור — נסה template אחר', true);
     } else {
       toast('שגיאה: ' + msg, true);
     }
@@ -460,6 +524,9 @@ async function sendMessage(){
     composeText.focus();
   }
 }
+
+// Refresh banner every minute so the countdown stays accurate when idle
+setInterval(updateWindowBanner, 60000);
 
 document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLeads(true); });
 

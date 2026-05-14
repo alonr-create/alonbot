@@ -2081,7 +2081,12 @@ app.get('/api/wa-manager/templates', dashAuth, async (req, res) => {
 // Send template message via Cloud API (routes to correct phone based on lead workspace)
 app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
   try {
-    const { phone, templateName, language } = req.body;
+    const { phone, templateName, language, bodyParams } = req.body as {
+      phone: string;
+      templateName: string;
+      language?: string;
+      bodyParams?: string[]; // {{1}}, {{2}}... values for the BODY component
+    };
     // Determine correct phone from lead's workspace
     const lead = db.prepare('SELECT source FROM leads WHERE phone = ?').get(phone) as any;
     const { getPhoneConfigForWorkspace: getPC3, getWorkspaceForSource: getWS3 } = await import('../utils/workspaces.js');
@@ -2089,6 +2094,20 @@ app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
     const pc3 = ws3 ? getPC3(ws3.id) : { phoneId: config.waCloudPhoneId, token: config.waCloudToken };
     if (!pc3.token || !pc3.phoneId) { res.status(400).json({ success: false, error: 'Cloud API not configured' }); return; }
     const to = phone.replace(/\D/g, '');
+
+    const templatePayload: any = {
+      name: templateName,
+      language: { code: language || 'he' },
+    };
+    if (bodyParams && bodyParams.length > 0) {
+      templatePayload.components = [
+        {
+          type: 'body',
+          parameters: bodyParams.map((text) => ({ type: 'text', text: String(text) })),
+        },
+      ];
+    }
+
     const r = await fetch(`https://graph.facebook.com/v21.0/${pc3.phoneId}/messages`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${pc3.token}`, 'Content-Type': 'application/json' },
@@ -2096,10 +2115,31 @@ app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
         messaging_product: 'whatsapp',
         to,
         type: 'template',
-        template: { name: templateName, language: { code: language || 'he' } }
+        template: templatePayload,
       })
     });
     const data = await r.json();
+    if (!r.ok) {
+      log.warn({ status: r.status, data, templateName, to }, 'send-template failed');
+      res.status(r.status).json({ success: false, error: data?.error?.message || 'send failed', data });
+      return;
+    }
+    // Mirror the sent message into messages table so wa-light shows it inline
+    try {
+      const wamid = data?.messages?.[0]?.id;
+      const display = `[template:${templateName}] ${(bodyParams || []).join(' | ')}`.trim();
+      db.prepare(
+        `INSERT INTO messages (channel, sender_id, role, content, created_at)
+         VALUES ('whatsapp-outbound', ?, 'assistant', ?, ?)`,
+      ).run(to, display, nowIsrael());
+      if (wamid) {
+        db.prepare(
+          `INSERT INTO delivery_receipts (wamid, phone, status, sent_at, created_at, updated_at)
+           VALUES (?, ?, 'sent', ?, ?, ?)
+           ON CONFLICT(wamid) DO UPDATE SET status = 'sent', sent_at = ?`,
+        ).run(wamid, to, Date.now(), Date.now(), Date.now(), Date.now());
+      }
+    } catch { /* best-effort mirror; do not fail send */ }
     res.json({ success: true, data });
   } catch (e: any) {
     res.status(500).json({ success: false, error: e.message });
