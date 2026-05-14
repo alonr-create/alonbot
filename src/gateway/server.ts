@@ -2079,6 +2079,48 @@ app.get('/api/wa-manager/templates', dashAuth, async (req, res) => {
 });
 
 // Send template message via Cloud API (routes to correct phone based on lead workspace)
+// Template delivery analytics — joins messages (content starts with [template:NAME])
+// with delivery_receipts to compute sent/delivered/read counts.
+app.get('/api/wa-manager/template-delivery', dashAuth, (req, res) => {
+  try {
+    const templateName = String(req.query.name || '').trim();
+    if (!templateName) { res.status(400).json({ success: false, error: 'name query param required' }); return; }
+    const tag = `[template:${templateName}`;
+    const days = Math.min(60, Math.max(1, Number(req.query.days) || 30));
+    const sinceMs = Date.now() - days * 86_400_000;
+    const sinceIso = new Date(sinceMs).toISOString();
+
+    // Find outbound messages tagged with this template within the window.
+    const msgs = db.prepare(
+      `SELECT id, sender_id AS phone, created_at
+       FROM messages
+       WHERE channel = 'whatsapp-outbound' AND role = 'assistant' AND content LIKE ?
+         AND created_at >= ?
+       ORDER BY id DESC`,
+    ).all(tag + '%', sinceIso) as Array<{ id: number; phone: string; created_at: string }>;
+
+    // For each phone, fetch the most-recent delivery receipt in the relevant window.
+    const stats = { total_sent: msgs.length, with_receipt: 0, delivered: 0, read: 0, failed: 0 };
+    const phones = [...new Set(msgs.map((m) => m.phone))];
+    for (const p of phones) {
+      const r = db.prepare(
+        `SELECT status, delivered_at, read_at FROM delivery_receipts
+         WHERE phone = ? AND created_at >= ?
+         ORDER BY id DESC LIMIT 1`,
+      ).get(p, sinceIso) as { status: string; delivered_at: string | null; read_at: string | null } | undefined;
+      if (!r) continue;
+      stats.with_receipt++;
+      if (r.read_at) stats.read++;
+      if (r.delivered_at) stats.delivered++;
+      if (r.status === 'failed') stats.failed++;
+    }
+
+    res.json({ success: true, template: templateName, days, stats, sample_count: phones.length });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
   try {
     const { phone, templateName, language, bodyParams } = req.body as {
