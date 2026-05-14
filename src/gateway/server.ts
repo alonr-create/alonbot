@@ -120,12 +120,20 @@ function isQuietHours(): boolean {
   return israelHour >= 22 || israelHour < 8;
 }
 
-// Security headers
-app.use((_req, res, next) => {
+// Security headers — default deny framing, but allow Monday/iframe routes to opt in.
+const MONDAY_EMBED_PATHS = new Set(['/wa-light', '/wa-monday-embed']);
+const MONDAY_FRAME_ANCESTORS = "'self' https://*.monday.com https://monday.com https://*.monday.app";
+app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
   res.setHeader('X-XSS-Protection', '1; mode=block');
+  if (MONDAY_EMBED_PATHS.has(req.path)) {
+    // Modern browsers prefer CSP frame-ancestors over X-Frame-Options.
+    // Explicitly omit X-Frame-Options for these routes so Monday can embed.
+    res.setHeader('Content-Security-Policy', `frame-ancestors ${MONDAY_FRAME_ANCESTORS}`);
+  } else {
+    res.setHeader('X-Frame-Options', 'DENY');
+  }
   next();
 });
 
