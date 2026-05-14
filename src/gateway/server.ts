@@ -2196,10 +2196,18 @@ app.get('/wa-light', (_req, res) => {
 
 // Monday Item View embed — reads phone column via Monday SDK, then loads wa-light.
 // Designed to be installed as a Monday app's Item View pointing at this URL.
+// Server-injects DASHBOARD_TOKEN so the embedded wa-light iframe can auth
+// against /api/wa-manager/* endpoints. The token is HTML-escaped and only
+// reachable inside Monday's iframe (enforced by CSP frame-ancestors).
 app.get('/wa-monday-embed', (_req, res) => {
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-  res.send(waMondayEmbedHTML);
+  const tokenJs = JSON.stringify(config.dashboardSecret || '');
+  const html = waMondayEmbedHTML.replace(
+    '<!--DASH_TOKEN_INJECTION-->',
+    `<script>window.__DASH_TOKEN = ${tokenJs};</script>`,
+  );
+  res.send(html);
 });
 
 // Monday item → board redirect. Used by wa-light's "פתח במאנדי" button.

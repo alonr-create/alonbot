@@ -12,6 +12,7 @@
   iframe{width:100%;height:100%;border:0;display:block}
 </style>
 <script src="https://cdn.jsdelivr.net/npm/monday-sdk-js/dist/main.js"></script>
+<!--DASH_TOKEN_INJECTION-->
 </head>
 <body>
 <div id="status">טוען צ'אט מ-WhatsApp…</div>
@@ -41,8 +42,12 @@
       showErr('הליד הזה ללא טלפון תקין (' + (phone || 'ריק') + ').');
       return;
     }
+    let src = '/wa-light?phone=' + encodeURIComponent(normalized) + '&embed=1';
+    if (window.__DASH_TOKEN) {
+      src += '&token=' + encodeURIComponent(window.__DASH_TOKEN);
+    }
     const iframe = document.createElement('iframe');
-    iframe.src = '/wa-light?phone=' + encodeURIComponent(normalized) + '&embed=1';
+    iframe.src = src;
     iframe.allow = 'clipboard-read; clipboard-write';
     document.body.innerHTML = '';
     document.body.appendChild(iframe);
