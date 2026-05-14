@@ -67,23 +67,40 @@
       return;
     }
     try {
-      const q = `query { items(ids: [${itemId}]) { column_values { id title text value type } } }`;
-      const r = await monday.api(q);
+      // Monday API 2024-10+: must use fragments for typed column values.
+      // PhoneValue returns { phone, country_short_name }; fall back to plain `text`
+      // on the base ColumnValue type for other column kinds.
+      const q = `query GetItemPhone($itemId: ID!) {
+        items (ids: [$itemId]) {
+          column_values {
+            id
+            type
+            ... on PhoneValue { phone country_short_name }
+            text
+          }
+        }
+      }`;
+      const r = await monday.api(q, { variables: { itemId: String(itemId) } });
+      if (r?.errors) {
+        showErr('GraphQL error: ' + JSON.stringify(r.errors).slice(0, 200));
+        return;
+      }
       const cols = r?.data?.items?.[0]?.column_values || [];
-      // Try by column id first, then by title
+      // Prefer typed PhoneValue.phone, fall back to .text
       let phone = '';
       for (const id of PHONE_COLUMN_IDS) {
         const c = cols.find(c => c.id === id);
+        if (c?.phone) { phone = c.phone; break; }
         if (c?.text) { phone = c.text; break; }
       }
       if (!phone) {
-        for (const t of PHONE_COLUMN_TITLES) {
-          const c = cols.find(c => (c.title || '').toLowerCase() === t.toLowerCase());
-          if (c?.text) { phone = c.text; break; }
-        }
+        // Try any column of type "phone"
+        const phoneCol = cols.find(c => c.type === 'phone');
+        if (phoneCol?.phone) phone = phoneCol.phone;
+        else if (phoneCol?.text) phone = phoneCol.text;
       }
       if (!phone) {
-        showErr('לא נמצאה עמודת טלפון בליד הזה.');
+        showErr('לא נמצאה עמודת טלפון בליד הזה. (cols: ' + cols.length + ')');
         return;
       }
       rendered = true;
