@@ -46,6 +46,7 @@ const chatHTML = readFileSync(join(import.meta.dirname, '../views/chat.html'), '
 const waInboxHTML = readFileSync(join(import.meta.dirname, '../views/wa-inbox.html'), 'utf-8');
 const waMobileHTML = readFileSync(join(import.meta.dirname, '../views/wa-mobile.html'), 'utf-8');
 const waLightHTML = readFileSync(join(import.meta.dirname, '../views/wa-light.html'), 'utf-8');
+const waMondayEmbedHTML = readFileSync(join(import.meta.dirname, '../views/wa-monday-embed.html'), 'utf-8');
 const manifestJSON = readFileSync(join(import.meta.dirname, '../views/manifest.json'), 'utf-8');
 const manifestWaJSON = readFileSync(join(import.meta.dirname, '../views/manifest-wa.json'), 'utf-8');
 const waManagerManifestJSON = readFileSync(join(import.meta.dirname, '../views/wa-manager-manifest.json'), 'utf-8');
@@ -2191,6 +2192,14 @@ app.get('/wa-light', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
   res.setHeader('Pragma', 'no-cache');
   res.send(waLightHTML);
+});
+
+// Monday Item View embed — reads phone column via Monday SDK, then loads wa-light.
+// Designed to be installed as a Monday app's Item View pointing at this URL.
+app.get('/wa-monday-embed', (_req, res) => {
+  res.setHeader('Content-Type', 'text/html; charset=utf-8');
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+  res.send(waMondayEmbedHTML);
 });
 
 // Monday item → board redirect. Used by wa-light's "פתח במאנדי" button.

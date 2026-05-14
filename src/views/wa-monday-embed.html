@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>WA Chat — Monday</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;font-family:-apple-system,'Segoe UI',Rubik,Arial,sans-serif;background:#0b141a;color:#e9edef}
+  #status{display:flex;align-items:center;justify-content:center;height:100%;color:#8696a0;font-size:14px;padding:20px;text-align:center}
+  #status.err{color:#f08080}
+  iframe{width:100%;height:100%;border:0;display:block}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/monday-sdk-js/dist/main.js"></script>
+</head>
+<body>
+<div id="status">טוען צ'אט מ-WhatsApp…</div>
+<script>
+(() => {
+  const PHONE_COLUMN_TITLES = ['phone', 'Phone', 'טלפון', 'מספר טלפון'];
+  const PHONE_COLUMN_IDS = ['phone'];
+  const status = document.getElementById('status');
+
+  function showErr(msg) {
+    status.className = 'err';
+    status.textContent = msg;
+  }
+
+  function normalizePhone(raw) {
+    if (!raw) return '';
+    const digits = String(raw).replace(/\D/g, '');
+    if (digits.startsWith('972')) return digits;
+    if (digits.startsWith('0')) return '972' + digits.slice(1);
+    if (digits.length === 9) return '972' + digits;
+    return digits;
+  }
+
+  function renderChat(phone) {
+    const normalized = normalizePhone(phone);
+    if (!normalized || normalized.length < 9) {
+      showErr('הליד הזה ללא טלפון תקין (' + (phone || 'ריק') + ').');
+      return;
+    }
+    const iframe = document.createElement('iframe');
+    iframe.src = '/wa-light?phone=' + encodeURIComponent(normalized) + '&embed=1';
+    iframe.allow = 'clipboard-read; clipboard-write';
+    document.body.innerHTML = '';
+    document.body.appendChild(iframe);
+  }
+
+  // Initialize Monday SDK
+  if (typeof window.mondaySdk !== 'function') {
+    showErr('Monday SDK לא נטען. בדוק חיבור אינטרנט.');
+    return;
+  }
+  const monday = window.mondaySdk();
+
+  // Track if we've already rendered to avoid duplicates from multiple context events
+  let rendered = false;
+
+  monday.listen('context', async (res) => {
+    if (rendered) return;
+    const ctx = res?.data || {};
+    const itemId = ctx.itemId || ctx.itemIds?.[0];
+    if (!itemId) {
+      showErr('לא נמצא itemId בקונטקסט של Monday.');
+      return;
+    }
+    try {
+      const q = `query { items(ids: [${itemId}]) { column_values { id title text value type } } }`;
+      const r = await monday.api(q);
+      const cols = r?.data?.items?.[0]?.column_values || [];
+      // Try by column id first, then by title
+      let phone = '';
+      for (const id of PHONE_COLUMN_IDS) {
+        const c = cols.find(c => c.id === id);
+        if (c?.text) { phone = c.text; break; }
+      }
+      if (!phone) {
+        for (const t of PHONE_COLUMN_TITLES) {
+          const c = cols.find(c => (c.title || '').toLowerCase() === t.toLowerCase());
+          if (c?.text) { phone = c.text; break; }
+        }
+      }
+      if (!phone) {
+        showErr('לא נמצאה עמודת טלפון בליד הזה.');
+        return;
+      }
+      rendered = true;
+      renderChat(phone);
+    } catch (e) {
+      showErr('שגיאה בשליפת הטלפון: ' + (e?.message || e));
+    }
+  });
+
+  // Some Monday Item Views need an explicit get() to bootstrap
+  monday.get('context').then(res => {
+    // listen() above will handle the data when it arrives
+  }).catch(() => {});
+
+  // Safety timeout — if no context arrived in 10s, show fallback
+  setTimeout(() => {
+    if (!rendered && status.textContent.indexOf('טוען') >= 0) {
+      showErr('Monday לא שלח קונטקסט בזמן. תרענן את העמוד או פתח את הליד מחדש.');
+    }
+  }, 10000);
+})();
+</script>
+</body>
+</html>
