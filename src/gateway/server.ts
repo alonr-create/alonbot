@@ -321,6 +321,30 @@ app.post('/api/push/unsubscribe', (req, res) => {
 });
 
 // Test push — sends a test notification to all subscribers with detailed results
+// Manual commission-alert trigger. Optionally resets the last-N-days entries
+// from commission_alerts_sent so the run re-fires alerts for items that bootstrap
+// wrongly snapshotted as "seen" (Alon 17/05: 14+ commissions >1500 missed when
+// the /data volume reset and bootstrap re-marked the historical 1,208 rows).
+//   POST /api/admin/commission-alerts?reset_days=7
+app.post('/api/admin/commission-alerts', dashAuth, async (req, res) => {
+  try {
+    const days = Math.min(60, Math.max(0, Number(req.query.reset_days) || 0));
+    let reset_count = 0;
+    if (days > 0) {
+      const cutoff = new Date(Date.now() - days * 86400_000).toISOString();
+      reset_count = db.prepare(
+        `DELETE FROM commission_alerts_sent WHERE alerted_at >= ?`,
+      ).run(cutoff).changes;
+    }
+    const { checkNewCommissionsForAlerts } = await import('../utils/commission-tracker.js');
+    await checkNewCommissionsForAlerts();
+    res.json({ success: true, reset_count, days });
+  } catch (e: any) {
+    log.error({ err: e.message }, 'manual commission alert trigger failed');
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/push/test', dashAuth, async (_req, res) => {
   try {
     const subs = db.prepare('SELECT * FROM push_subscriptions').all() as any[];
