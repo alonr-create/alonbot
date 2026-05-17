@@ -551,6 +551,10 @@ export async function checkNewCommissionsForAlerts(): Promise<{
 
     const dateStr = (it.column_values.find((c: any) => c.id === DATE_COL_COMMISSIONS)?.date) || '';
     const link = `https://palm530671.monday.com/boards/${COMMISSIONS_BOARD_ID}/pulses/${it.id}`;
+    // WhatsApp Cloud rejects template variable values containing newlines
+    // (Meta error 132012). Burned 17/05/2026 — 8 commissions over ₪1,500 never
+    // alerted because SEP was '\n'. Use ' · ' (middle dot) for in-variable
+    // separation; the surrounding template provides the line structure.
     const parts = [
       `💰 עמלה חדשה מעל ${fmtNis(ALERT_THRESHOLD_NIS)}`,
       `שם: ${it.name}`,
@@ -558,7 +562,7 @@ export async function checkNewCommissionsForAlerts(): Promise<{
     ];
     if (dateStr) parts.push(`תאריך: ${dateStr}`);
     parts.push(link);
-    const body = parts.join(SEP);
+    const body = parts.join(' · ');
 
     log.info({ itemId: it.id, name: it.name, amount }, 'sending threshold alert');
     let ok = true;
