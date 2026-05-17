@@ -321,6 +321,41 @@ app.post('/api/push/unsubscribe', (req, res) => {
 });
 
 // Test push — sends a test notification to all subscribers with detailed results
+// Kill-switch for the Dekel 148 WA AI auto-reply. Reads/writes a single row
+// in the kv_flags table (key='wa_dekel_ai_disabled'). The whatsapp-cloud
+// adapter checks this on every inbound msg from voice_agent/dekel sources.
+//   GET  /api/admin/wa-dekel-ai           → returns current state
+//   POST /api/admin/wa-dekel-ai?state=off  → disables AI replies on 148
+//   POST /api/admin/wa-dekel-ai?state=on   → re-enables
+app.get('/api/admin/wa-dekel-ai', dashAuth, (_req, res) => {
+  try {
+    db.exec(`CREATE TABLE IF NOT EXISTS kv_flags (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`);
+    const row = db.prepare(`SELECT value, updated_at FROM kv_flags WHERE key='wa_dekel_ai_disabled'`).get() as any;
+    const disabled = row?.value === '1' || row?.value === 'true';
+    res.json({ success: true, disabled, raw: row?.value || null, updated_at: row?.updated_at || null });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.post('/api/admin/wa-dekel-ai', dashAuth, (req, res) => {
+  try {
+    const state = String(req.query.state || '').toLowerCase();
+    if (state !== 'on' && state !== 'off') {
+      res.status(400).json({ success: false, error: 'state must be on|off' });
+      return;
+    }
+    db.exec(`CREATE TABLE IF NOT EXISTS kv_flags (key TEXT PRIMARY KEY, value TEXT, updated_at TEXT)`);
+    const value = state === 'off' ? '1' : '0';
+    db.prepare(`INSERT INTO kv_flags (key, value, updated_at) VALUES ('wa_dekel_ai_disabled', ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`)
+      .run(value, new Date().toISOString());
+    log.info({ state, value }, 'wa_dekel_ai_disabled flag toggled');
+    res.json({ success: true, state, disabled: value === '1' });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Manual commission-alert trigger. Optionally resets the last-N-days entries
 // from commission_alerts_sent so the run re-fires alerts for items that bootstrap
 // wrongly snapshotted as "seen" (Alon 17/05: 14+ commissions >1500 missed when

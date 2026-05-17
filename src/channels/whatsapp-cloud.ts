@@ -477,6 +477,27 @@ export function createWhatsAppCloudAdapter(): ChannelAdapter {
       raw: { from: senderId, cloudApi: true, receivingPhoneId: phoneCfg.phoneNumberId },
     };
 
+    // Kill-switch: AI auto-replies on Dekel (148) line can be disabled at runtime
+    // via the kv_flags table. Alon 17/05: bot was misreading context and
+    // sending wrong info to leads — needs immediate off-switch without a
+    // Render redeploy. DB-driven so toggle is instant. Media-to-Monday +
+    // lead upsert + TG notify already ran above, so we only skip the AI agent.
+    const isDekelLine = phoneCfg.source === 'voice_agent' || phoneCfg.source === 'dekel';
+    if (isDekelLine) {
+      try {
+        const flag = db.prepare(`SELECT value FROM kv_flags WHERE key = 'wa_dekel_ai_disabled'`).get() as { value?: string } | undefined;
+        if (flag?.value === '1' || flag?.value === 'true') {
+          log.info({ senderId, source: phoneCfg.source }, 'AI reply suppressed (wa_dekel_ai_disabled flag set)');
+          return;
+        }
+      } catch (e: any) {
+        // kv_flags table may not exist yet — ignore, default to enabled
+        if (!String(e.message).includes('no such table')) {
+          log.debug({ err: e.message }, 'kv_flags lookup failed');
+        }
+      }
+    }
+
     messageHandler(unified);
   }
 
