@@ -337,8 +337,8 @@ app.post('/api/admin/commission-alerts', dashAuth, async (req, res) => {
       ).run(cutoff).changes;
     }
     const { checkNewCommissionsForAlerts } = await import('../utils/commission-tracker.js');
-    await checkNewCommissionsForAlerts();
-    res.json({ success: true, reset_count, days });
+    const stats = await checkNewCommissionsForAlerts();
+    res.json({ success: true, reset_count, days, stats });
   } catch (e: any) {
     log.error({ err: e.message }, 'manual commission alert trigger failed');
     res.status(500).json({ success: false, error: e.message });

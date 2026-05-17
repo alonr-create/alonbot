@@ -524,14 +524,18 @@ ensureAlertTable();
 const stmtSeen = db.prepare('SELECT 1 FROM commission_alerts_sent WHERE item_id = ?');
 const stmtMark = db.prepare('INSERT OR IGNORE INTO commission_alerts_sent (item_id, amount, alerted_at) VALUES (?, ?, ?)');
 
-export async function checkNewCommissionsForAlerts(): Promise<void> {
+export async function checkNewCommissionsForAlerts(): Promise<{
+  fetched: number; in_window: number; over_threshold: number; already_seen: number; alerts_sent: number;
+}> {
   log.debug('checking new commissions for >1500 alerts');
+  const stats = { fetched: 0, in_window: 0, over_threshold: 0, already_seen: 0, alerts_sent: 0 };
   let items;
   try {
     items = await fetchAllItems(COMMISSIONS_BOARD_ID, [DATE_COL_COMMISSIONS, FORMULA_COMMISSIONS]);
+    stats.fetched = items.length;
   } catch (e: any) {
     log.error({ err: e.message }, 'fetch failed in alert check');
-    return;
+    return stats;
   }
 
   // Only consider items created in the last 7 days — old items can't suddenly cross threshold without webhook anyway
@@ -539,9 +543,11 @@ export async function checkNewCommissionsForAlerts(): Promise<void> {
 
   for (const it of items) {
     if (it.created_at < cutoff) continue;
+    stats.in_window++;
     const amount = num(it.column_values.find((c: any) => c.id === FORMULA_COMMISSIONS)?.display_value);
     if (amount <= ALERT_THRESHOLD_NIS) continue;
-    if (stmtSeen.get(it.id)) continue;
+    stats.over_threshold++;
+    if (stmtSeen.get(it.id)) { stats.already_seen++; continue; }
 
     const dateStr = (it.column_values.find((c: any) => c.id === DATE_COL_COMMISSIONS)?.date) || '';
     const link = `https://palm530671.monday.com/boards/${COMMISSIONS_BOARD_ID}/pulses/${it.id}`;
@@ -557,13 +563,17 @@ export async function checkNewCommissionsForAlerts(): Promise<void> {
     log.info({ itemId: it.id, name: it.name, amount }, 'sending threshold alert');
     let ok = true;
     for (const phone of RECIPIENTS) {
-      // Try approved UTILITY alert template first; fall back to MARKETING legacy if it fails
       let sent = await sendTemplate(phone, TEMPLATE_ALERT, body);
       if (!sent) sent = await sendWhatsApp(phone, body);
       if (!sent) ok = false;
     }
-    if (ok) stmtMark.run(it.id, amount, new Date().toISOString());
+    if (ok) {
+      stmtMark.run(it.id, amount, new Date().toISOString());
+      stats.alerts_sent++;
+    }
   }
+  log.info(stats, 'commission alert check complete');
+  return stats;
 }
 
 // On first run: snapshot existing items as already-alerted (so we don't blast the historical board)
