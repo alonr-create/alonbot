@@ -408,7 +408,9 @@ export async function sendAgentMessage(channel: string, targetId: string, text: 
   }
 }
 
-// Notify Alon via Telegram when a lead messages on WhatsApp
+// Notify Alon via Telegram when a lead messages on WhatsApp.
+// Always include a Monday lead link so it's obvious which lead the message
+// belongs to (Alon's complaint 17/05 — alerts were ambiguous without context).
 async function notifyLeadMessage(msg: UnifiedMessage) {
   const targetId = config.allowedTelegram[0];
   if (!targetId || !config.telegramBotToken) return;
@@ -423,12 +425,42 @@ async function notifyLeadMessage(msg: UnifiedMessage) {
     const hotTag = isHot && isFirstReply ? '🔥 ליד חם! תגובה ראשונה לקמפיין!\n' : '';
     const statusTag = lead?.lead_status ? `📋 סטטוס: ${lead.lead_status}\n` : '';
 
+    // Identify which WA line received this message (148 Dekel vs 249 Alon.dev)
+    const rawAny = msg.raw as any;
+    const receivingPhoneId = rawAny?.receivingPhoneId
+      || rawAny?.value?.metadata?.phone_number_id
+      || (lead?.source === 'voice_agent' || lead?.source === 'dekel' ? '1080047101853955' : '');
+    let lineTag = '';
+    if (receivingPhoneId === '1080047101853955') lineTag = '📞 קו 148 (דקל)\n';
+    else if (receivingPhoneId === '967467269793135') lineTag = '📞 קו 249 (Alon.dev)\n';
+    else if (lead?.source === 'voice_agent' || lead?.source === 'dekel') lineTag = '📞 קו 148 (דקל)\n';
+    else if (lead?.source === 'alon_dev' || lead?.source === 'alon_dev_whatsapp') lineTag = '📞 קו 249 (Alon.dev)\n';
+
+    // Lead context links — try to attach a Monday lead URL + wa-light chat URL
+    let mondayLink = '';
+    let chatLink = '';
+    try {
+      const { findDekelLeadByPhone } = await import('../utils/quickly-files.js');
+      const isDekel = lead?.source === 'voice_agent' || lead?.source === 'dekel';
+      const itemId = isDekel ? await findDekelLeadByPhone(msg.senderId) : null;
+      if (itemId) {
+        // /m/:itemId redirects to the canonical Monday URL after looking up the board
+        mondayLink = `\n🔗 ליד במאנדי: https://alonbot.onrender.com/m/${itemId}`;
+      }
+      // wa-light always works — opens the conversation directly
+      chatLink = `\n💬 צ'אט מלא: https://alonbot.onrender.com/wa-light?phone=${encodeURIComponent(msg.senderId)}`;
+    } catch (e: any) {
+      log.debug({ err: e.message }, 'lead-link enrichment failed');
+    }
+
     const { Bot } = await import('grammy');
     const bot = new Bot(config.telegramBotToken);
     const preview = msg.text ? msg.text.slice(0, 200) : '(תמונה/קובץ/קולי)';
-    await bot.api.sendMessage(Number(targetId),
-      `📩 הודעת WhatsApp חדשה!\n${hotTag}\n👤 ${msg.senderName || msg.senderId}\n${statusTag}💬 ${preview}`
-    );
+    const senderLabel = msg.senderName && msg.senderName !== msg.senderId
+      ? `${msg.senderName} (${msg.senderId})`
+      : msg.senderId;
+    const body = `📩 הודעת WhatsApp חדשה!\n${lineTag}${hotTag}👤 ${senderLabel}\n${statusTag}💬 ${preview}${mondayLink}${chatLink}`;
+    await bot.api.sendMessage(Number(targetId), body, { link_preview_options: { is_disabled: true } });
   } catch (e: any) {
     log.debug({ err: e.message }, 'lead notification failed');
   }
