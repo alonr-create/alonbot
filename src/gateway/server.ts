@@ -2387,6 +2387,30 @@ app.get('/m/:itemId', async (req, res) => {
   res.redirect(302, `${PALM_URL}/?q=${itemId}`);
 });
 
+// Direct prep-PDF link for the daily meetings digest. Monday's protected_static
+// asset URL needs a logged-in session (broken when tapped on mobile); its S3
+// public_url opens anywhere with no login but expires after 1h. So we expose a
+// permanent link here and 302 to a FRESHLY-minted public_url on every click —
+// works on mobile, never goes stale (used by daily-meetings-digest/digest.py).
+app.get('/prep/:updateId', async (req, res) => {
+  const updateId = String(req.params.updateId || '').replace(/\D/g, '');
+  if (!updateId) { res.status(400).send('bad update id'); return; }
+  try {
+    const r = await fetch('https://api.monday.com/v2', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': config.mondayApiKey, 'API-Version': '2024-10' },
+      body: JSON.stringify({ query: `query { updates(ids: [${updateId}]) { assets { public_url file_extension } } }` }),
+    });
+    const j = await r.json() as any;
+    const assets = j?.data?.updates?.[0]?.assets || [];
+    const pdf = assets.find((a: any) => (a?.file_extension || '').toLowerCase() === '.pdf') || assets[0];
+    if (pdf?.public_url) { res.redirect(302, pdf.public_url); return; }
+  } catch (e: any) {
+    console.error('prep/:updateId lookup failed:', e?.message);
+  }
+  res.status(404).send('דוח ההכנה לא נמצא');
+});
+
 // WA Mobile PWA (iPhone app) — served without dashAuth so PWA home screen launch works
 // Auth is enforced on API calls; the HTML shell itself contains no sensitive data
 app.get('/wa-mobile', (_req, res) => {
