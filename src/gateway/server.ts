@@ -2180,6 +2180,28 @@ app.get('/api/wa-manager/template-delivery', dashAuth, (req, res) => {
   }
 });
 
+// Per-message delivery status for an explicit set of wamids (exact join key).
+// Used by the mislaka client-reminder delivery report (lead-prep-pipeline/delivery-check.py),
+// which captures the wamid Meta returns per client and asks here whether each was
+// actually sent/delivered/read/failed. wamid is unique in delivery_receipts so this
+// avoids the phone-format ambiguity of the aggregate template-delivery endpoint.
+app.get('/api/wa-manager/delivery-by-wamids', dashAuth, (req, res) => {
+  try {
+    const raw = String(req.query.wamids || '').trim();
+    if (!raw) { res.status(400).json({ success: false, error: 'wamids query param required' }); return; }
+    const wamids = raw.split(',').map((s) => s.trim()).filter(Boolean).slice(0, 200);
+    if (!wamids.length) { res.json({ success: true, receipts: [] }); return; }
+    const placeholders = wamids.map(() => '?').join(',');
+    const rows = db.prepare(
+      `SELECT wamid, phone, status, sent_at, delivered_at, read_at, failed_at, error_code, error_title
+       FROM delivery_receipts WHERE wamid IN (${placeholders})`,
+    ).all(...wamids);
+    res.json({ success: true, receipts: rows });
+  } catch (e: any) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.post('/api/wa-manager/send-template', dashAuth, async (req, res) => {
   try {
     const { phone, templateName, language, bodyParams } = req.body as {
